@@ -19,11 +19,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from pop2026.domain.actions import Action
+from pop2026.domain.actions import Action, duration_ticks
 from pop2026.domain.game import Game, advance
-from pop2026.domain.geometry import Position
+from pop2026.domain.geometry import Facing, Position
 from pop2026.domain.input import InputFrame, PlayerCommand
-from pop2026.domain.level import effective_tile
+from pop2026.domain.level import Level, LevelState, effective_tile
 from pop2026.domain.ports import Rng
 from pop2026.domain.tiles import SOLID, Tile
 
@@ -33,19 +33,29 @@ def _front_solid(game: Game) -> bool:
     return effective_tile(game.level, game.state, target) in SOLID
 
 
-def _can_climb_up(game: Game) -> bool:
-    """¿Hay una cornisa accesible delante para trepar?"""
-    fwd = game.prince.pos.step(game.prince.facing)
+def _can_climb_up_from(level: Level, state: LevelState, pos: Position, facing: Facing) -> bool:
+    """¿Hay una cornisa accesible delante para trepar desde ``pos``?"""
+    fwd = pos.step(facing)
     above_fwd = fwd.shifted(drow=-1)
-    above = game.prince.pos.shifted(drow=-1)
+    above = pos.shifted(drow=-1)
     landing = fwd.shifted(drow=-2)
     eff = effective_tile
     return (
-        eff(game.level, game.state, above_fwd) in SOLID
-        and eff(game.level, game.state, fwd) not in SOLID
-        and eff(game.level, game.state, above) not in SOLID
-        and eff(game.level, game.state, landing) not in SOLID
+        eff(level, state, above_fwd) in SOLID
+        and eff(level, state, fwd) not in SOLID
+        and eff(level, state, above) not in SOLID
+        and eff(level, state, landing) not in SOLID
     )
+
+
+def _can_climb_up(game: Game) -> bool:
+    return _can_climb_up_from(game.level, game.state, game.prince.pos, game.prince.facing)
+
+
+def _climb_after_step(game: Game) -> bool:
+    """¿Tendrá oportunidad de trepar tras avanzar un paso?"""
+    next_pos = game.prince.pos.step(game.prince.facing)
+    return _can_climb_up_from(game.level, game.state, next_pos, game.prince.facing)
 
 
 def _front_is_spike(game: Game) -> bool:
@@ -85,6 +95,16 @@ def decide(game: Game, rng: Rng) -> InputFrame:
 
     # Cornisa accesible: trepar.
     if _can_climb_up(game):
+        return InputFrame(command=PlayerCommand.UP)
+
+    # Está a punto de completar un paso y aterrizará en una cornisa: pide UP
+    # justo en el tick previo para que la transición CLIMB_UP encaje en el
+    # boundary de la acción.
+    if (
+        p.action in (Action.RUN, Action.WALK)
+        and p.ticks_in_action == duration_ticks(p.action) - 1
+        and _climb_after_step(game)
+    ):
         return InputFrame(command=PlayerCommand.UP)
 
     # Pared inmediata: probar salto vertical.

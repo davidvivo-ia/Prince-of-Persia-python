@@ -30,7 +30,7 @@ from pop2026.domain.ports import Rng
 from pop2026.infrastructure.levels import load_builtin
 from pop2026.infrastructure.rng import LfsrRng
 from pop2026.presentation import input_device, renderer
-from pop2026.presentation.audio import Beeper
+from pop2026.presentation.audio import Beeper, play_transitions
 from pop2026.presentation.screens import card, ending, title
 from pop2026.presentation.theme import LAYOUT
 
@@ -160,7 +160,7 @@ def _run_interactive(config: AppConfig) -> int:
             pygame.quit()
             return 0
 
-        final = _play_level(screen, clock, font, rng, info, level_idx, state, config)
+        final = _play_level(screen, clock, font, beeper, rng, info, level_idx, state, config)
 
         if final is None:
             pygame.quit()
@@ -290,6 +290,7 @@ def _play_level(
     screen: pygame.Surface,
     clock: pygame.time.Clock,
     font: pygame.font.Font,
+    beeper: Beeper,
     rng: Rng,
     info: LevelInfo,
     level_index: int,
@@ -316,7 +317,9 @@ def _play_level(
                 return None
 
         inp = input_device.poll()
+        prev = game
         game = advance(game, inp, rng)
+        play_transitions(beeper, prev, game)
         renderer.render(screen, game, font, crt=config.crt)
         pygame.display.flip()
         clock.tick(60)

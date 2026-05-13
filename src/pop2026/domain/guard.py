@@ -126,9 +126,9 @@ def _next_action(
 
     if _spots_prince(guard, prince_pos):
         new_mode = GuardMode.ALERT
-        # Avanza hacia el príncipe si no hay pared
         target = guard.pos.step(guard.facing)
-        if _is_solid(level, state, target):
+        # No pisar la celda del príncipe ni atravesar muros.
+        if _is_solid(level, state, target) or target == prince_pos:
             return replace(guard, mode=new_mode, action=Action.STAND, ticks_in_action=0)
         return replace(
             guard,

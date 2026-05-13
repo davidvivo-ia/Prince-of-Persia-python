@@ -13,6 +13,7 @@ import math
 import pygame
 
 from pop2026.domain.actions import Action
+from pop2026.domain.anim import offset_for
 from pop2026.domain.game import Game, GameStatus
 from pop2026.domain.geometry import Facing, Position
 from pop2026.domain.guard import Guard, GuardMode
@@ -407,9 +408,22 @@ def _phase(p: Prince | Guard) -> float:
     return p.ticks_in_action / max(1, dur)
 
 
+def _smooth_feet(
+    col: int,
+    row: int,
+    action: Action,
+    ticks: int,
+    facing: Facing,
+) -> tuple[int, int]:
+    """Calcula píxeles ``(feet_x, feet_y)`` con offset sub-celda."""
+    dx, dy = offset_for(action=action, ticks=ticks, facing_value=int(facing))
+    feet_x = int((col + dx) * LAYOUT.tile_w + LAYOUT.tile_w / 2)
+    feet_y = int(_floor_top_y(row) + dy * LAYOUT.tile_h)
+    return feet_x, feet_y
+
+
 def _draw_prince(surface: pygame.Surface, p: Prince) -> None:
-    feet_x = p.pos.col * LAYOUT.tile_w + LAYOUT.tile_w // 2
-    feet_y = _floor_top_y(p.pos.row)
+    feet_x, feet_y = _smooth_feet(p.pos.col, p.pos.row, p.action, p.ticks_in_action, p.facing)
     _draw_humanoid(
         surface,
         feet_x,
@@ -426,8 +440,7 @@ def _draw_prince(surface: pygame.Surface, p: Prince) -> None:
 
 def _draw_guard(surface: pygame.Surface, g: Guard) -> None:
     if g.mode is GuardMode.DEAD:
-        feet_x = g.pos.col * LAYOUT.tile_w + LAYOUT.tile_w // 2
-        feet_y = _floor_top_y(g.pos.row)
+        feet_x, feet_y = _smooth_feet(g.pos.col, g.pos.row, Action.DEAD, 0, g.facing)
         _draw_humanoid(
             surface,
             feet_x,
@@ -441,8 +454,7 @@ def _draw_guard(surface: pygame.Surface, g: Guard) -> None:
             phase=0.0,
         )
         return
-    feet_x = g.pos.col * LAYOUT.tile_w + LAYOUT.tile_w // 2
-    feet_y = _floor_top_y(g.pos.row)
+    feet_x, feet_y = _smooth_feet(g.pos.col, g.pos.row, g.action, g.ticks_in_action, g.facing)
     _draw_humanoid(
         surface,
         feet_x,
