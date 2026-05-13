@@ -57,7 +57,7 @@ _DURATIONS: dict[Action, int] = {
     Action.JUMP_R: 10,
     Action.CLIMB_UP: 12,
     Action.CLIMB_DOWN: 10,
-    Action.HANG: 2,
+    Action.HANG: 30,  # ~0.5 s sosteniéndose antes de evaluar siguiente acción
     Action.FALL: 3,
     Action.LAND: 4,
     Action.STRIKE: 6,

@@ -84,6 +84,10 @@ def decide(game: Game, rng: Rng) -> InputFrame:
     if p.action is Action.DEAD:
         return InputFrame()
 
+    # Si está colgado, sube a la repisa para no quedarse pendiendo.
+    if p.action is Action.HANG:
+        return InputFrame(command=PlayerCommand.UP)
+
     if _guard_adjacent(game) and p.has_sword:
         if rng.coin(0.7):
             return InputFrame(command=PlayerCommand.STRIKE)
@@ -113,7 +117,10 @@ def decide(game: Game, rng: Rng) -> InputFrame:
 
     # Hueco delante: saltar (salto direccional si veníamos corriendo).
     if _gap_under_front(game):
-        return InputFrame(command=PlayerCommand.JUMP)
+        if p.action in (Action.RUN, Action.WALK):
+            return InputFrame(command=PlayerCommand.JUMP)
+        # Aún no corre: empieza a correr para llegar al salto con velocidad.
+        return InputFrame(command=PlayerCommand.RIGHT)
 
     return InputFrame(command=PlayerCommand.RIGHT)
 

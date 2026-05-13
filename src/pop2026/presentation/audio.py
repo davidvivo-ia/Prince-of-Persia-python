@@ -63,6 +63,7 @@ class Beeper:
             ("gate", _square_wave(110.0, 0.20, volume=0.45)),
             ("land", _square_wave(140.0, 0.06, volume=0.35)),
             ("victory", _glide(440.0, 880.0, 0.50, volume=0.50)),
+            ("grab", _square_wave(280.0, 0.06, volume=0.35)),
         ]
         sounds: dict[str, pygame.mixer.Sound] = {}
         for name, arr in recipes:
@@ -99,6 +100,8 @@ def play_transitions(beeper: Beeper, prev: Game, now: Game) -> None:
             beeper.play("strike")
         elif p_now.action is Action.PARRY:
             beeper.play("parry")
+        elif p_now.action is Action.HANG and p_prev.action is not Action.HANG:
+            beeper.play("grab")
         elif p_now.action is Action.FALL and p_prev.action not in (
             Action.JUMP_V,
             Action.JUMP_R,

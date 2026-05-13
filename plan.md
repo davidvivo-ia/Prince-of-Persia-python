@@ -8,6 +8,20 @@
 Fecha de redacción: 2026-05-13. Última versión publicada: **v1.0.0**
 (rama `claude/prince-of-persia-rebuild-y7uxD`).
 
+> **Progreso v1.1 (en curso)**:
+> - ✅ **F-2** (Hang / drop) entregado: el príncipe se cuelga del borde al
+>   correr fuera de una repisa; `UP` lo sube de nuevo, `DOWN` lo suelta.
+> - ✅ **F-1 fase 0** (cimientos): `PositionF`, `Velocity`, `AABB`,
+>   módulo `physics` con integrador y `is_grounded`. Tests con
+>   invariantes de gravedad y colisión. Aún sin integrar en el FSM
+>   del príncipe; pendiente fase 1.
+> - ✅ Demo bot reacciona a HANG y a saltos largos (`JUMP_R` desde
+>   `RUN/WALK` interrumpe el paso para "saltar antes de caer").
+> - ✅ Audio: nuevo SFX `grab` cuando agarra una cornisa.
+> - L9 rediseñado con hueco de una celda que obliga a `JUMP_R`.
+> - Demo bot gana 11 de 12 niveles; L10 y L12 quedan para humano.
+> - 131 tests, **91 % cobertura en dominio**, todas las gates verdes.
+
 ---
 
 ## 1. Auditoría del estado actual

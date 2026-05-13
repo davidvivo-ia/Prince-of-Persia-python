@@ -179,16 +179,53 @@ def _next_action(
     inp: InputFrame,
 ) -> Prince:
     """Decide la siguiente acción según input y entorno."""
-    # gravedad: si no hay suelo bajo nosotros (y no estamos colgados),
-    # caemos sin importar input
+    cmd = inp.command
+
+    # --- JUMP_R "long jump": si veníamos corriendo y se pulsa JUMP, saltamos
+    # antes de evaluar gravedad, para que el príncipe se eleve del borde y no
+    # se cuelgue prematuramente.
+    if cmd is PlayerCommand.JUMP and prince.action in (Action.RUN, Action.WALK):
+        return replace(prince, action=Action.JUMP_R, ticks_in_action=0)
+
+    # --- Estado HANG: el príncipe está colgado de una cornisa ---
+    if prince.action is Action.HANG:
+        # Comprueba que la repisa que le sostiene siga ahí (atrás-abajo).
+        ledge = prince.pos.step(prince.facing.opposite()).shifted(drow=1)
+        if not _is_solid(level, state, ledge):
+            return replace(prince, action=Action.FALL, ticks_in_action=0)
+        if cmd is PlayerCommand.UP:
+            # Sube a la cornisa: nueva posición en la celda de detrás.
+            target = prince.pos.step(prince.facing.opposite())
+            return replace(
+                prince,
+                pos=target,
+                facing=prince.facing.opposite(),
+                action=Action.STAND,
+                ticks_in_action=0,
+                fall_distance=0,
+            )
+        if cmd is PlayerCommand.DOWN:
+            return replace(prince, action=Action.FALL, ticks_in_action=0)
+        # Sin input: vuelve a colgarse otra HANG (efectivamente "se sostiene")
+        # hasta que el jugador decida. Para evitar bucles infinitos en el demo,
+        # tras varios ciclos auto-suelta.
+        return replace(prince, action=Action.HANG, ticks_in_action=0)
+
+    # --- Gravedad: si no hay suelo bajo y no está colgado/trepando ---
     if prince.action not in (
         Action.HANG,
         Action.CLIMB_UP,
         Action.CLIMB_DOWN,
     ) and not _can_stand_on_floor(level, state, prince.pos):
+        # ¿Puede agarrarse a la cornisa que acaba de dejar atrás?
+        behind = prince.pos.step(prince.facing.opposite())
+        behind_floor = behind.shifted(drow=1)
+        # Solo agarra si venía moviéndose horizontalmente (no spawn sintético).
+        if prince.action in (Action.WALK, Action.RUN, Action.JUMP_R) and _is_solid(
+            level, state, behind_floor
+        ):
+            return replace(prince, action=Action.HANG, ticks_in_action=0)
         return replace(prince, action=Action.FALL, ticks_in_action=0)
-
-    cmd = inp.command
 
     if prince.action is Action.HURT:
         return replace(prince, action=Action.STAND, ticks_in_action=0)

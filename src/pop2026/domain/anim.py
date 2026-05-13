@@ -74,6 +74,12 @@ def offset_for(*, action: Action, ticks: int, facing_value: int) -> tuple[float,
         eased = 0.5 - 0.5 * math.cos(math.pi * t)
         return eased * facing_value, 1.0 * eased
 
+    if action is Action.HANG:
+        # Cuelga del borde: empuja el cuerpo hacia abajo.
+        # Pequeña oscilación para sugerir esfuerzo.
+        sway = 0.05 * math.sin(t * math.pi * 4.0)
+        return -0.2 * facing_value, 0.75 + sway
+
     if action is Action.HURT:
         # Pequeño retroceso visible.
         return -0.15 * facing_value * (1.0 - t), 0.0

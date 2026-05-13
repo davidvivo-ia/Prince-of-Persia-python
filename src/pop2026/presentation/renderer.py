@@ -271,6 +271,54 @@ def _draw_humanoid(
     if pose == "hurt":
         body_h = 40
 
+    # Pose "hang": cuelga del borde con brazos arriba.
+    if pose == "hang":
+        # Manos en el borde superior (la repisa); cuerpo dangling abajo.
+        hand_y = feet_y - 4  # las manos quedan justo encima del cuerpo
+        # Dibuja brazos extendidos hacia arriba en sentido contrario a facing
+        # (el príncipe mira hacia la repisa, sus manos la agarran).
+        hands_dir = -fdir  # las manos van hacia donde mira (repisa atrás del fdir)
+        # Cuerpo y cabeza
+        body_top = hand_y + 4
+        torso_top = body_top
+        torso_bot = torso_top + 18
+        # Brazos arriba (de los hombros a las manos en la repisa)
+        shoulder_l = (feet_x - 4, body_top + 2)
+        shoulder_r = (feet_x + 4, body_top + 2)
+        hand_l = (feet_x + hands_dir * 6 - 3, hand_y)
+        hand_r = (feet_x + hands_dir * 6 + 3, hand_y)
+        pygame.draw.line(surface, skin, shoulder_l, hand_l, 3)
+        pygame.draw.line(surface, skin, shoulder_r, hand_r, 3)
+        # Torso
+        pygame.draw.polygon(
+            surface,
+            skin,
+            [
+                (feet_x - 6, torso_top),
+                (feet_x + 6, torso_top),
+                (feet_x + 5, torso_bot),
+                (feet_x - 5, torso_bot),
+            ],
+        )
+        if sash is not None:
+            pygame.draw.rect(surface, sash, (feet_x - 5, torso_bot - 3, 10, 3))
+        # Piernas colgando (ligeramente cruzadas, sin balanceo)
+        pygame.draw.line(surface, skin, (feet_x - 3, torso_bot), (feet_x - 2, torso_bot + 10), 3)
+        pygame.draw.line(surface, skin, (feet_x + 3, torso_bot), (feet_x + 2, torso_bot + 10), 3)
+        # Cabeza (entre los brazos elevados)
+        head_cy = body_top - 2
+        pygame.draw.circle(surface, skin, (feet_x, head_cy), head_r)
+        # Pequeño detalle del filo del sable si lo lleva (envainado en cadera)
+        if weapon:
+            pygame.draw.line(
+                surface,
+                PALETTE.warning,
+                (feet_x - fdir * 5, torso_bot - 2),
+                (feet_x - fdir * 5, torso_bot + 4),
+                2,
+            )
+        return
+
     head_cx = feet_x
     head_cy = feet_y - body_h + head_r
     torso_top = head_cy + head_r
@@ -392,6 +440,8 @@ def _pose_from_action(p: Prince | Guard) -> str:
         return "hurt"
     if a is Action.CROUCH:
         return "crouch"
+    if a is Action.HANG:
+        return "hang"
     if a in (Action.JUMP_V, Action.JUMP_R):
         return "jump"
     if a is Action.FALL:
