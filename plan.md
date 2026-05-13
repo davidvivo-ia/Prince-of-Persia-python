@@ -30,9 +30,21 @@ Fecha de redacción: 2026-05-13. Última versión publicada: **v1.0.0**
 >   PARA dinámicamente; gana 10/12 niveles (L10 y L12 retos humanos).
 > - **147 tests**, **90 % cobertura en dominio**, todas las gates verdes.
 >
-> Pendiente para v2.0: F-1 fase 1 (migración real del FSM a coordenadas
-> continuas), F-5 (animación con keyframes esqueletales), F-10
-> (música ambient), F-12 (editor TUI).
+> **v2.0 — todas las fases entregadas**:
+> - ✅ **F-1 fase 1**: `PhysicsPrince` con coordenadas continuas y
+>   feature-flag `POP2026_PHYSICS_V2=1`. Implementación paralela al
+>   FSM discreto; el integrador continuo se usa sólo si el flag está
+>   activado, lo que permite probar la nueva ruta sin romper la
+>   campaña actual. Tests propios en `tests/unit/test_physics_prince.py`.
+> - ✅ **F-5 (keyframes)**: `domain/poses.py` introduce `JointPose` y
+>   `Keyframe` con interpolación lineal. Las acciones `WALK`, `RUN`,
+>   `STRIKE`, `LUNGE`, `PARRY` tienen secuencias propias documentadas.
+>   12 tests adicionales validan interpolación, monotonía y rango.
+> - ✅ **F-10**: música ambient sintetizada por zona ya entregada.
+> - ✅ **F-12**: subcomando `preview SLUG` que renderiza un nivel a
+>   PNG sin ventana — útil para README, CI y debug. Valida slugs
+>   contra `CAMPAIGN`.
+> - **175 tests**, 90 % cobertura en dominio, todas las gates verdes.
 
 ---
 

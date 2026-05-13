@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
 
 import typer
 
 from pop2026 import __version__
-from pop2026.application.campaign import total_levels
+from pop2026.application.campaign import CAMPAIGN, total_levels
 from pop2026.presentation.app import AppConfig, run
 
 app = typer.Typer(
@@ -68,3 +70,49 @@ def _main(
     )
     code = run(config)
     sys.exit(code)
+
+
+_PREVIEW_DEFAULT = Path("preview.png")
+
+
+@app.command()
+def preview(
+    slug: str = typer.Argument(
+        ..., help="Slug del nivel built-in (p. ej. '01_cell', '12_jaffar')."
+    ),
+    out: Path = typer.Option(  # noqa: B008
+        _PREVIEW_DEFAULT, "--out", "-o", help="Ruta del PNG de salida."
+    ),
+    no_crt: bool = typer.Option(
+        False, "--no-crt", help="Desactiva el overlay CRT."
+    ),
+) -> None:
+    """Renderiza un nivel a PNG sin abrir ventana (útil para README y debug)."""
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+    import pygame
+
+    from pop2026.domain.game import new_game
+    from pop2026.infrastructure.levels import load_builtin
+    from pop2026.presentation import renderer
+    from pop2026.presentation.theme import LAYOUT
+
+    valid_slugs = {info.slug for info in CAMPAIGN}
+    if slug not in valid_slugs:
+        typer.echo(f"Nivel desconocido: {slug!r}", err=True)
+        typer.echo(f"Niveles disponibles: {', '.join(sorted(valid_slugs))}", err=True)
+        raise typer.Exit(2)
+
+    pygame.init()
+    try:
+        level = load_builtin(slug)
+        game = new_game(level, level_index=1)
+        surface = pygame.Surface((LAYOUT.width_px, LAYOUT.height_px))
+        font = pygame.font.Font(None, 22)
+        renderer.render(surface, game, font, crt=not no_crt)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        pygame.image.save(surface, str(out))
+        typer.echo(f"Preview guardada en {out}")
+    finally:
+        pygame.quit()
