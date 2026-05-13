@@ -30,7 +30,7 @@ from pop2026.domain.ports import Rng
 from pop2026.infrastructure.levels import load_builtin
 from pop2026.infrastructure.rng import LfsrRng
 from pop2026.presentation import input_device, renderer
-from pop2026.presentation.audio import Beeper, play_transitions
+from pop2026.presentation.audio import Beeper, play_transitions, zone_for_level
 from pop2026.presentation.screens import card, cutscene, ending, title
 from pop2026.presentation.theme import LAYOUT
 
@@ -177,6 +177,9 @@ def _run_interactive(config: AppConfig) -> int:
             )
     while 1 <= level_idx <= total_levels():
         info = CAMPAIGN[level_idx - 1]
+
+        # Música ambient por zona (dungeon/palace/throne)
+        beeper.play_music(zone_for_level(level_idx))
 
         # Cinemática en puntos clave de la campaña
         scene_at_level: dict[int, str] = {1: "intro", 6: "mid", 12: "final"}

@@ -293,10 +293,14 @@ def _draw_humanoid(
         pygame.draw.circle(surface, skin, (feet_x - 16 * fdir, feet_y - 5), head_r)
         return
 
-    # Ajuste de altura si está agachado o golpeado
+    # Ajuste de altura si está agachado, golpeado o aterrizando.
     if pose == "crouch":
         body_h = 28
         torso_h = 12
+    if pose == "land":
+        # Compresión moderada al aterrizar.
+        body_h = 34
+        torso_h = 14
     if pose == "hurt":
         body_h = 40
 
@@ -477,6 +481,8 @@ def _pose_from_action(p: Prince | Guard) -> str:
         return "crouch"
     if a is Action.HANG:
         return "hang"
+    if a is Action.LAND:
+        return "land"
     if a in (Action.JUMP_V, Action.JUMP_R):
         return "jump"
     if a is Action.FALL:

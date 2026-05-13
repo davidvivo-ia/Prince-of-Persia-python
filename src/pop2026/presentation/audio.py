@@ -43,11 +43,137 @@ def _glide(start_freq: float, end_freq: float, duration_s: float, *, volume: flo
     return (raw * env * (volume * 32767)).astype(np.int16)
 
 
+def _tone(freq: float, duration_s: float, *, volume: float = 0.18) -> Any:
+    """Tono cuadrado con envolvente ADSR sencilla (para música ambient)."""
+    n = int(SAMPLE_RATE * duration_s)
+    if n <= 0:
+        return np.zeros(0, dtype=np.int16)
+    t = np.arange(n) / SAMPLE_RATE
+    raw = np.sign(np.sin(2.0 * np.pi * freq * t))
+    # ADSR: attack 5%, decay 10%, sustain 60% @ 0.8, release 25%
+    attack = max(1, int(n * 0.05))
+    decay = max(1, int(n * 0.10))
+    release = max(1, int(n * 0.25))
+    sustain = max(1, n - attack - decay - release)
+    env = np.concatenate(
+        [
+            np.linspace(0.0, 1.0, attack),
+            np.linspace(1.0, 0.8, decay),
+            np.full(sustain, 0.8),
+            np.linspace(0.8, 0.0, release),
+        ]
+    )[:n]
+    return (raw * env * (volume * 32767)).astype(np.int16)
+
+
+def _silence(duration_s: float) -> Any:
+    """Silencio del tiempo dado."""
+    return np.zeros(int(SAMPLE_RATE * duration_s), dtype=np.int16)
+
+
+# ---------------------------------------------------------------------------
+# Música ambient — composiciones propias en escalas menores. Patrones de
+# 8-12 segundos pensados para loop. Volumen bajo: 0.12 para que los SFX
+# corten por encima.
+# ---------------------------------------------------------------------------
+
+
+def _ambient_dungeon() -> Any:
+    """Loop sombrío en La menor pentatónica (A, C, D, E, G)."""
+    notes = [
+        (220.00, 0.8),  # A3
+        (261.63, 0.6),  # C4
+        (293.66, 0.5),  # D4
+        (329.63, 0.7),  # E4
+        (0.0, 0.3),
+        (220.00, 0.6),
+        (196.00, 0.5),  # G3
+        (174.61, 0.9),  # F3 (color, fuera de la penta pura)
+        (0.0, 0.4),
+        (130.81, 1.2),  # C3 (grave, fundamento)
+    ]
+    return _compose(notes, volume=0.12)
+
+
+def _ambient_palace() -> Any:
+    """Loop intermedio: arpegio Re menor armónico (D, F, A, C#)."""
+    notes = [
+        (293.66, 0.4),  # D4
+        (349.23, 0.4),  # F4
+        (440.00, 0.4),  # A4
+        (554.37, 0.6),  # C#5 (sensible)
+        (440.00, 0.4),
+        (349.23, 0.4),
+        (293.66, 0.8),
+        (0.0, 0.3),
+        (220.00, 0.4),  # A3
+        (146.83, 1.0),  # D3
+    ]
+    return _compose(notes, volume=0.12)
+
+
+def _ambient_throne() -> Any:
+    """Loop urgente: pasos cromáticos descendentes desde Mi menor."""
+    notes = [
+        (329.63, 0.30),  # E4
+        (311.13, 0.30),  # D#4
+        (293.66, 0.30),  # D4
+        (277.18, 0.30),  # C#4
+        (261.63, 0.50),  # C4
+        (0.0, 0.20),
+        (164.81, 0.60),  # E3
+        (146.83, 0.40),  # D3
+        (164.81, 0.40),  # E3
+        (196.00, 0.80),  # G3
+    ]
+    return _compose(notes, volume=0.13)
+
+
+def _compose(notes: list[tuple[float, float]], *, volume: float) -> Any:
+    """Concatena tonos según ``(freq_Hz, duration_s)``; 0 Hz = silencio."""
+    parts: list[Any] = []
+    for freq, dur in notes:
+        if freq <= 0:
+            parts.append(_silence(dur))
+        else:
+            parts.append(_tone(freq, dur, volume=volume))
+    return np.concatenate(parts) if parts else np.zeros(0, dtype=np.int16)
+
+
+def zone_for_level(level_index: int) -> str:
+    """Asigna una zona musical según el índice del nivel."""
+    if level_index <= 4:
+        return "dungeon"
+    if level_index <= 8:
+        return "palace"
+    return "throne"
+
+
+AMBIENT_TRACKS: dict[str, Any] = {}
+"""Cache lazy: el primer uso compila el numpy y se reusa."""
+
+
+def _ambient_track(zone: str) -> Any:
+    """Devuelve el array PCM para el zone (con cache)."""
+    if zone in AMBIENT_TRACKS:
+        return AMBIENT_TRACKS[zone]
+    builder = {
+        "dungeon": _ambient_dungeon,
+        "palace": _ambient_palace,
+        "throne": _ambient_throne,
+    }.get(zone, _ambient_dungeon)
+    arr = builder()
+    AMBIENT_TRACKS[zone] = arr
+    return arr
+
+
 class Beeper:
-    """Pequeña batería de sonidos PC-speaker para el juego."""
+    """Pequeña batería de sonidos PC-speaker + música ambient para el juego."""
 
     def __init__(self, *, mute: bool = False) -> None:
         self._mute = mute
+        self._music_tracks: dict[str, pygame.mixer.Sound] = {}
+        self._current_zone: str | None = None
         if mute:
             self._sounds: dict[str, pygame.mixer.Sound] = {}
             return
@@ -86,6 +212,41 @@ class Beeper:
         if snd is not None:
             with contextlib.suppress(pygame.error):
                 snd.play()
+
+    def play_music(self, zone: str) -> None:
+        """Reproduce el loop ambient de la zona dada. No reinicia si ya
+        está sonando la misma. Silencioso si está muteado.
+        """
+        if self._mute or zone == self._current_zone:
+            return
+        # Carga lazy del Sound (necesita mixer inicializado)
+        snd = self._music_tracks.get(zone)
+        if snd is None:
+            arr = _ambient_track(zone)
+            stereo = np.column_stack([arr, arr])
+            try:
+                snd = pygame.sndarray.make_sound(stereo)
+                self._music_tracks[zone] = snd
+            except (pygame.error, ValueError):
+                return
+        with contextlib.suppress(pygame.error):
+            # Para la zona anterior si la había
+            if self._current_zone is not None:
+                prev = self._music_tracks.get(self._current_zone)
+                if prev is not None:
+                    prev.stop()
+            snd.play(loops=-1)
+            self._current_zone = zone
+
+    def stop_music(self) -> None:
+        """Detiene la música ambient actual."""
+        if self._current_zone is None:
+            return
+        snd = self._music_tracks.get(self._current_zone)
+        if snd is not None:
+            with contextlib.suppress(pygame.error):
+                snd.stop()
+        self._current_zone = None
 
 
 def play_transitions(beeper: Beeper, prev: Game, now: Game) -> None:

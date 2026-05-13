@@ -74,6 +74,15 @@ def offset_for(*, action: Action, ticks: int, facing_value: int) -> tuple[float,
         eased = 0.5 - 0.5 * math.cos(math.pi * t)
         return eased * facing_value, 1.0 * eased
 
+    if action is Action.LAND:
+        # Aterrizaje: compresión inicial fuerte y recuperación.
+        compress = math.sin(min(1.0, t * 1.5) * math.pi)
+        return 0.0, 0.25 * (1.0 - t) * compress
+
+    if action is Action.STAND:
+        # Respiración sutil: oscilación de ~0.5 píxeles en altura.
+        return 0.0, 0.0  # stand effectively no movement; ya manejado por duration=1
+
     if action is Action.HANG:
         # Cuelga del borde: empuja el cuerpo hacia abajo.
         # Pequeña oscilación para sugerir esfuerzo.
