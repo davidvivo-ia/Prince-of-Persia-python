@@ -1,0 +1,137 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pop2026"
+version = "1.0.0"
+description = "Prince of Persia (1989), reimaginado en Python 2026."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.13"
+authors = [
+    { name = "pop2026 contributors" },
+]
+keywords = ["game", "platformer", "prince-of-persia", "retro", "pygame"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Games/Entertainment :: Arcade",
+]
+dependencies = [
+    "pygame-ce>=2.5",
+    "typer>=0.12",
+    "rich>=13.7",
+    "pydantic>=2.7",
+    "structlog>=24.1",
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+]
+
+[project.scripts]
+pop2026 = "pop2026.__main__:main"
+
+[project.urls]
+"Homepage" = "https://github.com/davidvivo-ia/Prince-of-Persia-python"
+"Source"   = "https://github.com/davidvivo-ia/Prince-of-Persia-python"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pop2026"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "docs", "README.md", "CHANGELOG.md", "LICENSE"]
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+extend-exclude = ["legacy"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",       # pycodestyle / pyflakes
+    "I",                 # isort
+    "N",                 # pep8-naming
+    "UP",                # pyupgrade
+    "B",                 # bugbear
+    "C4",                # comprehensions
+    "SIM",               # simplify
+    "RUF",               # ruff-specific
+    "PT",                # pytest style
+    "PL",                # pylint subset
+    "TID",               # tidy imports
+]
+ignore = [
+    "PLR0913",  # too many args (use cases pass many things)
+    "PLR2004",  # magic values: ubiquitous in games
+    "PLR0911",  # too many returns (FSM patterns)
+    "PLR0912",  # too many branches (FSM patterns)
+    "PLR0915",  # too many statements (FSM step funcs)
+    "PLC0415",  # late imports (pygame imported lazily)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# MyPy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+show_error_codes = true
+exclude = ["legacy/", "build/", "dist/"]
+
+[[tool.mypy.overrides]]
+module = ["pygame.*", "pygame_ce.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "slow: tests que pueden tardar (E2E)",
+]
+
+[tool.coverage.run]
+source = ["src/pop2026"]
+branch = true
+omit = [
+    "src/pop2026/presentation/*",
+    "src/pop2026/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+show_missing = true

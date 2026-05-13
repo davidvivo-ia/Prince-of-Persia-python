@@ -1,0 +1,74 @@
+# pop2026 — Prince of Persia reimaginado
+
+> *Una mazmorra que respira en violeta y oro, dibujada con la mano de
+> 1989 pero el aliento de 2026.*
+
+Reimplementación moderna en **Python 3.13+** del Prince of Persia
+original de Jordan Mechner (1989). Preserva la lógica funcional y el
+alma del original; reimagina todo lo demás.
+
+- **Motor**: dominio puro, FSM explícitas, físicas inerciales.
+- **Render**: pygame-ce con dibujo geométrico procedural (vector-retro).
+- **Audio**: PC-speaker sintetizado (numpy → pygame mixer).
+- **Determinismo**: `--seed` reproduce partidas exactas; `--demo`
+  juega solo.
+- **Calidad**: `ruff`, `mypy --strict`, `pytest` con cobertura ≥80%.
+
+## Vista previa (ASCII de captura)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  NIVEL 1 · MAZMORRA                              ⏱ 59:42  ♥♥♥♥   │
+├──────────────────────────────────────────────────────────────────┤
+│ ##############################################################   │
+│ #..........................................................#    │
+│ #..@.........=====.........|...........+.....................   │
+│ #####...^^^...#####....#####...########.........############    │
+│      #.......#     #..#     #.#        #.......#                │
+│      #########     ####     #.##########   g   #     >          │
+│                              #              ####################│
+└──────────────────────────────────────────────────────────────────┘
+   ←→ moverse · ↑ saltar · ↓ agacharse · ⎵ atacar · Q parar · Esc pausa
+```
+
+## Instalación rápida
+
+Requisitos: Python 3.13+ y [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync                    # instala todo (incluye dev por defecto si --extra dev)
+uv run pop2026             # juega
+uv run pop2026 --demo --seed 42   # ve la demo determinista
+uv run pop2026 --help
+```
+
+## Calidad
+
+```bash
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy --strict src
+uv run pytest --cov=src --cov-report=term-missing
+```
+
+## Estructura
+
+Ver [`docs/architecture.md`](docs/architecture.md) y
+[`docs/design.md`](docs/design.md).
+
+## Documentación
+
+- [`docs/original_program_analysis.md`](docs/original_program_analysis.md)
+  — arqueología del original.
+- [`docs/architecture.md`](docs/architecture.md) — capas y composición.
+- [`docs/design.md`](docs/design.md) — sistema visual, paleta,
+  tipografía, audio, accesibilidad.
+- [`docs/adr/`](docs/adr) — Architecture Decision Records.
+- [`docs/postmortem.md`](docs/postmortem.md) — qué se ganó, qué se
+  perdió, qué dice del oficio.
+
+## Licencia
+
+MIT. Ver [`LICENSE`](LICENSE). "Prince of Persia" es marca registrada
+de Ubisoft; este proyecto es una reinterpretación fan y no redistribuye
+código ni assets originales.
