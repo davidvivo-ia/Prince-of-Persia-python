@@ -8,23 +8,31 @@
 Fecha de redacción: 2026-05-13. Última versión publicada: **v1.0.0**
 (rama `claude/prince-of-persia-rebuild-y7uxD`).
 
-> **Progreso v1.1 (en curso)**:
-> - ✅ **F-2** (Hang / drop) entregado: el príncipe se cuelga del borde al
->   correr fuera de una repisa; `UP` lo sube de nuevo, `DOWN` lo suelta.
-> - ✅ **F-1 fase 0** (cimientos): `PositionF`, `Velocity`, `AABB`,
->   módulo `physics` con integrador y `is_grounded`. Tests con
->   invariantes de gravedad y colisión. Aún sin integrar en el FSM
->   del príncipe; pendiente fase 1.
-> - ✅ **F-3** (Multi-pantalla con cámara *room-flick*) entregado:
->   `viewport_col()` calcula la habitación visible y el renderer dibuja
->   solo esa banda. HUD muestra `SALA n/N`. L10 rediseñado a 40 celdas
->   (dos habitaciones).
-> - ✅ Demo bot reacciona a HANG y a saltos largos (`JUMP_R` desde
->   `RUN/WALK` interrumpe el paso para "saltar antes de caer").
-> - ✅ Audio: nuevo SFX `grab` cuando agarra una cornisa.
-> - L9 rediseñado con hueco de una celda que obliga a `JUMP_R`.
-> - Demo bot gana 11 de 12 niveles; solo L12 queda como reto humano.
-> - 141 tests, **91 % cobertura en dominio**, todas las gates verdes.
+> **Progreso v1.2 (entregado en esta tanda)**:
+> - ✅ **F-2** Hang / drop completo.
+> - ✅ **F-1 fase 0** cimientos físicos (`PositionF`, `Velocity`, `AABB`, `physics`).
+> - ✅ **F-3** Multi-pantalla con `viewport_col` y `SALA n/N`.
+> - ✅ **F-4** Combate por ventanas: `HIT_WINDOWS` y `BLOCK_WINDOWS`,
+>   nueva acción `LUNGE` (alcance 2, jefe), IA del guardia por
+>   distancia (skill 2 lanza LUNGE a 2 celdas).
+> - ✅ **F-6** Save/load wired al runner: guardado automático tras
+>   cada nivel ganado en `~/.local/share/pop2026/save.json`; flag
+>   `--resume` para continuar.
+> - ✅ **F-7** Esqueleto inmortal: `is_skeleton=True` en `Guard`,
+>   carácter `K` en `.poplv`, paleta espectral; al "morir" se levanta.
+> - ✅ **F-8** Cinemáticas mínimas: `cutscene.py` con tres viñetas
+>   (`intro`, `mid`, `final`) en niveles 1, 6 y 12; texto + glyph
+>   procedural; auto-avanza a los 6 s.
+> - ✅ **F-9** Poción de max-HP (`M`): aumenta `max_hp` y cura al
+>   máximo. L6 la incluye.
+> - ✅ **F-11** Difficulty: `--difficulty hard` arranca con 2 HP.
+> - ✅ Demo bot mejorado: detecta ventana de impacto del enemigo y
+>   PARA dinámicamente; gana 10/12 niveles (L10 y L12 retos humanos).
+> - **147 tests**, **90 % cobertura en dominio**, todas las gates verdes.
+>
+> Pendiente para v2.0: F-1 fase 1 (migración real del FSM a coordenadas
+> continuas), F-5 (animación con keyframes esqueletales), F-10
+> (música ambient), F-12 (editor TUI).
 
 ---
 

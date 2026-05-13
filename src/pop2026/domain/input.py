@@ -21,6 +21,7 @@ class PlayerCommand(IntEnum):
     JUMP = 5
     STRIKE = 6
     PARRY = 7
+    LUNGE = 8
 
 
 @dataclass(frozen=True, slots=True)

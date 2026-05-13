@@ -78,6 +78,10 @@ class Level:
                 elif tile is Tile.SPAWN_BOSS:
                     guards.append((Position(r, c), 2))
                     row_tiles.append(Tile.EMPTY)
+                elif tile is Tile.SPAWN_SKELETON:
+                    # skill -1 marca esqueleto en el spawn list
+                    guards.append((Position(r, c), -1))
+                    row_tiles.append(Tile.EMPTY)
                 else:
                     row_tiles.append(tile)
             rows.append(tuple(row_tiles))
@@ -131,6 +135,9 @@ def effective_tile(level: Level, state: LevelState, pos: Position) -> Tile:
         return Tile.EMPTY
     if raw is Tile.LOOSE_FLOOR and pos in state.fallen_floors:
         return Tile.EMPTY
-    if raw in (Tile.POTION_HEAL, Tile.POTION_POISON, Tile.SWORD) and pos in state.consumed_potions:
+    if (
+        raw in (Tile.POTION_HEAL, Tile.POTION_POISON, Tile.POTION_MAXHP, Tile.SWORD)
+        and pos in state.consumed_potions
+    ):
         return Tile.EMPTY
     return raw

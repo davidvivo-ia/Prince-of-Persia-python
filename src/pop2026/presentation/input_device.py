@@ -18,6 +18,8 @@ def poll() -> InputFrame:
 
     walk = bool(keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT])
 
+    if keys[pygame.K_x]:
+        return InputFrame(command=PlayerCommand.LUNGE, walk_modifier=walk)
     if keys[pygame.K_SPACE]:
         return InputFrame(command=PlayerCommand.STRIKE, walk_modifier=walk)
     if keys[pygame.K_q]:

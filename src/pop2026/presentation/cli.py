@@ -38,6 +38,10 @@ def _main(
     no_crt: bool = typer.Option(False, "--no-crt", help="Desactiva el overlay CRT."),
     mute: bool = typer.Option(False, "--mute", help="Sin audio."),
     skip_title: bool = typer.Option(False, "--skip-title", help="Salta la pantalla de título."),
+    difficulty: str = typer.Option(
+        "normal", "--difficulty", help="normal | hard (hard: 2 HP iniciales)."
+    ),
+    resume: bool = typer.Option(False, "--resume", help="Carga la partida guardada (si existe)."),
     version: bool = typer.Option(
         False,
         "--version",
@@ -59,6 +63,8 @@ def _main(
         crt=not no_crt,
         mute=mute,
         skip_title=skip_title,
+        difficulty=difficulty,
+        resume=resume,
     )
     code = run(config)
     sys.exit(code)

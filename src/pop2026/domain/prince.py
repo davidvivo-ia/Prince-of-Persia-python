@@ -232,6 +232,8 @@ def _next_action(
 
     if cmd is PlayerCommand.STRIKE and prince.has_sword:
         return replace(prince, action=Action.STRIKE, ticks_in_action=0)
+    if cmd is PlayerCommand.LUNGE and prince.has_sword:
+        return replace(prince, action=Action.LUNGE, ticks_in_action=0)
     if cmd is PlayerCommand.PARRY and prince.has_sword:
         return replace(prince, action=Action.PARRY, ticks_in_action=0)
 

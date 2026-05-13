@@ -68,7 +68,15 @@ def new_game(
         max_hp=starting_hp,
         has_sword=False,
     )
-    gs = tuple(Guard(pos=pos, skill=skill, hp=2 + skill) for pos, skill in level.guard_spawns)
+    gs = tuple(
+        Guard(
+            pos=pos,
+            skill=max(1, skill),
+            hp=(2 if skill == -1 else 2 + skill),
+            is_skeleton=skill == -1,
+        )
+        for pos, skill in level.guard_spawns
+    )
     return Game(
         level=level,
         state=LevelState(),
@@ -114,6 +122,10 @@ def _process_tile_interactions(g: Game) -> Game:
         from dataclasses import replace as _r
 
         p = _r(p, has_sword=True)
+        state = state.with_potion_consumed(p.pos)
+
+    if standing_tile is Tile.POTION_MAXHP and p.pos not in state.consumed_potions:
+        p = p.with_max_hp_bonus(1)
         state = state.with_potion_consumed(p.pos)
 
     # placas: cualquier actor pisándolas activa la gate más cercana

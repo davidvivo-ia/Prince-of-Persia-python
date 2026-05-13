@@ -12,6 +12,7 @@ from pop2026.domain.prince import Prince
 
 
 def _p_with_sword() -> Prince:
+    # ticks_in_action=3 cae dentro de la hit-window de STRIKE (3, 5).
     return Prince(
         pos=Position(1, 3),
         facing=Facing.RIGHT,
@@ -19,6 +20,7 @@ def _p_with_sword() -> Prince:
         hp=3,
         max_hp=3,
         action=Action.STRIKE,
+        ticks_in_action=3,
     )
 
 
@@ -67,6 +69,7 @@ class TestCombatResolve:
             pos=Position(1, 4),
             facing=Facing.LEFT,
             action=Action.STRIKE,
+            ticks_in_action=3,  # dentro de la hit-window
             hp=3,
         )
         r = resolve(p, (g,))
@@ -81,11 +84,13 @@ class TestCombatResolve:
             hp=3,
             max_hp=3,
             action=Action.PARRY,
+            ticks_in_action=1,  # dentro de la block-window de PARRY (0, 4)
         )
         g = Guard(
             pos=Position(1, 4),
             facing=Facing.LEFT,
             action=Action.STRIKE,
+            ticks_in_action=3,  # hit-window activa
             hp=3,
         )
         r = resolve(p, (g,))
@@ -104,3 +109,104 @@ class TestCombatResolve:
         r = resolve(p, (g,))
         assert len(r.guards) == 1
         assert r.guards[0].mode is GuardMode.DEAD
+
+
+class TestHitWindows:
+    def test_strike_outside_window_does_no_damage(self) -> None:
+        # ticks_in_action=0 está fuera de la hit-window (3, 5)
+        p = Prince(
+            pos=Position(1, 3),
+            facing=Facing.RIGHT,
+            has_sword=True,
+            hp=3,
+            max_hp=3,
+            action=Action.STRIKE,
+            ticks_in_action=0,
+        )
+        g = Guard(pos=Position(1, 4), facing=Facing.LEFT, action=Action.STAND, hp=3)
+        r = resolve(p, (g,))
+        assert r.hits_dealt == 0
+        assert r.guards[0].hp == 3
+
+    def test_strike_inside_window_damages(self) -> None:
+        p = Prince(
+            pos=Position(1, 3),
+            facing=Facing.RIGHT,
+            has_sword=True,
+            hp=3,
+            max_hp=3,
+            action=Action.STRIKE,
+            ticks_in_action=4,  # tick 4 está dentro de (3, 5)
+        )
+        g = Guard(pos=Position(1, 4), facing=Facing.LEFT, action=Action.STAND, hp=3)
+        r = resolve(p, (g,))
+        assert r.hits_dealt == 1
+
+    def test_parry_outside_window_does_not_block(self) -> None:
+        # ticks=4 está fuera de la block-window (0, 4)
+        p = Prince(
+            pos=Position(1, 3),
+            facing=Facing.RIGHT,
+            has_sword=True,
+            hp=3,
+            max_hp=3,
+            action=Action.PARRY,
+            ticks_in_action=4,
+        )
+        g = Guard(
+            pos=Position(1, 4),
+            facing=Facing.LEFT,
+            action=Action.STRIKE,
+            ticks_in_action=3,
+            hp=3,
+        )
+        r = resolve(p, (g,))
+        # PARRY fuera de ventana → recibe golpe
+        assert r.hits_received >= 1
+
+
+class TestLunge:
+    def test_lunge_reaches_two_cells(self) -> None:
+        # Príncipe con LUNGE en ticks 4-7, guardia a 2 celdas
+        p = Prince(
+            pos=Position(1, 3),
+            facing=Facing.RIGHT,
+            has_sword=True,
+            hp=3,
+            max_hp=3,
+            action=Action.LUNGE,
+            ticks_in_action=5,  # dentro de hit-window LUNGE (4, 7)
+        )
+        g = Guard(pos=Position(1, 5), facing=Facing.LEFT, action=Action.STAND, hp=3)
+        r = resolve(p, (g,))
+        assert r.hits_dealt == 1
+        assert r.guards[0].hp < 3
+
+    def test_lunge_outside_window_misses(self) -> None:
+        p = Prince(
+            pos=Position(1, 3),
+            facing=Facing.RIGHT,
+            has_sword=True,
+            hp=3,
+            max_hp=3,
+            action=Action.LUNGE,
+            ticks_in_action=1,  # fuera de (4, 7)
+        )
+        g = Guard(pos=Position(1, 5), facing=Facing.LEFT, action=Action.STAND, hp=3)
+        r = resolve(p, (g,))
+        assert r.hits_dealt == 0
+
+    def test_strike_does_not_reach_two_cells(self) -> None:
+        # STRIKE solo alcanza 1 celda, no debería conectar a distancia 2.
+        p = Prince(
+            pos=Position(1, 3),
+            facing=Facing.RIGHT,
+            has_sword=True,
+            hp=3,
+            max_hp=3,
+            action=Action.STRIKE,
+            ticks_in_action=3,
+        )
+        g = Guard(pos=Position(1, 5), facing=Facing.LEFT, action=Action.STAND, hp=3)
+        r = resolve(p, (g,))
+        assert r.hits_dealt == 0

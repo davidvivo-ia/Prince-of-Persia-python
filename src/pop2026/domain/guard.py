@@ -32,7 +32,7 @@ class GuardMode(IntEnum):
 
 @dataclass(frozen=True, slots=True)
 class Guard:
-    """Estado de un guardia."""
+    """Estado de un guardia (o esqueleto si ``is_skeleton``)."""
 
     pos: Position
     facing: Facing = Facing.LEFT
@@ -42,6 +42,8 @@ class Guard:
     skill: int = 1
     mode: GuardMode = GuardMode.PATROL
     patrol_steps_left: int = 3
+    is_skeleton: bool = False
+    """Variante inmortal: nunca llega a HP 0; se recupera tras HURT."""
 
     @property
     def alive(self) -> bool:
@@ -49,9 +51,12 @@ class Guard:
         return self.hp > 0 and self.mode is not GuardMode.DEAD
 
     def with_damage(self, amount: int) -> Guard:
-        """Aplica daño; si llega a 0 HP pasa a ``DEAD``."""
+        """Aplica daño; si llega a 0 HP pasa a ``DEAD`` (salvo esqueleto)."""
         new_hp = max(0, self.hp - amount)
         if new_hp == 0:
+            if self.is_skeleton:
+                # Inmortal: queda en 1 HP recuperándose, no muere.
+                return replace(self, hp=1, action=Action.HURT, ticks_in_action=0)
             return replace(
                 self,
                 hp=0,
@@ -103,25 +108,52 @@ def _next_action(
     prince_pos: Position,
     rng: Rng,
 ) -> Guard:
-    """Elige siguiente acción según modo."""
-    # Re-evalúa modo
-    adjacent = abs(prince_pos.col - guard.pos.col) <= 1 and prince_pos.row == guard.pos.row
-    if adjacent:
+    """Elige siguiente acción según modo.
+
+    Decisión por distancia:
+
+    - dist 0-1 (cuerpo a cuerpo): STRIKE o PARRY (skill 2 más agresivo).
+    - dist 2 (rango LUNGE, solo skill ≥ 2): LUNGE ocasional.
+    - dist 3-8 (visión): avanza si comparte fila; si no, patrulla.
+    - dist > 8: patrulla.
+    """
+    same_row = prince_pos.row == guard.pos.row
+    dist = abs(prince_pos.col - guard.pos.col) if same_row else 99
+    new_facing = (
+        guard.facing
+        if not same_row
+        else (Facing.RIGHT if prince_pos.col > guard.pos.col else Facing.LEFT)
+    )
+
+    # Distancia 0-1: cuerpo a cuerpo
+    if dist <= 1 and same_row:
         new_mode = GuardMode.COMBAT
-        # Encara al príncipe
-        new_facing = Facing.RIGHT if prince_pos.col > guard.pos.col else Facing.LEFT
         if guard.action is Action.HURT:
             return replace(
                 guard, mode=new_mode, facing=new_facing, action=Action.STAND, ticks_in_action=0
             )
-        # 50/50 entre strike y parry; skill 2 más agresivo
-        attack_prob = 0.6 if guard.skill >= 2 else 0.45
-        if rng.coin(attack_prob):
+        attack_prob = 0.65 if guard.skill >= 2 else 0.5
+        action = Action.STRIKE if rng.coin(attack_prob) else Action.PARRY
+        return replace(guard, mode=new_mode, facing=new_facing, action=action, ticks_in_action=0)
+
+    # Distancia 2 (rango LUNGE): solo jefe (skill 2) lo usa, con probabilidad.
+    if dist == 2 and same_row and guard.skill >= 2:
+        if rng.coin(0.55):
             return replace(
-                guard, mode=new_mode, facing=new_facing, action=Action.STRIKE, ticks_in_action=0
+                guard,
+                mode=GuardMode.COMBAT,
+                facing=new_facing,
+                action=Action.LUNGE,
+                ticks_in_action=0,
             )
+        # Si no estoca, retrocede / avanza (queda en STAND y deja la IA al
+        # siguiente tick decidir).
         return replace(
-            guard, mode=new_mode, facing=new_facing, action=Action.PARRY, ticks_in_action=0
+            guard,
+            mode=GuardMode.COMBAT,
+            facing=new_facing,
+            action=Action.STAND,
+            ticks_in_action=0,
         )
 
     if _spots_prince(guard, prince_pos):

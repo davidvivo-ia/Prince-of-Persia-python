@@ -392,18 +392,22 @@ def _draw_humanoid(
         arm_swing = -math.sin(phase * math.pi * 2) * 4
     shoulder_l = (head_cx - torso_w // 2, torso_top + 3)
     shoulder_r = (head_cx + torso_w // 2, torso_top + 3)
-    if pose == "strike":
-        # Brazo del sable extendido hacia adelante
-        hand_x = head_cx + fdir * 16
+    if pose in ("strike", "lunge"):
+        # Estocada: la versión LUNGE empuja más hacia delante.
+        is_lunge = pose == "lunge"
+        reach = 26 if is_lunge else 16
+        blade_extra = 22 if is_lunge else 14
+        hand_x = head_cx + fdir * reach
         hand_y = torso_top + 6
         front_shoulder = shoulder_r if fdir > 0 else shoulder_l
         back_shoulder = shoulder_l if fdir > 0 else shoulder_r
         pygame.draw.line(surface, skin, front_shoulder, (hand_x, hand_y), 3)
         pygame.draw.line(surface, skin, back_shoulder, (head_cx - fdir * 6, torso_top + 10), 3)
         if weapon:
-            blade_end = (hand_x + fdir * 14, hand_y - 2)
-            pygame.draw.line(surface, PALETTE.blade, (hand_x, hand_y), blade_end, 2)
-            # Guarda del sable
+            blade_end = (hand_x + fdir * blade_extra, hand_y - 2)
+            pygame.draw.line(
+                surface, PALETTE.blade, (hand_x, hand_y), blade_end, 3 if is_lunge else 2
+            )
             pygame.draw.line(
                 surface, PALETTE.warning, (hand_x - 1, hand_y - 2), (hand_x + 1, hand_y + 2), 2
             )
@@ -463,6 +467,8 @@ def _pose_from_action(p: Prince | Guard) -> str:
     a = p.action
     if a is Action.STRIKE:
         return "strike"
+    if a is Action.LUNGE:
+        return "lunge"
     if a is Action.PARRY:
         return "parry"
     if a is Action.HURT:
@@ -522,6 +528,14 @@ def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> Non
 
 
 def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
+    # Esqueleto: paleta espectral (gris perla / violeta apagado).
+    if g.is_skeleton:
+        skin = (0xCF, 0xCF, 0xDC)
+        shadow = (0x5E, 0x4F, 0x7A)
+    else:
+        skin = PALETTE.guard_skin
+        shadow = PALETTE.guard_armor
+
     if g.mode is GuardMode.DEAD:
         feet_x, feet_y = _smooth_feet(
             g.pos.col, g.pos.row, Action.DEAD, 0, g.facing, viewport_x=viewport_x
@@ -531,8 +545,8 @@ def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
             feet_x,
             feet_y,
             g.facing,
-            skin=PALETTE.guard_skin,
-            shadow=PALETTE.guard_armor,
+            skin=skin,
+            shadow=shadow,
             sash=None,
             weapon=False,
             pose="dead",
@@ -547,8 +561,8 @@ def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
         feet_x,
         feet_y,
         g.facing,
-        skin=PALETTE.guard_skin,
-        shadow=PALETTE.guard_armor,
+        skin=skin,
+        shadow=shadow,
         sash=None,
         weapon=True,
         pose=_pose_from_action(g),
@@ -690,6 +704,8 @@ def render(
                 _draw_potion(surface, x, y, color=PALETTE.success)
             elif tile is Tile.POTION_POISON:
                 _draw_potion(surface, x, y, color=PALETTE.error)
+            elif tile is Tile.POTION_MAXHP:
+                _draw_potion(surface, x, y, color=PALETTE.accent)
             elif tile is Tile.SWORD:
                 _draw_sword_pickup(surface, x, y)
             elif tile is Tile.EXIT:

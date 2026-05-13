@@ -89,7 +89,19 @@ def decide(game: Game, rng: Rng) -> InputFrame:
         return InputFrame(command=PlayerCommand.UP)
 
     if _guard_adjacent(game) and p.has_sword:
-        if rng.coin(0.7):
+        # Si algún guardia adyacente está dentro de su ventana de impacto,
+        # ¡parar! De otro modo, atacar.
+        from pop2026.domain.actions import is_within_window
+
+        for gd in game.guards:
+            if (
+                gd.alive
+                and abs(gd.pos.col - p.pos.col) <= 1
+                and gd.pos.row == p.pos.row
+                and is_within_window(gd.action, gd.ticks_in_action)
+            ):
+                return InputFrame(command=PlayerCommand.PARRY)
+        if rng.coin(0.75):
             return InputFrame(command=PlayerCommand.STRIKE)
         return InputFrame(command=PlayerCommand.PARRY)
 

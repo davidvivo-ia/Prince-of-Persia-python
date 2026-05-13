@@ -31,6 +31,8 @@ class Tile(IntEnum):
     SPAWN_GUARD = 10
     SPAWN_BOSS = 11
     SWORD = 12
+    POTION_MAXHP = 13
+    SPAWN_SKELETON = 14
 
 
 SOLID: frozenset[Tile] = frozenset({Tile.FLOOR, Tile.LOOSE_FLOOR, Tile.GATE})
@@ -42,6 +44,7 @@ WALKABLE_OVER: frozenset[Tile] = frozenset(
         Tile.PRESSURE,
         Tile.POTION_HEAL,
         Tile.POTION_POISON,
+        Tile.POTION_MAXHP,
         Tile.EXIT,
         Tile.SWORD,
         Tile.SPIKES,  # se puede entrar; las spikes matan si pisas con caída
@@ -59,11 +62,13 @@ CHAR_TO_TILE: dict[str, Tile] = {
     "_": Tile.PRESSURE,
     "+": Tile.POTION_HEAL,
     "-": Tile.POTION_POISON,
+    "M": Tile.POTION_MAXHP,
     ">": Tile.EXIT,
     "S": Tile.SWORD,
     "@": Tile.SPAWN_PRINCE,
     "g": Tile.SPAWN_GUARD,
     "G": Tile.SPAWN_BOSS,
+    "K": Tile.SPAWN_SKELETON,
 }
 """Mapeo carácter → Tile para el formato ``.poplv``."""
 

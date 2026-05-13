@@ -31,7 +31,7 @@ from pop2026.infrastructure.levels import load_builtin
 from pop2026.infrastructure.rng import LfsrRng
 from pop2026.presentation import input_device, renderer
 from pop2026.presentation.audio import Beeper, play_transitions
-from pop2026.presentation.screens import card, ending, title
+from pop2026.presentation.screens import card, cutscene, ending, title
 from pop2026.presentation.theme import LAYOUT
 
 
@@ -47,6 +47,10 @@ class AppConfig:
     crt: bool = True
     mute: bool = False
     skip_title: bool = False
+    difficulty: str = "normal"
+    """``normal`` (3 HP iniciales) o ``hard`` (2 HP iniciales, daño x1.5)."""
+    resume: bool = False
+    """Si ``True``, carga la partida guardada al arrancar."""
 
 
 def _make_rng(seed: int) -> Rng:
@@ -146,15 +150,42 @@ def _run_interactive(config: AppConfig) -> int:
         pygame.quit()
         return 0
 
+    starting_hp = 2 if config.difficulty == "hard" else 3
     state = _RunState(
         time_left=DEFAULT_TIME_LIMIT_TICKS,
-        max_hp=3,
+        max_hp=starting_hp,
         has_sword=False,
     )
-
     level_idx = config.start_level
+    shown_cutscenes: set[str] = set()
+    _ = cutscene  # uso diferido más abajo
+
+    # Cargar partida si se pidió.
+    if config.resume:
+        from pop2026.infrastructure import savegame
+
+        try:
+            slot = savegame.load()
+        except Exception:
+            slot = None
+        if slot is not None:
+            level_idx = slot.level
+            state = _RunState(
+                time_left=slot.time_left_ms,
+                max_hp=slot.max_hp,
+                has_sword=False,
+            )
     while 1 <= level_idx <= total_levels():
         info = CAMPAIGN[level_idx - 1]
+
+        # Cinemática en puntos clave de la campaña
+        scene_at_level: dict[int, str] = {1: "intro", 6: "mid", 12: "final"}
+        scene_name = scene_at_level.get(level_idx)
+        if scene_name is not None and scene_name not in shown_cutscenes:
+            shown_cutscenes.add(scene_name)
+            if not _show_cutscene(screen, clock, font_big, font, scene_name):
+                pygame.quit()
+                return 0
 
         if not _show_card(screen, clock, font_big, font, info, level_idx):
             pygame.quit()
@@ -173,6 +204,21 @@ def _run_interactive(config: AppConfig) -> int:
                 has_sword=final.prince.has_sword,
             )
             beeper.play("victory" if level_idx == total_levels() else "jump")
+            # Guardado automático al completar un nivel
+            try:
+                from pop2026.infrastructure import savegame
+
+                slot = savegame.SaveGame(
+                    version=savegame.SAVE_VERSION,
+                    level=min(level_idx + 1, total_levels()),
+                    hp=state.max_hp,
+                    max_hp=state.max_hp,
+                    time_left_ms=state.time_left,
+                    rng_seed=config.seed,
+                )
+                savegame.save(slot)
+            except Exception:
+                pass  # no fatal si no se puede guardar
             level_idx += 1
             continue
 
@@ -212,6 +258,32 @@ def _show_title(
         pygame.display.flip()
         dt = clock.tick(60) / 1000.0
         t += dt
+
+
+def _show_cutscene(
+    screen: pygame.Surface,
+    clock: pygame.time.Clock,
+    font_big: pygame.font.Font,
+    font: pygame.font.Font,
+    scene_name: str,
+) -> bool:
+    """Muestra una cinemática. Devuelve ``False`` si el usuario pulsa Esc."""
+    t = 0.0
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return False
+                if t > 0.4:
+                    return True
+        cutscene.draw(screen, scene_name, font_big=font_big, font=font, t=t)
+        pygame.display.flip()
+        dt = clock.tick(60) / 1000.0
+        t += dt
+        if t > 6.0:
+            return True
 
 
 def _show_card(
