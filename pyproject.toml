@@ -50,6 +50,7 @@ pop2026 = "pop2026.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pop2026"]
+include = ["src/pop2026/**/*.poplv", "src/pop2026/py.typed"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "docs", "README.md", "CHANGELOG.md", "LICENSE"]
