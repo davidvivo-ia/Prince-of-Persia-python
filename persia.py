@@ -2,9 +2,12 @@
 
 Uso::
 
-    python persia.py                 # juega
-    python persia.py --demo --seed 42
+    python persia.py                  # juega
+    python persia.py --demo --seed 42 # demo determinista
     python persia.py --help
+
+(En Windows, si solo tienes el Python Launcher: ``py -3.13 persia.py``;
+en Linux/macOS: ``python3`` o ``python3.13`` valen igual.)
 
 Si las dependencias no están instaladas, el script lo detecta e indica
 qué hacer (``pip install -e .`` o ``pip install -r requirements.txt``).

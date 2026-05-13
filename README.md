@@ -44,21 +44,23 @@ uv run pop2026 --demo --seed 42      # demo determinista
 uv run pop2026 --help
 ```
 
-### Opción B — con `python` plano (Windows, sin `uv`)
+### Opción B — con `python` plano (Windows / cualquier sistema, sin `uv`)
 
-```powershell
-py -3.13 -m pip install -r requirements.txt
-py -3.13 persia.py                   # juega
-py -3.13 persia.py --demo --seed 42  # demo determinista
-py -3.13 persia.py --help
+```bash
+python -m pip install -r requirements.txt
+python persia.py                     # juega
+python persia.py --demo --seed 42    # demo determinista
+python persia.py --help
 ```
 
-En Linux/macOS funciona el mismo flujo con `python3.13` en lugar de `py -3.13`.
-
-> El script `persia.py` añade `src/` al `sys.path`, así que no hace
-> falta instalar el paquete. Si prefieres instalarlo:
+> Si en tu Windows tienes el "Python Launcher" en vez del comando
+> `python`, sustituye por `py -3.13`. En Linux/macOS, `python3` o
+> `python3.13` funcionan igual.
+>
+> `persia.py` añade `src/` al `sys.path`, así que no hace falta
+> instalar el paquete. Si prefieres instalarlo:
 > `python -m pip install -e .` y luego `pop2026` queda disponible como
-> comando.
+> comando en el PATH.
 
 ## Calidad
 
