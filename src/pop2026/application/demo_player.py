@@ -61,13 +61,10 @@ def decide(game: Game, rng: Rng) -> InputFrame:
             return InputFrame(command=PlayerCommand.STRIKE)
         return InputFrame(command=PlayerCommand.PARRY)
 
+    # Avanza siempre hacia la derecha; la gravedad gestiona el resto.
+    # Si encuentra una pared, intenta trepar (UP).
     if _front_solid(game):
-        # pared: probamos saltar
-        return InputFrame(command=PlayerCommand.JUMP)
-
-    if _gap_ahead(game):
-        # salto direccional: en v1.0 usamos JUMP simple
-        return InputFrame(command=PlayerCommand.JUMP)
+        return InputFrame(command=PlayerCommand.UP)
 
     return InputFrame(command=PlayerCommand.RIGHT)
 
