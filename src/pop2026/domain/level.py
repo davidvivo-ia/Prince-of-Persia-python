@@ -131,6 +131,6 @@ def effective_tile(level: Level, state: LevelState, pos: Position) -> Tile:
         return Tile.EMPTY
     if raw is Tile.LOOSE_FLOOR and pos in state.fallen_floors:
         return Tile.EMPTY
-    if raw in (Tile.POTION_HEAL, Tile.POTION_POISON) and pos in state.consumed_potions:
+    if raw in (Tile.POTION_HEAL, Tile.POTION_POISON, Tile.SWORD) and pos in state.consumed_potions:
         return Tile.EMPTY
     return raw

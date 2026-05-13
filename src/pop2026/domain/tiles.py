@@ -30,6 +30,7 @@ class Tile(IntEnum):
     SPAWN_PRINCE = 9
     SPAWN_GUARD = 10
     SPAWN_BOSS = 11
+    SWORD = 12
 
 
 SOLID: frozenset[Tile] = frozenset({Tile.FLOOR, Tile.LOOSE_FLOOR, Tile.GATE})
@@ -42,6 +43,7 @@ WALKABLE_OVER: frozenset[Tile] = frozenset(
         Tile.POTION_HEAL,
         Tile.POTION_POISON,
         Tile.EXIT,
+        Tile.SWORD,
         Tile.SPIKES,  # se puede entrar; las spikes matan si pisas con caída
     }
 )
@@ -58,6 +60,7 @@ CHAR_TO_TILE: dict[str, Tile] = {
     "+": Tile.POTION_HEAL,
     "-": Tile.POTION_POISON,
     ">": Tile.EXIT,
+    "S": Tile.SWORD,
     "@": Tile.SPAWN_PRINCE,
     "g": Tile.SPAWN_GUARD,
     "G": Tile.SPAWN_BOSS,

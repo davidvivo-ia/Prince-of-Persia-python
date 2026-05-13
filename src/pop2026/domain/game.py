@@ -110,6 +110,12 @@ def _process_tile_interactions(g: Game) -> Game:
         p = p.with_damage(1)
         state = state.with_potion_consumed(p.pos)
 
+    if standing_tile is Tile.SWORD and not p.has_sword:
+        from dataclasses import replace as _r
+
+        p = _r(p, has_sword=True)
+        state = state.with_potion_consumed(p.pos)
+
     # placas: cualquier actor pisándolas activa la gate más cercana
     pressed: set[Position] = set()
     actors = [p.pos, *(gd.pos for gd in g.guards if gd.alive)]
