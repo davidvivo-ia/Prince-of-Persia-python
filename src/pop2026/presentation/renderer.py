@@ -42,6 +42,35 @@ def _floor_top_y(row: int) -> int:
     return y + LAYOUT.tile_h - FLOOR_THICKNESS
 
 
+def viewport_col(prince_col: int, level_cols: int) -> int:
+    """Columna lógica donde empieza la pantalla visible.
+
+    Cada "habitación" mide ``LAYOUT.cols`` celdas. La cámara salta en
+    bloque (room-flick) cuando el príncipe cruza un borde, igual que en
+    el motor original.
+
+    Args:
+        prince_col: columna lógica del príncipe.
+        level_cols: anchura total del nivel.
+
+    Returns:
+        Columna donde empieza la habitación visible actual, recortada al
+        rango válido del nivel.
+    """
+    if level_cols <= LAYOUT.cols:
+        return 0
+    room = max(0, prince_col // LAYOUT.cols)
+    max_room = max(0, (level_cols - 1) // LAYOUT.cols)
+    return min(room, max_room) * LAYOUT.cols
+
+
+def total_rooms(level_cols: int) -> int:
+    """Cuántas habitaciones lógicas tiene el nivel."""
+    if level_cols <= 0:
+        return 0
+    return max(1, (level_cols + LAYOUT.cols - 1) // LAYOUT.cols)
+
+
 # ---------------------------------------------------------------------------
 # Fondo: pared trasera con sombreado
 # ---------------------------------------------------------------------------
@@ -464,16 +493,20 @@ def _smooth_feet(
     action: Action,
     ticks: int,
     facing: Facing,
+    *,
+    viewport_x: int = 0,
 ) -> tuple[int, int]:
     """Calcula píxeles ``(feet_x, feet_y)`` con offset sub-celda."""
     dx, dy = offset_for(action=action, ticks=ticks, facing_value=int(facing))
-    feet_x = int((col + dx) * LAYOUT.tile_w + LAYOUT.tile_w / 2)
+    feet_x = int((col - viewport_x + dx) * LAYOUT.tile_w + LAYOUT.tile_w / 2)
     feet_y = int(_floor_top_y(row) + dy * LAYOUT.tile_h)
     return feet_x, feet_y
 
 
-def _draw_prince(surface: pygame.Surface, p: Prince) -> None:
-    feet_x, feet_y = _smooth_feet(p.pos.col, p.pos.row, p.action, p.ticks_in_action, p.facing)
+def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> None:
+    feet_x, feet_y = _smooth_feet(
+        p.pos.col, p.pos.row, p.action, p.ticks_in_action, p.facing, viewport_x=viewport_x
+    )
     _draw_humanoid(
         surface,
         feet_x,
@@ -488,9 +521,11 @@ def _draw_prince(surface: pygame.Surface, p: Prince) -> None:
     )
 
 
-def _draw_guard(surface: pygame.Surface, g: Guard) -> None:
+def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
     if g.mode is GuardMode.DEAD:
-        feet_x, feet_y = _smooth_feet(g.pos.col, g.pos.row, Action.DEAD, 0, g.facing)
+        feet_x, feet_y = _smooth_feet(
+            g.pos.col, g.pos.row, Action.DEAD, 0, g.facing, viewport_x=viewport_x
+        )
         _draw_humanoid(
             surface,
             feet_x,
@@ -504,7 +539,9 @@ def _draw_guard(surface: pygame.Surface, g: Guard) -> None:
             phase=0.0,
         )
         return
-    feet_x, feet_y = _smooth_feet(g.pos.col, g.pos.row, g.action, g.ticks_in_action, g.facing)
+    feet_x, feet_y = _smooth_feet(
+        g.pos.col, g.pos.row, g.action, g.ticks_in_action, g.facing, viewport_x=viewport_x
+    )
     _draw_humanoid(
         surface,
         feet_x,
@@ -524,7 +561,13 @@ def _draw_guard(surface: pygame.Surface, g: Guard) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _draw_hud(surface: pygame.Surface, game: Game, font: pygame.font.Font) -> None:
+def _draw_hud(
+    surface: pygame.Surface,
+    game: Game,
+    font: pygame.font.Font,
+    *,
+    viewport_x: int = 0,
+) -> None:
     # Banda superior
     pygame.draw.rect(surface, PALETTE.bg, (0, 0, surface.get_width(), LAYOUT.hud_top))
     pygame.draw.line(
@@ -538,7 +581,12 @@ def _draw_hud(surface: pygame.Surface, game: Game, font: pygame.font.Font) -> No
     secs = game.time_left // 60
     mm, ss = divmod(secs, 60)
     sword_txt = "  SABLE" if game.prince.has_sword else ""
-    title = f"NIVEL {game.level_index}   {mm:02d}:{ss:02d}{sword_txt}"
+    rooms = total_rooms(game.level.cols)
+    room_txt = ""
+    if rooms > 1:
+        current_room = viewport_x // LAYOUT.cols + 1
+        room_txt = f"  SALA {current_room}/{rooms}"
+    title = f"NIVEL {game.level_index}   {mm:02d}:{ss:02d}{sword_txt}{room_txt}"
     surface.blit(font.render(title, True, PALETTE.primary), (10, 8))
 
     # Corazones (cada HP es un pequeño rombo rojo)
@@ -602,22 +650,31 @@ def render(
     *,
     crt: bool = True,
 ) -> None:
-    """Renderiza un frame completo del juego."""
+    """Renderiza un frame completo del juego.
+
+    Si el nivel es más ancho que ``LAYOUT.cols``, la cámara opera en
+    modo *room-flick*: salta en bloque cuando el príncipe cruza el
+    borde de una habitación lógica (homenaje al cambio de pantalla del
+    motor original).
+    """
     surface.fill(PALETTE.bg)
+    viewport_x = viewport_col(game.prince.pos.col, game.level.cols)
 
     # Pared trasera + banda de techo
     _draw_back_wall(surface)
     _draw_ceiling_strip(surface)
 
-    # Pilares decorativos cada 5 columnas (efecto arquitectónico)
-    for c in range(0, game.level.cols, 5):
-        _draw_pillar(surface, c)
+    # Pilares decorativos cada 5 columnas dentro de la habitación visible.
+    for local_c in range(0, LAYOUT.cols, 5):
+        _draw_pillar(surface, local_c)
 
-    # Tiles
+    # Tiles visibles (solo las columnas de la habitación actual)
+    col_start = viewport_x
+    col_end = min(viewport_x + LAYOUT.cols, game.level.cols)
     for r in range(game.level.rows):
-        for c in range(game.level.cols):
+        for c in range(col_start, col_end):
             tile = effective_tile(game.level, game.state, Position(r, c))
-            x, y = _cell_to_px(c, r)
+            x, y = _cell_to_px(c - viewport_x, r)
             if tile is Tile.FLOOR:
                 _draw_floor(surface, x, y)
             elif tile is Tile.LOOSE_FLOOR:
@@ -638,12 +695,13 @@ def render(
             elif tile is Tile.EXIT:
                 _draw_exit(surface, x, y)
 
-    # Actores (guardias debajo, príncipe encima)
+    # Actores visibles
     for g in game.guards:
-        _draw_guard(surface, g)
-    _draw_prince(surface, game.prince)
+        if col_start - 1 <= g.pos.col <= col_end:
+            _draw_guard(surface, g, viewport_x=viewport_x)
+    _draw_prince(surface, game.prince, viewport_x=viewport_x)
 
-    _draw_hud(surface, game, font)
+    _draw_hud(surface, game, font, viewport_x=viewport_x)
 
     if crt:
         _draw_crt(surface)
