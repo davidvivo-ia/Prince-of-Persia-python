@@ -33,14 +33,32 @@ alma del original; reimagina todo lo demás.
 
 ## Instalación rápida
 
-Requisitos: Python 3.13+ y [uv](https://docs.astral.sh/uv/).
+Requisitos: **Python 3.13+**.
+
+### Opción A — con `uv` (recomendado, Linux/macOS/WSL)
 
 ```bash
-uv sync                    # instala todo (incluye dev por defecto si --extra dev)
-uv run pop2026             # juega
-uv run pop2026 --demo --seed 42   # ve la demo determinista
+uv sync                              # instala todo
+uv run pop2026                       # juega
+uv run pop2026 --demo --seed 42      # demo determinista
 uv run pop2026 --help
 ```
+
+### Opción B — con `python` plano (Windows, sin `uv`)
+
+```powershell
+py -3.13 -m pip install -r requirements.txt
+py -3.13 persia.py                   # juega
+py -3.13 persia.py --demo --seed 42  # demo determinista
+py -3.13 persia.py --help
+```
+
+En Linux/macOS funciona el mismo flujo con `python3.13` en lugar de `py -3.13`.
+
+> El script `persia.py` añade `src/` al `sys.path`, así que no hace
+> falta instalar el paquete. Si prefieres instalarlo:
+> `python -m pip install -e .` y luego `pop2026` queda disponible como
+> comando.
 
 ## Calidad
 

@@ -1,0 +1,10 @@
+# Dependencias runtime. Para entorno completo de desarrollo usar
+#     pip install -e ".[dev]"
+# o bien
+#     uv sync --extra dev
+pygame-ce>=2.5
+typer>=0.12
+rich>=13.7
+pydantic>=2.7
+structlog>=24.1
+numpy>=2.0
