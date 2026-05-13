@@ -1,15 +1,18 @@
 """Reproductor de demo determinista.
 
-Genera una secuencia de :class:`InputFrame` a partir de una seed. La
-misma seed produce la misma demo. Útil para:
+Genera una secuencia de :class:`InputFrame` a partir de una seed y una
+política sencilla, en orden de prioridad:
 
-- Tests E2E sin intervención humana.
-- Grabar GIFs/SVGs reproducibles.
-- Verificar tras refactors que el motor sigue comportándose igual.
+1. Si hay guardia adyacente: alterna ``STRIKE`` y ``PARRY`` con
+   probabilidad influida por el RNG.
+2. Si la celda de delante es sólida (pared o cornisa): pide ``UP`` para
+   trepar.
+3. Si la celda inmediatamente delante es sólida y la de delante-arriba
+   también, intenta saltar.
+4. En cualquier otro caso, ``RIGHT``.
 
-Estrategia v1.0: una *política simple* avanza a la derecha buscando la
-salida, salta sobre huecos, pulsa STRIKE al ver guardia y PARRY si
-recibe daño. El RNG fija microvariaciones (parry vs strike, walk vs run).
+La misma seed produce la misma demo, lo que permite tests E2E y
+reproducción de partidas grabadas.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from pop2026.domain.geometry import Position
 from pop2026.domain.input import InputFrame, PlayerCommand
 from pop2026.domain.level import effective_tile
 from pop2026.domain.ports import Rng
-from pop2026.domain.tiles import SOLID
+from pop2026.domain.tiles import SOLID, Tile
 
 
 def _front_solid(game: Game) -> bool:
@@ -30,22 +33,38 @@ def _front_solid(game: Game) -> bool:
     return effective_tile(game.level, game.state, target) in SOLID
 
 
-def _gap_ahead(game: Game) -> bool:
-    """¿Hay un hueco una celda adelante (suelo bajo la siguiente celda falta)?"""
+def _can_climb_up(game: Game) -> bool:
+    """¿Hay una cornisa accesible delante para trepar?"""
+    fwd = game.prince.pos.step(game.prince.facing)
+    above_fwd = fwd.shifted(drow=-1)
+    above = game.prince.pos.shifted(drow=-1)
+    landing = fwd.shifted(drow=-2)
+    eff = effective_tile
+    return (
+        eff(game.level, game.state, above_fwd) in SOLID
+        and eff(game.level, game.state, fwd) not in SOLID
+        and eff(game.level, game.state, above) not in SOLID
+        and eff(game.level, game.state, landing) not in SOLID
+    )
+
+
+def _front_is_spike(game: Game) -> bool:
+    target = game.prince.pos.step(game.prince.facing)
+    return effective_tile(game.level, game.state, target) is Tile.SPIKES
+
+
+def _gap_under_front(game: Game) -> bool:
+    """¿No hay suelo bajo la celda inmediatamente delante?"""
     target = game.prince.pos.step(game.prince.facing)
     below = Position(target.row + 1, target.col)
     return effective_tile(game.level, game.state, below) not in SOLID
 
 
 def _guard_adjacent(game: Game) -> bool:
-    for g in game.guards:
-        if (
-            g.alive
-            and abs(g.pos.col - game.prince.pos.col) <= 1
-            and g.pos.row == game.prince.pos.row
-        ):
-            return True
-    return False
+    return any(
+        g.alive and abs(g.pos.col - game.prince.pos.col) <= 1 and g.pos.row == game.prince.pos.row
+        for g in game.guards
+    )
 
 
 def decide(game: Game, rng: Rng) -> InputFrame:
@@ -55,16 +74,26 @@ def decide(game: Game, rng: Rng) -> InputFrame:
     if p.action is Action.DEAD:
         return InputFrame()
 
-    if _guard_adjacent(game):
-        # 70% strike, 30% parry: rng.coin lo decide
+    if _guard_adjacent(game) and p.has_sword:
         if rng.coin(0.7):
             return InputFrame(command=PlayerCommand.STRIKE)
         return InputFrame(command=PlayerCommand.PARRY)
 
-    # Avanza siempre hacia la derecha; la gravedad gestiona el resto.
-    # Si encuentra una pared, intenta trepar (UP).
-    if _front_solid(game):
+    # Pinchos delante: saltar para evitar caer encima con velocidad.
+    if _front_is_spike(game):
+        return InputFrame(command=PlayerCommand.JUMP)
+
+    # Cornisa accesible: trepar.
+    if _can_climb_up(game):
         return InputFrame(command=PlayerCommand.UP)
+
+    # Pared inmediata: probar salto vertical.
+    if _front_solid(game):
+        return InputFrame(command=PlayerCommand.JUMP)
+
+    # Hueco delante: saltar (salto direccional si veníamos corriendo).
+    if _gap_under_front(game):
+        return InputFrame(command=PlayerCommand.JUMP)
 
     return InputFrame(command=PlayerCommand.RIGHT)
 
@@ -75,10 +104,7 @@ def play(
     *,
     max_frames: int = 6_000,
 ) -> Iterable[Game]:
-    """Itera ticks hasta que el juego termine o se alcance ``max_frames``.
-
-    Yield cada ``Game`` resultante (incluido el inicial).
-    """
+    """Itera ticks hasta que el juego termine o se alcance ``max_frames``."""
     yield game
     for _ in range(max_frames):
         if not game.running:

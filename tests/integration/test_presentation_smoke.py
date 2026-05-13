@@ -24,7 +24,7 @@ def test_renderer_can_draw_a_frame() -> None:
         from pop2026.presentation import renderer
         from pop2026.presentation.theme import LAYOUT
 
-        level = load_builtin("01_dungeon")
+        level = load_builtin("01_cell")
         game = new_game(level)
         screen = pygame.Surface((LAYOUT.width_px, LAYOUT.height_px))
         font = pygame.font.Font(None, 22)

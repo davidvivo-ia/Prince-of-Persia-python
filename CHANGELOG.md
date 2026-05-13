@@ -44,9 +44,25 @@ versionado sigue [SemVer].
 
 ### Añadido
 
-- 3 niveles built-in: `01_dungeon`, `02_prison`, `03_throne`.
-- CLI con Typer: `--demo`, `--seed`, `--frames`, `--headless`,
-  `--no-crt`, `--mute`, `--level`, `--version`.
+- **12 niveles** de campaña con nombres y subtítulos:
+  `01_cell`, `02_sword`, `03_guard`, `04_traps`, `05_plate`,
+  `06_loose`, `07_duo`, `08_climb`, `09_maze`, `10_patrol`,
+  `11_spikes`, `12_jaffar`. Diseños propios en formato `.poplv`.
+- **Campaña encadenada** con reloj global de 60 minutos conservado
+  entre niveles (homenaje al original).
+- **Pantalla de título** con logo, subtítulo y parpadeo del prompt.
+- **Cartas de nivel** intermedias con número, título narrativo y
+  subtítulo.
+- **Pantallas finales** de victoria y derrota con opción de reintento.
+- **Tile sable `S`**: se recoge al pisarlo y habilita el combate.
+- **Salto direccional**: ``JUMP`` mientras corres/andas hace `JUMP_R`
+  (salto largo para cruzar huecos).
+- **Trepar repisas**: ``UP`` ante una cornisa válida hace `CLIMB_UP`.
+- **Demo determinista** mejorada: gestiona combate y reconocimiento de
+  trampas. Gana 11/12 niveles sin intervención humana.
+- CLI con Typer: `--demo`, `--seed`, `--frames`, `--start-level`,
+  `--skip-title`, `--headless`, `--no-crt`, `--mute`, `--version`.
+- Launcher `persia.py` para Windows/macOS/Linux sin `uv`.
 - Tests unitarios, de integración y de propiedad (hypothesis).
 - CI GitHub Actions con matriz Python 3.13 y 3.14.
 - 5 ADRs documentando decisiones clave.
@@ -62,9 +78,10 @@ versionado sigue [SemVer].
 - **[LICENCIA CREATIVA] Estética vector-retro**: en lugar de imitar los
   sprites rotoscopiados con bitmaps, dibujamos siluetas geométricas con
   scanlines CRT. Ver `docs/adr/0005-visual-language.md`.
-- **[LICENCIA CREATIVA] Scope reducido a 3 niveles**: el original
-  ofrece 12. Construir 12 niveles balanceados queda para `TODO.md`
-  v1.1.
+- **[LICENCIA CREATIVA] 12 niveles propios**: los diseños de los
+  niveles son nuestros, en formato `.poplv` ASCII; no reproducen los
+  layouts concretos del original. La progresión de dificultad y los
+  nombres narrativos son originales.
 
 ### Bugs corregidos respecto del original
 

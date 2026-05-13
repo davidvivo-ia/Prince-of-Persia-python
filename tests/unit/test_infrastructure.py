@@ -56,15 +56,22 @@ class TestLfsrRng:
 class TestLevelLoader:
     def test_list_builtin_returns_known_levels(self) -> None:
         names = levels.list_builtin()
-        assert "01_dungeon" in names
-        assert "02_prison" in names
-        assert "03_throne" in names
+        # La campaña tiene 12 niveles built-in
+        assert len(names) == 12
+        assert "01_cell" in names
+        assert "12_jaffar" in names
 
     def test_load_builtin_parses(self) -> None:
-        lv = levels.load_builtin("01_dungeon")
-        assert lv.name == "01_dungeon"
+        lv = levels.load_builtin("01_cell")
+        assert lv.name == "01_cell"
         assert lv.rows > 0
         assert lv.prince_spawn.row >= 0
+
+    def test_every_builtin_level_parses(self) -> None:
+        for name in levels.list_builtin():
+            lv = levels.load_builtin(name)
+            assert lv.prince_spawn.row >= 0
+            assert lv.cols > 0
 
     def test_load_unknown_raises(self) -> None:
         with pytest.raises(LevelLoadError):

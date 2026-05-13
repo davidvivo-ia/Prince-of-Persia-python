@@ -130,17 +130,14 @@ def _apply_action_effect(
         return prince
 
     if action is Action.JUMP_V:
-        # Salto vertical: si hay borde alcanzable arriba, sube.
-        up = prince.pos.shifted(drow=-1)
-        if not _is_solid(level, state, up) and _is_solid(level, state, up.shifted(drow=-1)):
-            # Hay techo justo arriba del up: cuelga
-            return replace(prince, pos=up, fall_distance=0)
+        # Salto vertical en sitio: no desplaza, sirve para evitar golpes.
         return replace(prince, fall_distance=0)
 
     if action is Action.JUMP_R:
-        target = prince.pos.step(prince.facing, 2)
-        if not _is_solid(level, state, target):
-            return replace(prince, pos=target, fall_distance=0)
+        # Salto direccional: hasta 2 celdas hacia adelante saltando un hueco.
+        target2 = prince.pos.step(prince.facing, 2)
+        if not _is_solid(level, state, target2):
+            return replace(prince, pos=target2, fall_distance=0)
         target1 = prince.pos.step(prince.facing, 1)
         if not _is_solid(level, state, target1):
             return replace(prince, pos=target1, fall_distance=0)
@@ -162,10 +159,15 @@ def _apply_action_effect(
         return replace(prince, pos=below, fall_distance=prince.fall_distance + 1)
 
     if action is Action.CLIMB_UP:
-        return replace(prince, pos=prince.pos.shifted(drow=-1), fall_distance=0)
+        # Trepa: el príncipe se sube encima de la repisa adelante.
+        # La repisa es la celda sólida en (r-1, c+1); queda parado en (r-2, c+1).
+        target = prince.pos.step(prince.facing).shifted(drow=-2)
+        return replace(prince, pos=target, fall_distance=0)
 
     if action is Action.CLIMB_DOWN:
-        return replace(prince, pos=prince.pos.shifted(drow=1), fall_distance=0)
+        # Se descuelga: queda colgado y luego cae hasta el suelo de abajo.
+        fwd_down = prince.pos.step(prince.facing).shifted(drow=1)
+        return replace(prince, pos=fwd_down, fall_distance=0)
 
     return prince
 
@@ -197,14 +199,24 @@ def _next_action(
         return replace(prince, action=Action.PARRY, ticks_in_action=0)
 
     if cmd is PlayerCommand.JUMP:
+        # Si venía corriendo o andando, salto direccional; si no, vertical.
+        if prince.action in (Action.RUN, Action.WALK):
+            return replace(prince, action=Action.JUMP_R, ticks_in_action=0)
         return replace(prince, action=Action.JUMP_V, ticks_in_action=0)
 
     if cmd is PlayerCommand.UP:
-        # intenta trepar: necesita borde sólido arriba-adelante
-        up_fwd = prince.pos.step(prince.facing).shifted(drow=-1)
-        if _is_solid(
-            level, state, prince.pos.step(prince.facing).shifted(drow=-1)
-        ) is False and _is_solid(level, state, up_fwd.shifted(drow=-1)):
+        # Trepa si hay una repisa accesible: bloque sólido en (r-1, c+1),
+        # con hueco delante a la altura de los pies y aire encima de la cabeza.
+        fwd = prince.pos.step(prince.facing)
+        above_fwd = fwd.shifted(drow=-1)
+        above = prince.pos.shifted(drow=-1)
+        landing = fwd.shifted(drow=-2)
+        if (
+            _is_solid(level, state, above_fwd)
+            and not _is_solid(level, state, fwd)
+            and not _is_solid(level, state, above)
+            and not _is_solid(level, state, landing)
+        ):
             return replace(prince, action=Action.CLIMB_UP, ticks_in_action=0)
 
     if cmd is PlayerCommand.DOWN:

@@ -1,7 +1,4 @@
-"""CLI Typer del juego.
-
-Subcomandos: ninguno (uso ``pop2026 [opciones]`` para jugar / demo).
-"""
+"""CLI Typer del juego."""
 
 from __future__ import annotations
 
@@ -10,6 +7,7 @@ import sys
 import typer
 
 from pop2026 import __version__
+from pop2026.application.campaign import total_levels
 from pop2026.presentation.app import AppConfig, run
 
 app = typer.Typer(
@@ -33,10 +31,13 @@ def _main(
     demo: bool = typer.Option(False, "--demo", help="Reproduce una demo determinista."),
     seed: int = typer.Option(42, "--seed", min=0, max=0xFF, help="Semilla del RNG (0..255)."),
     frames: int = typer.Option(0, "--frames", help="Limita el número de ticks (0 = sin límite)."),
-    level: str = typer.Option("01_dungeon", "--level", help="Nivel built-in a cargar."),
+    start_level: int = typer.Option(
+        1, "--start-level", min=1, max=total_levels(), help=f"Nivel inicial (1..{total_levels()})."
+    ),
     headless: bool = typer.Option(False, "--headless", help="Sin ventana ni audio (CI / scripts)."),
     no_crt: bool = typer.Option(False, "--no-crt", help="Desactiva el overlay CRT."),
     mute: bool = typer.Option(False, "--mute", help="Sin audio."),
+    skip_title: bool = typer.Option(False, "--skip-title", help="Salta la pantalla de título."),
     version: bool = typer.Option(
         False,
         "--version",
@@ -45,18 +46,19 @@ def _main(
         help="Imprime la versión y sale.",
     ),
 ) -> None:
-    """Lanza el juego o la demo."""
+    """Lanza la campaña o la demo."""
     if ctx.invoked_subcommand is not None:
         return
-    _ = version  # ya manejado por el callback
+    _ = version
     config = AppConfig(
         seed=seed,
         demo=demo,
         headless=headless,
         max_frames=frames,
-        level_name=level,
+        start_level=start_level,
         crt=not no_crt,
         mute=mute,
+        skip_title=skip_title,
     )
     code = run(config)
     sys.exit(code)

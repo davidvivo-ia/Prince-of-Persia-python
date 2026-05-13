@@ -33,7 +33,7 @@ class CombatResult:
 
 def _adjacent(prince: Prince, guard: Guard) -> bool:
     return (
-        guard.alive and guard.pos.row == prince.pos.row and abs(guard.pos.col - prince.pos.col) == 1
+        guard.alive and guard.pos.row == prince.pos.row and abs(guard.pos.col - prince.pos.col) <= 1
     )
 
 
