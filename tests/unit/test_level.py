@@ -54,6 +54,16 @@ class TestLevelParse:
         assert lv.tile_at(Position(-1, 0)) is Tile.FLOOR
         assert lv.tile_at(Position(100, 100)) is Tile.FLOOR
 
+    def test_level_default_time_limit_is_none(self) -> None:
+        lv = Level.parse(SIMPLE)
+        assert lv.time_limit_ticks is None
+
+    def test_level_with_explicit_time_limit(self) -> None:
+        from dataclasses import replace
+
+        lv = replace(Level.parse(SIMPLE), time_limit_ticks=3600)
+        assert lv.time_limit_ticks == 3600
+
 
 class TestLevelState:
     def test_effective_tile_respects_open_gate(self) -> None:

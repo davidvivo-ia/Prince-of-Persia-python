@@ -18,7 +18,7 @@ class SaveGame(BaseModel):
     """Snapshot persistible del estado de partida."""
 
     version: int = Field(default=SAVE_VERSION)
-    level: int = Field(ge=1, le=99)
+    level: int = Field(ge=1, le=100)
     hp: int = Field(ge=0, le=99)
     max_hp: int = Field(ge=1, le=99)
     time_left_ms: int = Field(ge=0)

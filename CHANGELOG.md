@@ -6,6 +6,48 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [3.0.0] — 2026-05-13
+
+### Modernizado / añadido en v3.0
+
+- **100 niveles encadenados** en 4 actos de 25:
+  Acto I "Mazmorra" (1-25), Acto II "Prisión" (26-50),
+  Acto III "Palacio" (51-75), Acto IV "Torre" (76-100).
+- **12 niveles hand-crafted** (los originales de v1.0) + **88 procedurales**
+  por semilla determinista. Misma `--seed` reproduce la misma campaña
+  byte a byte.
+- **Generador procedural** en `application/level_generator.py`:
+  esqueleto + densidad + actores + validación BFS + reintentos.
+- **Reachability BFS** en `domain/reachability.py`: garantiza que cada
+  nivel generado tiene al menos un camino del spawn al exit.
+- **Curva de dificultad** declarativa en `application/difficulty.py`:
+  monótona dentro de cada acto, escalón al cambiar; jefe en cada local
+  24, esqueleto inmortal aparece en Acto IV a partir del local 12.
+- **Tiempo por nivel** (no global): cada nivel arranca con su propio
+  cronómetro derivado del acto (90/75/60/50 segundos).
+- **Auto-save tras cada nivel ganado** hasta el 100; `--resume` carga
+  la partida.
+- **HUD** muestra acto + `N/100`.
+- **Cinemáticas por acto** (4 escenas + final 100): `act1`, `act2`,
+  `act3`, `act4`, `victory100`.
+- **Música ambient por zona** (4 loops sintetizados): dungeon, prison,
+  palace, throne. Cada acto tiene su pista.
+- **CLI** acepta `--start-level [1..100]`, `--difficulty hard`,
+  `--resume`, `--seed`, etc.
+- **Tests**: 290+ verdes en menos de 2 s, 90 % cobertura en dominio,
+  property tests con hypothesis para invariantes del generador.
+- ADR 0006: justificación del enfoque procedural híbrido.
+
+### Bugs corregidos en v3.0
+
+- BFS de alcanzabilidad ya **no permite saltar sobre rejas cerradas**
+  (antes la trayectoria horizontal del salto direccional ignoraba la
+  celda intermedia).
+- Esqueleto inmortal solo aparece a partir de Acto IV, local 12 (antes
+  aparecía en todo el Acto IV por una constante mal asignada).
+
+---
+
 ## [1.0.0] — 2026-05-13
 
 ### Preservado del original

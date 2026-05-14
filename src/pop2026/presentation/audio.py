@@ -95,6 +95,24 @@ def _ambient_dungeon() -> Any:
     return _compose(notes, volume=0.12)
 
 
+def _ambient_prison() -> Any:
+    """Loop opresivo: arpegio Sol menor con golpes graves."""
+    notes = [
+        (196.00, 0.40),  # G3
+        (233.08, 0.40),  # Bb3
+        (293.66, 0.40),  # D4
+        (349.23, 0.60),  # F4
+        (293.66, 0.30),  # D4
+        (233.08, 0.30),  # Bb3
+        (196.00, 0.50),  # G3
+        (0.0, 0.20),
+        (98.00, 0.80),  # G2 (golpe grave)
+        (146.83, 0.50),  # D3
+        (98.00, 0.50),  # G2
+    ]
+    return _compose(notes, volume=0.12)
+
+
 def _ambient_palace() -> Any:
     """Loop intermedio: arpegio Re menor armónico (D, F, A, C#)."""
     notes = [
@@ -141,10 +159,18 @@ def _compose(notes: list[tuple[float, float]], *, volume: float) -> Any:
 
 
 def zone_for_level(level_index: int) -> str:
-    """Asigna una zona musical según el índice del nivel."""
-    if level_index <= 4:
+    """Asigna una zona musical según el acto del nivel.
+
+    Acto 0 (1-25)   → ``dungeon``
+    Acto 1 (26-50)  → ``prison``
+    Acto 2 (51-75)  → ``palace``
+    Acto 3 (76-100) → ``throne``
+    """
+    if level_index <= 25:
         return "dungeon"
-    if level_index <= 8:
+    if level_index <= 50:
+        return "prison"
+    if level_index <= 75:
         return "palace"
     return "throne"
 
@@ -159,6 +185,7 @@ def _ambient_track(zone: str) -> Any:
         return AMBIENT_TRACKS[zone]
     builder = {
         "dungeon": _ambient_dungeon,
+        "prison": _ambient_prison,
         "palace": _ambient_palace,
         "throne": _ambient_throne,
     }.get(zone, _ambient_dungeon)

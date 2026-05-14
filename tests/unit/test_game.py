@@ -70,6 +70,18 @@ class TestGameLoop:
         assert g2 is not g
         assert g2.time_left == g.time_left - 1
 
+    def test_new_game_uses_level_time_when_set(self) -> None:
+        lv = replace(Level.parse(SIMPLE), time_limit_ticks=999)
+        g = new_game(lv, time_limit=10_000)
+        # El tiempo del nivel manda sobre el argumento.
+        assert g.time_left == 999
+
+    def test_new_game_falls_back_to_arg_when_level_time_none(self) -> None:
+        lv = Level.parse(SIMPLE)
+        assert lv.time_limit_ticks is None
+        g = new_game(lv, time_limit=4321)
+        assert g.time_left == 4321
+
     def test_reach_exit_wins(self) -> None:
         lv = Level.parse(SIMPLE)
         g = new_game(lv, time_limit=10_000)

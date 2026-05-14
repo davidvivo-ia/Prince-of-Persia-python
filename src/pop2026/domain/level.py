@@ -27,7 +27,10 @@ class Level:
 
     prince_spawn: Position
     guard_spawns: tuple[tuple[Position, int], ...]
-    """Lista de (posición, skill 1..2) para los guardias."""
+    """Lista de (posición, skill 1..2 / -1 esqueleto) para los guardias."""
+
+    time_limit_ticks: int | None = None
+    """Tiempo del nivel. ``None`` = usar el default del juego."""
 
     @property
     def rows(self) -> int:

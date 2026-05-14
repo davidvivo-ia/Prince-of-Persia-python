@@ -77,12 +77,14 @@ def new_game(
         )
         for pos, skill in level.guard_spawns
     )
+    # El tiempo del nivel manda si está definido; si no, el argumento.
+    effective_time = level.time_limit_ticks if level.time_limit_ticks is not None else time_limit
     return Game(
         level=level,
         state=LevelState(),
         prince=p,
         guards=gs,
-        time_left=time_limit,
+        time_left=effective_time,
         level_index=level_index,
     )
 

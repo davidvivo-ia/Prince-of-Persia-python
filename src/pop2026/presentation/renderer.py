@@ -598,6 +598,9 @@ def _draw_hud(
         1,
     )
 
+    from pop2026.application.campaign import TOTAL_LEVELS
+    from pop2026.application.difficulty import ACT_THEMES, act_for_level
+
     secs = game.time_left // 60
     mm, ss = divmod(secs, 60)
     sword_txt = "  SABLE" if game.prince.has_sword else ""
@@ -606,7 +609,14 @@ def _draw_hud(
     if rooms > 1:
         current_room = viewport_x // LAYOUT.cols + 1
         room_txt = f"  SALA {current_room}/{rooms}"
-    title = f"NIVEL {game.level_index}   {mm:02d}:{ss:02d}{sword_txt}{room_txt}"
+    # Acto + N/100 (limita el cálculo al rango válido por seguridad)
+    act_txt = ""
+    if 1 <= game.level_index <= TOTAL_LEVELS:
+        act = act_for_level(game.level_index)
+        act_txt = f"{ACT_THEMES[act].upper()}  ·  "
+    title = (
+        f"{act_txt}NIVEL {game.level_index}/{TOTAL_LEVELS}   {mm:02d}:{ss:02d}{sword_txt}{room_txt}"
+    )
     surface.blit(font.render(title, True, PALETTE.primary), (10, 8))
 
     # Corazones (cada HP es un pequeño rombo rojo)

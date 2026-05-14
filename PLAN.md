@@ -322,5 +322,30 @@ paralelización inteligente de A y D.
 
 ---
 
-*Pendiente de tu revisión. Modifica, recorta, reordena. No empiezo
-hasta tu OK explícito.*
+*Plan ejecutado: 19 tareas cerradas. v3.0 entregada.*
+
+## Estado al cierre (commit reflejado en CHANGELOG.md)
+
+| Tarea | Estado |
+|---|---|
+| T0.1 snapshot | ✅ |
+| T1 SaveGame le=100 | ✅ |
+| T2 time_limit_ticks en Level | ✅ |
+| T3 new_game respeta tiempo | ✅ |
+| T4 reachability BFS | ✅ |
+| T5 difficulty params | ✅ |
+| T6 generador procedural | ✅ |
+| T7 level_source unificado | ✅ |
+| T8 CAMPAIGN 100 | ✅ |
+| T9 app integra source | ✅ |
+| T10 CLI hasta 100 | ✅ |
+| T11 HUD acto + N/100 | ✅ |
+| T12 cinemáticas por acto | ✅ |
+| T13 música por acto (4 zonas) | ✅ |
+| T14 demo bot muestra | ✅ |
+| T15 property tests | ✅ |
+| T16 save/load 100 | ✅ |
+| T17 docs | ✅ |
+| T18 ADR-0006 | ✅ |
+| T19 verificación + push | ✅ |
+

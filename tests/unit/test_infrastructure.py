@@ -96,6 +96,14 @@ class TestSaveGame:
         loaded = savegame.load(path)
         assert loaded == s
 
+    def test_can_save_level_100(self, tmp_path: Path) -> None:
+        s = SaveGame(level=100, hp=3, max_hp=3, time_left_ms=0, rng_seed=42)
+        path = tmp_path / "save.json"
+        savegame.save(s, path)
+        loaded = savegame.load(path)
+        assert loaded is not None
+        assert loaded.level == 100
+
     def test_load_missing_returns_none(self, tmp_path: Path) -> None:
         assert savegame.load(tmp_path / "no.json") is None
 

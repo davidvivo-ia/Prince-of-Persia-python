@@ -19,15 +19,14 @@ import pygame
 
 from pop2026.application import demo_player
 from pop2026.application.campaign import CAMPAIGN, LevelInfo, total_levels
+from pop2026.application.level_source import load_level
 from pop2026.domain.game import (
-    DEFAULT_TIME_LIMIT_TICKS,
     Game,
     GameStatus,
     advance,
     new_game,
 )
 from pop2026.domain.ports import Rng
-from pop2026.infrastructure.levels import load_builtin
 from pop2026.infrastructure.rng import LfsrRng
 from pop2026.presentation import input_device, renderer
 from pop2026.presentation.audio import Beeper, play_transitions, zone_for_level
@@ -75,8 +74,7 @@ def run(config: AppConfig) -> int:
 
 def _run_demo(config: AppConfig) -> int:
     rng = _make_rng(config.seed)
-    info = CAMPAIGN[max(0, config.start_level - 1)]
-    level = load_builtin(info.slug)
+    level = load_level(config.start_level, seed=config.seed)
     game = new_game(level, level_index=config.start_level)
 
     if config.headless:
@@ -120,11 +118,14 @@ def _run_demo_windowed(game: Game, rng: Rng, config: AppConfig) -> int:
 # ---------------------------------------------------------------------------
 
 
+DEFAULT_PER_LEVEL_TIME_TICKS: int = 90 * 60
+"""Tiempo por defecto para niveles hand-crafted sin ``time_limit_ticks``."""
+
+
 @dataclass(slots=True)
 class _RunState:
-    """Estado persistente entre niveles."""
+    """Estado persistente entre niveles (sin reloj global)."""
 
-    time_left: int
     max_hp: int
     has_sword: bool
 
@@ -152,7 +153,6 @@ def _run_interactive(config: AppConfig) -> int:
 
     starting_hp = 2 if config.difficulty == "hard" else 3
     state = _RunState(
-        time_left=DEFAULT_TIME_LIMIT_TICKS,
         max_hp=starting_hp,
         has_sword=False,
     )
@@ -171,7 +171,6 @@ def _run_interactive(config: AppConfig) -> int:
         if slot is not None:
             level_idx = slot.level
             state = _RunState(
-                time_left=slot.time_left_ms,
                 max_hp=slot.max_hp,
                 has_sword=False,
             )
@@ -181,8 +180,8 @@ def _run_interactive(config: AppConfig) -> int:
         # Música ambient por zona (dungeon/palace/throne)
         beeper.play_music(zone_for_level(level_idx))
 
-        # Cinemática en puntos clave de la campaña
-        scene_at_level: dict[int, str] = {1: "intro", 6: "mid", 12: "final"}
+        # Cinemática al inicio de cada acto (1, 26, 51, 76)
+        scene_at_level: dict[int, str] = {1: "act1", 26: "act2", 51: "act3", 76: "act4"}
         scene_name = scene_at_level.get(level_idx)
         if scene_name is not None and scene_name not in shown_cutscenes:
             shown_cutscenes.add(scene_name)
@@ -202,7 +201,6 @@ def _run_interactive(config: AppConfig) -> int:
 
         if final.status is GameStatus.WON:
             state = _RunState(
-                time_left=final.time_left,
                 max_hp=final.prince.max_hp,
                 has_sword=final.prince.has_sword,
             )
@@ -216,7 +214,7 @@ def _run_interactive(config: AppConfig) -> int:
                     level=min(level_idx + 1, total_levels()),
                     hp=state.max_hp,
                     max_hp=state.max_hp,
-                    time_left_ms=state.time_left,
+                    time_left_ms=0,  # sin reloj global; cada nivel tiene el suyo
                     rng_seed=config.seed,
                 )
                 savegame.save(slot)
@@ -233,7 +231,11 @@ def _run_interactive(config: AppConfig) -> int:
         pygame.quit()
         return 0
 
-    _show_final_victory(screen, clock, font_big, font, state.time_left)
+    # Cinemática final (única, antes del cuadro de victoria).
+    if "victory100" not in shown_cutscenes:
+        shown_cutscenes.add("victory100")
+        _show_cutscene(screen, clock, font_big, font, "victory100")
+    _show_final_victory(screen, clock, font_big, font, 0)
     pygame.quit()
     return 0
 
@@ -372,8 +374,11 @@ def _play_level(
     state: _RunState,
     config: AppConfig,
 ) -> Game | None:
-    level = load_builtin(info.slug)
-    game = new_game(level, level_index=level_index, time_limit=state.time_left)
+    _ = info  # campaign info ya está disponible; el slug no se usa aquí
+    level = load_level(level_index, seed=config.seed)
+    # El tiempo del nivel viene del propio Level (procedural) o del default
+    # per-level si es hand-crafted (sin time_limit_ticks propio).
+    game = new_game(level, level_index=level_index, time_limit=DEFAULT_PER_LEVEL_TIME_TICKS)
     game = replace(
         game,
         prince=replace(

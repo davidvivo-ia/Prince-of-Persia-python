@@ -1,4 +1,7 @@
-# pop2026 — Prince of Persia reimaginado
+# pop2026 — Prince of Persia reimaginado · 100 niveles
+
+> **v3.0** · 12 niveles narrativos hand-crafted + 88 procedurales por
+> semilla determinista · 4 actos · cinemáticas · música ambient · save/load.
 
 > *Una mazmorra que respira en violeta y oro, dibujada con la mano de
 > 1989 pero el aliento de 2026.*

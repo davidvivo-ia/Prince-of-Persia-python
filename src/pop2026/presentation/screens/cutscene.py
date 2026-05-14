@@ -26,6 +26,7 @@ class Scene:
 
 
 SCENES: dict[str, Scene] = {
+    # Cinemáticas legacy (compat con triggers anteriores).
     "intro": Scene(
         title="MEDIANOCHE EN LA MAZMORRA",
         body=(
@@ -56,6 +57,57 @@ SCENES: dict[str, Scene] = {
         ),
         glyph="throne",
         color=PALETTE.accent,
+    ),
+    # Cinemáticas por acto (campaña de 100 niveles).
+    "act1": Scene(
+        title="ACTO I — LA MAZMORRA",
+        body=(
+            "Veinticinco celdas. Veinticinco silencios.",
+            "Aquí abajo nadie te oye correr.",
+            "Aprende a caer sin morir.",
+        ),
+        glyph="prisoner",
+        color=PALETTE.cloth,
+    ),
+    "act2": Scene(
+        title="ACTO II — LA PRISIÓN",
+        body=(
+            "Las llaves cuelgan de los cinturones equivocados.",
+            "Cada puerta exige el peso de un cuerpo.",
+            "Y los guardias ya no patrullan: te buscan.",
+        ),
+        glyph="stairs",
+        color=PALETTE.warning,
+    ),
+    "act3": Scene(
+        title="ACTO III — EL PALACIO",
+        body=(
+            "El mosaico aún recuerda otras hojas.",
+            "Las cortinas separan habitaciones que no existen.",
+            "Caminas por habitaciones que el visir cree suyas.",
+        ),
+        glyph="throne",
+        color=PALETTE.accent,
+    ),
+    "act4": Scene(
+        title="ACTO IV — LA TORRE",
+        body=(
+            "La torre se inclina hacia el alba.",
+            "Cada peldaño es una decisión que no admite reverso.",
+            "Arriba alguien afila una hoja larga.",
+        ),
+        glyph="throne",
+        color=PALETTE.error,
+    ),
+    "victory100": Scene(
+        title="HAS LLEGADO AL ALBA",
+        body=(
+            "Cien pasillos quedan a tu espalda.",
+            "El visir cae sin gritar.",
+            "El sol entra por una ventana que jamás vio salir a un príncipe vivo.",
+        ),
+        glyph="throne",
+        color=PALETTE.success,
     ),
 }
 """Catálogo de cinemáticas. Diseño narrativo propio."""

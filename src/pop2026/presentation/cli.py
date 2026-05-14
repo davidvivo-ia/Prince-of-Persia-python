@@ -83,9 +83,7 @@ def preview(
     out: Path = typer.Option(  # noqa: B008
         _PREVIEW_DEFAULT, "--out", "-o", help="Ruta del PNG de salida."
     ),
-    no_crt: bool = typer.Option(
-        False, "--no-crt", help="Desactiva el overlay CRT."
-    ),
+    no_crt: bool = typer.Option(False, "--no-crt", help="Desactiva el overlay CRT."),
 ) -> None:
     """Renderiza un nivel a PNG sin abrir ventana (útil para README y debug)."""
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
