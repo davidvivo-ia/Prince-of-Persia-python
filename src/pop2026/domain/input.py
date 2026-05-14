@@ -34,3 +34,10 @@ class InputFrame:
 
     jump_held: bool = False
     """Si ``True``, la tecla de salto sigue pulsada (para *variable jump*)."""
+
+    jump_pressed: bool = False
+    """``True`` si JUMP se pulsó este tick — canal independiente de ``command``.
+
+    Permite combinar dirección y salto en el mismo tick (running jump),
+    sin sacrificar el momento horizontal a un ``cmd=JUMP``.
+    """

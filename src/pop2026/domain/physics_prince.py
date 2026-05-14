@@ -180,7 +180,7 @@ def step(
 
     # --- Coyote y jump buffer -------------------------------------------------
     new_coyote = COYOTE_TICKS if grounded else max(0, prince.coyote_left - 1)
-    jump_pressed_this_tick = cmd is PlayerCommand.JUMP
+    jump_pressed_this_tick = inp.jump_pressed or cmd is PlayerCommand.JUMP
     new_buffer = JUMP_BUFFER_TICKS if jump_pressed_this_tick else max(0, prince.buffer_left - 1)
 
     new_knockback = max(0, prince.knockback_left - 1)
@@ -196,8 +196,9 @@ def step(
         input_blocked=input_blocked,
     )
 
+    combat_ticks: int | None = None
     if combat is not None:
-        new_action, new_facing, desired_vx = combat
+        new_action, new_facing, desired_vx, combat_ticks = combat
         new_vy = prince.body.vel.vy
     else:
         # --- Input horizontal --------------------------------------------------
@@ -245,7 +246,10 @@ def step(
     pre_body = replace(prince.body, vel=Velocity(desired_vx, new_vy))
     result = integrate(pre_body, level, state, accel_x=0.0, accel_y=GRAVITY)
 
-    new_ticks = prince.ticks_in_action + 1 if new_action is prince.action else 0
+    if combat_ticks is not None:
+        new_ticks = combat_ticks
+    else:
+        new_ticks = prince.ticks_in_action + 1 if new_action is prince.action else 0
     return PhysicsPrince(
         body=result.state,
         facing=new_facing,
@@ -286,12 +290,20 @@ def _combat_micro_step(
     grounded: bool,
     guard_dir: int | None,
     input_blocked: bool,
-) -> tuple[Action, Facing, float] | None:
-    """Si procede, devuelve ``(action, facing, vx)`` para un tick ADVANCE/RETREAT.
+) -> tuple[Action, Facing, float, int] | None:
+    """Si procede, devuelve ``(action, facing, vx, ticks_within)``.
 
     Continúa una acción ya en curso (lock por duración) o arranca una
-    nueva si hay sable + guardia adyacente + LEFT/RIGHT pulsado.
+    nueva si hay sable + guardia adyacente + LEFT/RIGHT pulsado. El
+    tick interno devuelto se asigna directamente a
+    ``ticks_in_action`` para que el ciclo ADVANCE/RETREAT no acumule
+    indefinidamente al re-disparar.
     """
+    # STRIKE/PARRY/LUNGE rompen inmediatamente el micro-paso: el sable
+    # tiene prioridad sobre el avance.
+    if cmd in (PlayerCommand.STRIKE, PlayerCommand.PARRY, PlayerCommand.LUNGE):
+        return None
+
     continuing = prince.action in (
         Action.ADVANCE,
         Action.RETREAT,
@@ -326,7 +338,7 @@ def _combat_micro_step(
     impulse_sign = sign_to_guard if action is Action.ADVANCE else -sign_to_guard
     in_window = ADVANCE_WINDOW[0] <= ticks_within < ADVANCE_WINDOW[1]
     desired_vx = float(impulse_sign) * ADVANCE_IMPULSE if in_window else 0.0
-    return action, facing, desired_vx
+    return action, facing, desired_vx, ticks_within
 
 
 def _decide_action(
@@ -342,6 +354,15 @@ def _decide_action(
     """Mapea el estado a la acción simbólica que el renderer pinta."""
     if input_blocked:
         return Action.HURT
+    # Acción de combate completada: fuerza un tick de STAND para que la
+    # siguiente STRIKE/PARRY/LUNGE reinicie ``ticks_in_action`` y vuelva
+    # a entrar en su ventana de impacto.
+    if prince.action in (
+        Action.STRIKE,
+        Action.PARRY,
+        Action.LUNGE,
+    ) and prince.ticks_in_action + 1 >= duration_ticks(prince.action):
+        return Action.STAND
     if cmd is PlayerCommand.STRIKE and prince.has_sword:
         return Action.STRIKE
     if cmd is PlayerCommand.LUNGE and prince.has_sword:
