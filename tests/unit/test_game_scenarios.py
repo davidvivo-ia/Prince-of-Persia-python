@@ -138,11 +138,14 @@ class TestSpikes:
         g = new_game(lv, time_limit=10_000)
         # el príncipe en (1,3) caerá; spikes en (5,4) — no alineadas
         # usar mejor un test directo: forzar al príncipe a estar sobre spikes con fall>0
-        from pop2026.domain.geometry import Position
-        from pop2026.domain.prince import Prince
+        from pop2026.domain.geometry import PositionF, Velocity
+        from pop2026.domain.physics import SPIKE_LETHAL_VY, BodyState
+        from pop2026.domain.physics_prince import PhysicsPrince
 
-        p = Prince(pos=Position(5, 4), fall_distance=2)
+        # PhysicsPrince centrado en (5, 4) con velocidad letal hacia abajo
+        p = PhysicsPrince(
+            body=BodyState(pos=PositionF(4.5, 5.5), vel=Velocity(0.0, SPIKE_LETHAL_VY + 0.1))
+        )
         g = replace(g, prince=p)
-        # un tick para procesar interacción de tile
         g2 = advance(g, InputFrame(), _rng())
         assert g2.prince.hp == 0 or g2.status is GameStatus.LOST_DIED

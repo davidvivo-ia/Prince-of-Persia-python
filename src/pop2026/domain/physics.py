@@ -40,10 +40,10 @@ GRAVITY: float = 0.06
 WALK_SPEED: float = 0.10
 """Velocidad de andar (celdas/tick). ~ 6 cells/s."""
 
-RUN_SPEED: float = 0.18
-"""Velocidad de correr (celdas/tick). ~ 10 cells/s."""
+RUN_SPEED: float = 0.22
+"""Velocidad de correr (celdas/tick). ~ 13 cells/s."""
 
-JUMP_VEL: float = -0.32
+JUMP_VEL: float = -0.42
 """Velocidad inicial de salto vertical (celdas/tick, negativa = arriba)."""
 
 MAX_FALL_VEL: float = 0.45
@@ -52,8 +52,37 @@ MAX_FALL_VEL: float = 0.45
 PRINCE_W: float = 0.55
 """Anchura de la AABB del príncipe en celdas."""
 
-PRINCE_H: float = 0.95
+PRINCE_H: float = 0.90
 """Altura de la AABB del príncipe en celdas."""
+
+# --- Constantes de game-feel (R1) ----------------------------------------
+
+COYOTE_TICKS: int = 6
+"""Ticks tras dejar el suelo en los que aún se admite salto."""
+
+JUMP_BUFFER_TICKS: int = 6
+"""Ticks antes de aterrizar en los que un JUMP queda buffereado."""
+
+VAR_JUMP_CUT: float = 0.45
+"""Si se suelta JUMP mientras ``vy < 0``, se multiplica por este valor."""
+
+GROUND_ACCEL: float = 0.10
+"""Aceleración horizontal pedida al input estando en suelo (lerp objetivo)."""
+
+AIR_ACCEL: float = 0.025
+"""Aceleración horizontal en el aire — menor que en suelo (air control)."""
+
+KNOCKBACK_VX: float = 0.30
+"""Magnitud horizontal del empujón al recibir un golpe."""
+
+KNOCKBACK_VY: float = -0.18
+"""Componente vertical del knockback (un poco hacia arriba)."""
+
+KNOCKBACK_TICKS: int = 10
+"""Ticks durante los que el input horizontal queda bloqueado tras hit."""
+
+SPIKE_LETHAL_VY: float = 0.30
+"""Velocidad vertical mínima al pisar pinchos para que sean letales."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +139,8 @@ class StepResult:
     hit_wall: bool = False
     hit_ground: bool = False
     hit_ceiling: bool = False
+    impact_vy: float = 0.0
+    """Velocidad vertical instantes antes de colisionar (0 si no hubo)."""
 
 
 def integrate(
@@ -156,7 +187,9 @@ def integrate(
     box = AABB(test_pos.x - half_w, test_pos.y - half_h, half_w * 2, half_h * 2)
     hit_ground = False
     hit_ceiling = False
+    impact_vy = 0.0
     if _aabb_touches_solid(level, state, box):
+        impact_vy = new_vy  # capturado antes del reset
         if new_vy > 0:
             hit_ground = True
         elif new_vy < 0:
@@ -169,6 +202,7 @@ def integrate(
         hit_wall=hit_wall,
         hit_ground=hit_ground,
         hit_ceiling=hit_ceiling,
+        impact_vy=impact_vy,
     )
 
 

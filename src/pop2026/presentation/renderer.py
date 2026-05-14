@@ -18,7 +18,7 @@ from pop2026.domain.game import Game, GameStatus
 from pop2026.domain.geometry import Facing, Position
 from pop2026.domain.guard import Guard, GuardMode
 from pop2026.domain.level import effective_tile
-from pop2026.domain.prince import Prince
+from pop2026.domain.physics_prince import PhysicsPrince as Prince
 from pop2026.domain.tiles import Tile
 from pop2026.presentation.theme import LAYOUT, PALETTE, RGB
 

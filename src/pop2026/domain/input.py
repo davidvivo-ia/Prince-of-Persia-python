@@ -31,3 +31,6 @@ class InputFrame:
     command: PlayerCommand = PlayerCommand.NONE
     walk_modifier: bool = False
     """Si ``True``, ``LEFT``/``RIGHT`` resulta en paso de andar (preciso)."""
+
+    jump_held: bool = False
+    """Si ``True``, la tecla de salto sigue pulsada (para *variable jump*)."""

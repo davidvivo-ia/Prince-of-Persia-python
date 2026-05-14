@@ -11,14 +11,16 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import IntEnum
 
-from pop2026.domain import combat, guard, prince
+from pop2026.domain import combat, guard
+from pop2026.domain import physics_prince as prince_module
 from pop2026.domain.actions import Action
 from pop2026.domain.geometry import Position
 from pop2026.domain.guard import Guard
 from pop2026.domain.input import InputFrame
 from pop2026.domain.level import Level, LevelState, effective_tile
+from pop2026.domain.physics_prince import PhysicsPrince
+from pop2026.domain.physics_prince import initial as prince_initial
 from pop2026.domain.ports import Rng
-from pop2026.domain.prince import Prince
 from pop2026.domain.tiles import Tile
 
 DEFAULT_TIME_LIMIT_TICKS: int = 60 * 60 * 60
@@ -40,7 +42,7 @@ class Game:
 
     level: Level
     state: LevelState
-    prince: Prince
+    prince: PhysicsPrince
     guards: tuple[Guard, ...]
     time_left: int
     status: GameStatus = GameStatus.PLAYING
@@ -62,12 +64,7 @@ def new_game(
     starting_hp: int = 3,
 ) -> Game:
     """Construye una ``Game`` lista para jugar a partir de un ``Level``."""
-    p = Prince(
-        pos=level.prince_spawn,
-        hp=starting_hp,
-        max_hp=starting_hp,
-        has_sword=False,
-    )
+    p = prince_initial(level.prince_spawn, hp=starting_hp, max_hp=starting_hp)
     gs = tuple(
         Guard(
             pos=pos,
@@ -147,7 +144,9 @@ def _process_tile_interactions(g: Game) -> Game:
         state = state.with_floor_fallen(below)
 
     # spikes: si está parado sobre celda con spikes con caída previa, muere
-    if standing_tile is Tile.SPIKES and p.fall_distance > 0:
+    from pop2026.domain.physics import SPIKE_LETHAL_VY
+
+    if standing_tile is Tile.SPIKES and p.last_impact_vy >= SPIKE_LETHAL_VY:
         p = replace(p, hp=0, action=Action.DEAD, ticks_in_action=0)
 
     return replace(g, prince=p, state=state)
@@ -177,7 +176,7 @@ def advance(g: Game, inp: InputFrame, rng: Rng) -> Game:
         return g
 
     # 1. Step físico del príncipe
-    new_prince = prince.step(g.prince, g.level, g.state, inp)
+    new_prince = prince_module.step(g.prince, g.level, g.state, inp)
 
     # 2. Step de cada guardia
     new_guards = tuple(guard.step(gd, g.level, g.state, new_prince.pos, rng) for gd in g.guards)

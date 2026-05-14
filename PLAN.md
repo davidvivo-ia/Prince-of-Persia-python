@@ -1,351 +1,240 @@
-# PLAN.md — Campaña de 100 niveles
+# PLAN.md — Refactor a platformer real
 
-> Plan ejecutable y atómico. Cada tarea se cierra independiente, con
-> DoD verificable y *quality gates* en verde antes de avanzar al
-> siguiente. Nada de tareas que dependan de "cuando termine X". Si una
-> depende, se marca con ⤴ y se ejecuta después.
->
-> **Decisión de producto** (confirmada):
-> - 12 niveles hand-crafted (los actuales) + 88 procedurales por
->   semilla determinista.
-> - 4 actos de 25 niveles. Cada acto introduce un mecanismo dominante.
-> - Sin reloj global. Cada nivel tiene su propio tiempo.
-> - Auto-save tras cada nivel ganado, slot único, hasta el 100.
+> Sustituye al PLAN anterior. Objetivo: el juego se siente como un
+> platformer 2D moderno (Celeste/Hollow Knight tier de "game feel"),
+> no como un roguelike por celdas.
+
+## Diagnóstico del problema actual
+
+- `Prince` (discreto, FSM por celdas) es el motor por defecto.
+- `PhysicsPrince` con `(x, y)` float existe pero está como feature
+  flag opt-in y nunca se promovió.
+- Niveles son corredores horizontales planos: la mecánica de celda
+  no premia precisión, así que nadie los diseñó verticales.
+- Faltan los "10 mandamientos" del platformer 2026: coyote time,
+  jump buffer, variable jump, air control, knockback, AABB
+  pixel-perfect, animaciones con keyframes reales.
+
+## Asunciones declaradas (CLAUDE.md §1)
+
+A1. **Promovemos PhysicsPrince a motor único** y eliminamos el FSM
+    discreto de `prince.step`. El módulo discreto se queda como
+    archivo deprecated durante el refactor, se borra en R12.
+
+A2. **Guard sigue siendo discreto** (`Position` int row/col) por
+    ahora. Razón: la IA del guardia es por casillas y el coste de
+    portarla a continuo es alto sin beneficio claro. El renderer
+    interpolará visualmente. Si quieres guard continuo también, lo
+    digo en R4 como variante.
+
+A3. **Tile size de colisión = 1.0**. El AABB del príncipe es
+    aproximadamente `0.55 × 0.90` celdas. La velocidad máxima por
+    tick es < 0.5 celdas para evitar tunneling.
+
+A4. **El reloj de juego sigue per-level** (decisión v3.0 que no
+    cambia).
+
+A5. **Pygame-ce sigue como capa de presentación**. No tocamos eso.
+
+## Decisiones que necesito confirmar antes de ejecutar
+
+D1. **¿Combate continuo o por celdas?**
+
+   - (a) Combate sigue siendo "adyacencia por celda" — el príncipe
+     calcula su celda derivada (`pos.to_cell()`) y reusa la lógica
+     actual de hit windows + reach. Bajo riesgo. **Recomendado**.
+   - (b) Combate también pasa a continuo: alcance por distancia
+     Euclídea, parry como cono frontal. Más auténtico pero +3 h.
+
+D2. **¿Wall jumps?**
+
+   - (a) **No**. Más simple y fiel al POP original.
+   - (b) Sí: el príncipe rebota de paredes verticales con dirección
+     opuesta. Daría verticalidad extra pero rompe el espíritu del
+     original.
+
+   *Mi recomendación: (a).*
+
+Cuando me digas D1 y D2 arranco. Si dices "decide tú" tomo
+(a)+(a) por defecto.
 
 ---
 
-## Bloque 0 — Pre-trabajo (no negociable)
+## Bloque R — Refactor a platformer
 
-### T0.1 · Snapshot de estado actual
-- **Hago**: `git status --short`, `pytest -q`, `ruff check`, `mypy --strict`.
-- **DoD**: 175 tests verdes, sin lints, mypy limpio. Si algo falla, se
-  arregla antes de tocar nada de este plan.
-- **Estimado**: 3 min.
-
----
-
-## Bloque A — Cimientos (sin tocar UI todavía)
-
-### T1 · Subir cota de SaveGame a 100
-- **Archivos**: `src/pop2026/infrastructure/savegame.py`,
-  `tests/unit/test_infrastructure.py`.
-- **Hago**: `Field(ge=1, le=99)` → `Field(ge=1, le=100)`.
-- **DoD**: test nuevo `test_can_save_level_100`; tests existentes
-  siguen verdes.
+### R1 · Constantes de game-feel
+- **Archivos**: `src/pop2026/domain/physics.py`.
+- **Hago**: añadir `COYOTE_TICKS=6`, `JUMP_BUFFER_TICKS=6`,
+  `VAR_JUMP_CUT=0.5`, `AIR_ACCEL=0.025`, `GROUND_ACCEL=0.10`,
+  `MAX_FALL_VEL=0.45`, ajustar `JUMP_VEL` a `-0.42`.
+- **DoD**: módulo importa, constantes son ≥0 y mutuamente coherentes
+  (test rápido).
 - **Estimado**: 5 min.
 
-### T2 · Tiempo por nivel en `Level`
-- **Archivos**: `src/pop2026/domain/level.py`.
-- **Hago**: añadir campo opcional `time_limit_ticks: int | None = None`
-  al dataclass `Level`. Inmutable, retro-compatible.
-- **DoD**: tests `test_level_default_time_limit_is_none` y
-  `test_level_with_explicit_time_limit`.
-- **Estimado**: 8 min.
-
-### T3 · `new_game` respeta el tiempo del nivel
-- **Archivos**: `src/pop2026/domain/game.py`,
-  `tests/unit/test_game.py`.
-- **Hago**: si `level.time_limit_ticks is not None`, usar ese valor;
-  si no, mantener el `time_limit` argumento (compat).
-- **DoD**: test `test_new_game_uses_level_time_when_set`.
-- **Estimado**: 10 min.
-
-### T4 · Reachability BFS pura
-- **Archivos**: nuevo `src/pop2026/domain/reachability.py`,
-  `tests/unit/test_reachability.py`.
-- **Hago**:
-  - `is_reachable(level: Level) -> bool` haciendo BFS desde
-    `prince_spawn` por celdas walkable + caída + salto direccional
-    (≤ 2 cells).
-  - Considera placas que abren gates (modelo simplificado: si hay
-    placa accesible, se asume gate abierta).
-- **DoD**: tests con (a) corredor recto, (b) hueco salvable con jump,
-  (c) hueco insalvable, (d) gate cerrada sin placa accesible.
-- **Estimado**: 30 min.
-
-### T5 · Tablas de densidad por acto
-- **Archivos**: nuevo `src/pop2026/application/difficulty.py`,
-  `tests/unit/test_difficulty.py`.
-- **Hago**:
-  - `@dataclass(frozen=True, slots=True) DifficultyParams`:
-    `gap_prob`, `spike_prob`, `loose_prob`, `guard_count`,
-    `skeleton_count`, `multi_room_prob`, `boss_flag`,
-    `time_limit_seconds`.
-  - `params_for(act: int, local_index: int) -> DifficultyParams`.
-  - Curva monótona dentro de cada acto + escalón al cambiar de acto.
+### R2 · PhysicsPrince con game-feel completo
+- **Archivos**: `src/pop2026/domain/physics_prince.py`,
+  `tests/unit/test_physics_prince.py`.
+- **Hago**: añadir a `PhysicsPrince` y `step()`:
+  - `coyote_ticks_left` se resetea al estar grounded; permite saltar
+    durante `COYOTE_TICKS` después de salir de plataforma.
+  - `jump_buffer_ticks_left` se setea al pulsar JUMP; consume al
+    aterrizar si > 0.
+  - `jump_held: bool` permite *variable jump*: si se suelta JUMP y
+    `vy < 0`, multiplicar `vy *= VAR_JUMP_CUT`.
+  - `air_control`: si no grounded, `accel_x` reducido a `AIR_ACCEL`.
+  - `knockback(direction)`: setea `vel.vx` con magnitud fija opuesta
+    al atacante; bloquea control durante `KNOCKBACK_TICKS=10`.
 - **DoD**: tests:
-  - `test_params_monotonic_within_act` (no decrece dificultad
-    relativa).
-  - `test_act_step_up` (acto 2 ≥ acto 1 en cualquier métrica).
-  - `test_boss_flag_only_at_local_index_24` (jefe al final de cada
-    acto).
-- **Estimado**: 25 min.
+  - `test_coyote_allows_jump_after_leaving_ledge`.
+  - `test_jump_buffer_consumed_on_landing`.
+  - `test_releasing_jump_cuts_height`.
+  - `test_air_control_weaker_than_ground`.
+  - `test_knockback_blocks_input`.
+- **Estimado**: 75 min.
 
----
-
-## Bloque B — Generador (depende de A)
-
-### T6 · Generador procedural ⤴ (T2, T4, T5)
-- **Archivos**: nuevo `src/pop2026/application/level_generator.py`,
-  `tests/unit/test_level_generator.py`,
-  `tests/property/test_generator_invariants.py`.
+### R3 · Game.advance usa PhysicsPrince por defecto
+- **Archivos**: `src/pop2026/domain/game.py`,
+  `src/pop2026/domain/prince.py` (deprecation),
+  `tests/unit/test_game.py`.
 - **Hago**:
-  - `GeneratorConfig(level_index: int, seed: int)`.
-  - `generate(config) -> Level`:
-    1. Calcula `act = (level_index - 1) // 25`,
-       `local = (level_index - 1) % 25`.
-    2. Pide `params_for(act, local)`.
-    3. Construye grid 20×6 (acto I–II) o 40×6 (acto III–IV).
-    4. Coloca spawn izda, exit dcha en filas asentables.
-    5. Sprinkle obstáculos según probabilidades, RNG sembrado por
-       `seed * 1000 + level_index` (LFSR existente).
-    6. Coloca guardias/esqueletos lejos del spawn.
-    7. **Reintenta** hasta 12 veces con micro-perturbaciones si
-       `is_reachable()` falla. Si tras 12 intentos no, fallback a un
-       corredor mínimo.
-    8. Devuelve `Level` con `time_limit_ticks` derivado de `params`.
+  - `Game.prince: PhysicsPrince` (cambio de tipo).
+  - `new_game(level)` construye `PhysicsPrince` con `initial(spawn)`.
+  - `advance()` llama a `physics_prince.step` en lugar de
+    `prince.step`.
+  - `prince.py` queda como módulo deprecated con docstring que
+    explica el reemplazo. Los tests viejos (`test_prince.py`,
+    `test_hang.py`) se marcan `@pytest.mark.skip(reason="discrete
+    prince deprecated; superseded by physics_prince")` con plan de
+    borrar en R12.
+  - Flag `POP2026_PHYSICS_V2` desaparece (físicas son default).
 - **DoD**:
-  - `test_same_seed_same_level` (determinismo).
-  - `test_different_seeds_differ` (variedad).
-  - `test_every_generated_level_is_reachable` (hypothesis con seeds
-    1..200, niveles 13..100). 0 fallos.
-  - `test_difficulty_monotonic_levels_13_to_100` (suma de
-    obstáculos no decrece de forma significativa).
+  - `test_game_advance_uses_continuous_position`.
+  - Demo bot pasa nivel 1 (hand-crafted, simple).
 - **Estimado**: 90 min.
 
-### T7 · Source unificado de niveles ⤴ (T6)
-- **Archivos**: nuevo `src/pop2026/application/level_source.py`,
-  `tests/unit/test_level_source.py`.
-- **Hago**:
-  - `load_level(level_index: int, *, seed: int) -> Level`.
-  - Si `level_index ≤ 12`: delega a
-    `infrastructure.levels.load_builtin(slug)` con el slug actual.
-  - Si `level_index ≥ 13`: delega a `level_generator.generate(...)`.
-- **DoD**: tests por rama, plus `test_load_level_100_works`.
-- **Estimado**: 15 min.
+### R4 · Combate continuo-vs-celda (depende de D1)
+- **Si D1=(a)**: minimal — `Combat._adjacent` recibe el príncipe
+  continuo y deriva celda con `pos.to_cell()`. Resto idéntico. ~15
+  min.
+- **Si D1=(b)**: rewrite — alcance Euclídeo, parry como cono frontal
+  60°. ~3 h. Tests nuevos.
 
----
-
-## Bloque C — Campaña a 100 (depende de B)
-
-### T8 · `CAMPAIGN` extendida ⤴ (T7)
-- **Archivos**: `src/pop2026/application/campaign.py`,
-  `tests/unit/test_campaign.py`.
-- **Hago**:
-  - Mantener los 12 `LevelInfo` actuales como Acto I (1-12) +
-    placeholder narrativo para 13-25.
-  - Generar 88 entradas más con título derivado: `"Mazmorra 14"`,
-    `"Prisión 28"`, `"Palacio 51"`, `"Torre 76"`. Subtítulo del
-    pool deterministico por acto.
-  - `total_levels() == 100`.
-- **DoD**: `test_campaign_has_100_entries`, `test_act_for_level`,
-  `test_titles_use_act_theme`.
-- **Estimado**: 20 min.
-
-### T9 · `app.py` integra `level_source` ⤴ (T7, T8)
-- **Archivos**: `src/pop2026/presentation/app.py`,
-  `tests/integration/test_runner_100_levels.py`.
-- **Hago**:
-  - Sustituir `load_builtin(info.slug)` por
-    `level_source.load_level(level_idx, seed=config.seed)`.
-  - Eliminar herencia de `time_left` entre niveles (cada nivel
-    arranca con su propio reloj).
-- **DoD**:
-  - `test_runner_starts_level_50_headless`.
-  - `test_runner_completes_levels_1_to_5_demo` (smoke).
-- **Estimado**: 25 min.
-
-### T10 · CLI hasta 100 ⤴ (T8)
-- **Archivos**: `src/pop2026/presentation/cli.py`.
-- **Hago**: `--start-level` ya usa `total_levels()`; queda automático.
-- **DoD**: `pop2026 --start-level 100 --demo --headless --frames 200`
-  no rompe.
-- **Estimado**: 5 min.
-
----
-
-## Bloque D — Presentación (depende de C)
-
-### T11 · HUD con acto y `N/100`
-- **Archivos**: `src/pop2026/presentation/renderer.py`,
-  `tests/unit/test_renderer_hud.py`.
-- **Hago**:
-  - Línea HUD: `ACTO II · NIVEL 28/100 · ⏱ 01:24 · ❤❤❤`.
-  - Cálculo de acto vía
-    `application.difficulty.act_for_level(level_index)`.
-- **DoD**: test que renderiza el HUD a `pygame.Surface` y verifica
-  pixels de colores conocidos en posiciones esperadas.
-- **Estimado**: 20 min.
-
-### T12 · Cinemáticas de cambio de acto
-- **Archivos**: `src/pop2026/presentation/screens/cutscene.py`,
-  `src/pop2026/presentation/app.py`.
-- **Hago**:
-  - Nuevas escenas: `act1`, `act2`, `act3`, `act4`, `final`.
-  - `app.py`: dispara al entrar en `level_index` 1, 26, 51, 76 y
-    tras ganar 100. Conserva el set `shown_cutscenes`.
-- **DoD**:
-  - Render headless de cada escena no peta.
-  - `test_cutscene_dispatched_at_act_boundaries`.
+### R5 · Tile interactions continuo
+- **Archivos**: `src/pop2026/domain/game.py`,
+  `src/pop2026/domain/level.py`.
+- **Hago**: `_process_tile_interactions` lee `prince.pos.to_cell()`
+  para resolver qué tile pisa. Placa, pociones, exit, spikes:
+  todos por celda derivada. Spikes letales si `vel.vy >
+  SPIKE_LETHAL_VY=0.3`.
+- **DoD**: tests para cada interacción.
 - **Estimado**: 30 min.
 
-### T13 · Música por acto
-- **Archivos**: `src/pop2026/presentation/audio.py`,
-  `src/pop2026/presentation/app.py`.
-- **Hago**: `zone_for_level` cambia de mapa: actos 1,2,3,4 →
-  dungeon/prison/palace/throne. Añadir track `prison`.
-- **DoD**: `test_zone_for_level_returns_four_distinct_zones`.
-- **Estimado**: 25 min.
-
----
-
-## Bloque E — Validación end-to-end
-
-### T14 · Demo bot pasa muestra
-- **Archivos**: `tests/integration/test_demo_sample.py`.
-- **Hago**: para `level_index ∈ {1, 13, 26, 38, 51, 63, 76, 88, 99}`,
-  el demo bot termina (WON o LOST_DIED, no PLAYING) en 8 000 frames.
-  Niveles narrativos de combate (3, 7, 10, 12) excepción documentada.
-- **DoD**: test pasa o explícitamente skip los conocidos.
+### R6 · Reachability ajustada a físicas reales
+- **Archivos**: `src/pop2026/domain/reachability.py`,
+  `tests/unit/test_reachability.py`.
+- **Hago**: recalcular `JUMP_REACH` y `MAX_FALL_DROP` a partir de
+  las constantes nuevas. Una parabola con `JUMP_VEL=-0.42` y
+  gravedad alcanza ~3 celdas horizontales. Ajustar.
+- **DoD**: tests pasan con los nuevos rangos.
 - **Estimado**: 20 min.
 
-### T15 · Property test del generador
-- **Archivos**: `tests/property/test_generator_invariants.py`.
-- **Hago** (hypothesis):
-  - Para `seed ∈ [0, 255]`, `level ∈ [13, 100]`: el level es
-    reachable.
-  - Para mismo `seed, level`, dos llamadas devuelven `Level` igual.
-  - Para mismo `level`, distintos seeds producen al menos 50 % de
-    layouts diferentes.
-- **DoD**: hypothesis 100 ejemplos, 0 fallos.
-- **Estimado**: 25 min.
-
-### T16 · Save/load nivel 100
-- **Archivos**: `tests/integration/test_save_load_100.py`.
-- **Hago**: simular ganar nivel 99 → save → reload → arranca en 100.
-- **DoD**: test verde.
-- **Estimado**: 10 min.
-
----
-
-## Bloque F — Documentación + release
-
-### T17 · Actualizar `README`, `CHANGELOG`, `plan.md`, `docs/postmortem.md`
-- **Archivos**: `README.md`, `CHANGELOG.md`, `plan.md`, `docs/postmortem.md`.
+### R7 · Renderer lee `pos.x/pos.y` directos
+- **Archivos**: `src/pop2026/presentation/renderer.py`.
 - **Hago**:
-  - README: sección "100 niveles" explicando híbrido y cómo se
-    juega.
-  - CHANGELOG: nueva v3.0.0 con todo lo del bloque.
-  - plan.md: marcar todas las tareas de este `PLAN.md` como
-    completadas.
-  - postmortem: párrafo nuevo sobre escala 12 → 100, decisiones de
-    procedural, qué se ganó / qué se perdió.
-- **DoD**: docs leen bien y reflejan el estado real.
-- **Estimado**: 25 min.
+  - `_smooth_feet(prince)` ahora hace
+    `feet_x = prince.pos.x * tile_w`, `feet_y = (prince.pos.y +
+    half_h) * tile_h + hud_top`. No anim offset (la posición YA es
+    continua).
+  - Mantener anim offset solo para guards (siguen discretos).
+  - Eliminar las llamadas a `offset_for(action, ticks)` para el
+    príncipe; sustituir por `poses.interpolate(action, phase)` con
+    `phase = ticks_in_action / duration_ticks(action)`.
+- **DoD**: render headless de cualquier estado no peta; preview
+  manual ok.
+- **Estimado**: 45 min.
 
-### T18 · ADR-0006 generador procedural
-- **Archivos**: `docs/adr/0006-procedural-levels.md`.
-- **Hago**: contexto, opciones consideradas, decisión, consecuencias.
-- **DoD**: archivo existe, formato consistente con otros ADRs.
+### R8 · Niveles hand-crafted con verticalidad real
+- **Archivos**: `src/pop2026/infrastructure/builtin_levels/*.poplv`.
+- **Hago**: rediseñar los 12 niveles con plataformas a alturas
+  variadas. Cada nivel introduce o repite una mecánica:
+  1. Tutorial: caminar, exit. Plano.
+  2. Sable: pickup en plataforma elevada (debe trepar).
+  3. Guardia: en plataforma intermedia, baja con drop.
+  4. Pinchos: gaps con pinchos abajo, debe saltar.
+  5. Placa+gate: placa en plataforma alta, gate arriba.
+  6. Suelos sueltos: cadena de plataformas que caen.
+  7. Dos guardias: en plataformas distintas, secuencia.
+  8. Trepar: ascenso vertical, mezcla de saltos y climbs.
+  9. Maze: laberinto vertical con backtrack.
+  10. Patrulla larga: corredor de 40 celdas con plataformas.
+  11. Pinchos forest: precisión de salto, sin red.
+  12. Visir: arena vertical, plataforma central, jefe.
+- **DoD**: cada nivel pasa el demo bot con seed=42 en <8000 frames,
+  excepto los conocidos human-only (3, 7, 10, 12).
+- **Estimado**: 90 min.
+
+### R9 · Generador procedural rediseñado
+- **Archivos**: `src/pop2026/application/level_generator.py`,
+  tests.
+- **Hago**: layout con 2-3 plataformas a distintas alturas,
+  conectadas por saltos o caídas controladas. Reachability sigue
+  validando.
+- **DoD**: property test `every_generated_level_is_reachable`
+  sigue verde (puede requerir relajar parámetros).
+- **Estimado**: 60 min.
+
+### R10 · Demo bot adaptado a físicas continuas
+- **Archivos**: `src/pop2026/application/demo_player.py`.
+- **Hago**: el bot vuelve a leer `pos.to_cell()` para decidir.
+  JUMP_R desaparece, se reemplaza por mantener `RIGHT + JUMP`. Air
+  control implícito.
+- **DoD**: bot pasa niveles 1-2 hand-crafted.
+- **Estimado**: 45 min.
+
+### R11 · Audio transitions actualizado
+- **Archivos**: `src/pop2026/presentation/audio.py`.
+- **Hago**: detectar saltos, aterrizajes, golpes en el nuevo
+  modelo (transición de action symbol, igual que antes). Adaptar.
+- **DoD**: SFX se disparan en eventos.
 - **Estimado**: 15 min.
 
-### T19 · Verificación final + push
-- **Hago**:
-  ```bash
-  uv run ruff format --check .
-  uv run ruff check .
-  uv run mypy --strict src persia.py
-  uv run pytest --cov=src/pop2026/domain --cov-report=term -q
-  uv run python persia.py preview 50_act2 --out /tmp/l50.png
-  uv run python persia.py --demo --seed 42 --headless --frames 200 --start-level 50
-  ```
-  - Tag `v3.0.0`, push.
-- **DoD**: gates verdes; demo headless de un nivel procedural OK;
-  push aceptado por el remoto.
-- **Estimado**: 15 min.
+### R12 · Limpieza + tests viejos + docs
+- **Archivos**: `prince.py` discreto borrado; tests `test_prince.py`
+  y `test_hang.py` migrados o borrados; `physics_prince` renombrado
+  a `prince`.
+- **Hago**: limpieza final, CHANGELOG v4.0.0, ADR 0007, postmortem
+  actualizado.
+- **DoD**: gates verdes, demo bot pasa muestra representativa, push.
+- **Estimado**: 45 min.
 
 ---
 
-## Resumen y dependencias
+## Tiempo total y dependencias
 
 ```
-T0.1 ──┐
-       ├── T1, T2, T3, T4, T5  (Bloque A — independientes entre sí)
-       │           │
-       │           └─→ T6 ──→ T7 ──→ T8 ──→ T9 ──→ T10
-       │                                     │
-       │                                     ├─→ T11
-       │                                     ├─→ T12
-       │                                     └─→ T13
-       │                                            │
-       │                                            ├─→ T14
-       │                                            ├─→ T15
-       │                                            └─→ T16
-       │                                                  │
-       └─────────────────────────────────────────────────→ T17, T18 → T19
+R1 ─→ R2 ─→ R3 ─→ R4 ─→ R5 ─→ R6
+                       ↓
+                       R7 ←→ R8 ─→ R10
+                                  ↓
+                                  R11 ─→ R12
 ```
 
-**Tareas paralelizables** (subagentes potenciales):
-- A: T1, T2, T3, T4, T5 — todos independientes.
-- D: T11, T12, T13 — todos independientes una vez T9 está cerrado.
-- F: T17, T18 — independientes entre sí.
+- **Serie**: ~9 h.
+- **Paralelizable (R7, R8, R9 después de R3-R6)**: ~6 h.
 
-**Tiempo total estimado**: ~6 h ejecutando en serie; ~3.5 h con
-paralelización inteligente de A y D.
+## Criterios de "hecho" para v4.0
 
----
-
-## Criterios de "hecho" para v3.0
-
-- [ ] Las 19 tareas con DoD verificada.
-- [ ] `pytest --cov=src/pop2026/domain` ≥ 90 %.
-- [ ] `uv run python persia.py --demo --seed 42 --headless` puede
-      arrancar en cualquier nivel 1..100 y reportar status.
-- [ ] Save/load funcional hasta nivel 100.
-- [ ] CHANGELOG, README, postmortem, plan.md alineados.
-- [ ] ADR-0006 publicado.
-- [ ] Tag `v3.0.0`, branch `claude/prince-of-persia-rebuild-y7uxD`
-      sincronizada con `origin`.
+- [ ] `prince` antiguo borrado.
+- [ ] `Game.prince` es `PhysicsPrince`.
+- [ ] Coyote time + jump buffer + variable jump funcionan
+      (tests dedicados).
+- [ ] Renderer dibuja sin anim offset para el príncipe.
+- [ ] Los 12 niveles hand-crafted tienen al menos 2 alturas
+      diferentes.
+- [ ] Demo bot pasa muestra (1, 13, 26, 51, 76).
+- [ ] 290+ tests verdes, cobertura dominio ≥ 90%.
+- [ ] CHANGELOG, README, ADR 0007 actualizados.
 
 ---
 
-## Riesgos identificados (para tu repaso)
-
-| Riesgo | Mitigación |
-|---|---|
-| Generador produce niveles imposibles | T4 (BFS) + reintentos en T6, fallback a corredor |
-| Niveles procedurales aburridos | T5 con curvas pensadas + T15 garantiza variedad |
-| 100 niveles agotan al jugador | Acto = pausa narrativa con cinemática (T12) y música distinta (T13) |
-| Save/load schema cambia | T1 sólo bumpea `le=100`, no rompe slots existentes |
-| HUD se queda pequeño con `ACTO X · NIVEL N/100` | T11 con tabular numerals y abreviación si hace falta |
-| Tests de hypothesis lentos | Limitar a 100 ejemplos; pytest marker `slow` para los E2E |
-
----
-
-*Plan ejecutado: 19 tareas cerradas. v3.0 entregada.*
-
-## Estado al cierre (commit reflejado en CHANGELOG.md)
-
-| Tarea | Estado |
-|---|---|
-| T0.1 snapshot | ✅ |
-| T1 SaveGame le=100 | ✅ |
-| T2 time_limit_ticks en Level | ✅ |
-| T3 new_game respeta tiempo | ✅ |
-| T4 reachability BFS | ✅ |
-| T5 difficulty params | ✅ |
-| T6 generador procedural | ✅ |
-| T7 level_source unificado | ✅ |
-| T8 CAMPAIGN 100 | ✅ |
-| T9 app integra source | ✅ |
-| T10 CLI hasta 100 | ✅ |
-| T11 HUD acto + N/100 | ✅ |
-| T12 cinemáticas por acto | ✅ |
-| T13 música por acto (4 zonas) | ✅ |
-| T14 demo bot muestra | ✅ |
-| T15 property tests | ✅ |
-| T16 save/load 100 | ✅ |
-| T17 docs | ✅ |
-| T18 ADR-0006 | ✅ |
-| T19 verificación + push | ✅ |
-
+*Pendiente: tu D1 y D2.*

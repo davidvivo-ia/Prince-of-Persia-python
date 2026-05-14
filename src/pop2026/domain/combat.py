@@ -25,7 +25,7 @@ from pop2026.domain.actions import (
 )
 from pop2026.domain.geometry import Facing
 from pop2026.domain.guard import Guard, GuardMode
-from pop2026.domain.prince import Prince
+from pop2026.domain.physics_prince import PhysicsPrince as Prince
 
 
 @dataclass(frozen=True, slots=True)
