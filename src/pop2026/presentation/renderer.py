@@ -77,11 +77,16 @@ def total_rooms(level_cols: int) -> int:
 
 
 def _draw_back_wall(surface: pygame.Surface) -> None:
-    """Pinta la pared trasera del calabozo: degradado + arcos repetidos.
+    """Pinta la pared trasera del calabozo: sillería de piedra + arcos.
 
-    Estilo POP1: la pared del fondo no es plana. Lleva una serie de
-    arcos rebajados en una banda media (sombras del pasillo) y un
-    degradado vertical sutil arriba-abajo para sugerir profundidad.
+    Capas (de atrás hacia delante):
+
+    1. Degradado vertical sutil — cielo profundo / fondo violeta.
+    2. Sillería de piedra: bloques rectangulares con mortero claro
+       formando un fondo "construido" (no plano).
+    3. Antorchas en columnas alternas con halos de luz.
+    4. Arcos rebajados en la banda media para dar profundidad de
+       galería.
     """
     w = surface.get_width()
     top_y = LAYOUT.hud_top
@@ -95,15 +100,38 @@ def _draw_back_wall(surface: pygame.Surface) -> None:
         col = tuple(int(PALETTE.bg_far[k] * (1 - t) + PALETTE.bg[k] * t * 0.6) for k in range(3))
         pygame.draw.rect(surface, col, (0, top_y + i * band, w, band + 1))
 
-    # 2. Arcos rebajados en el muro del fondo. Repiten cada 2 columnas.
-    arch_h = LAYOUT.tile_h - 12
-    arch_w = LAYOUT.tile_w * 2 - 8
-    arch_top = top_y + LAYOUT.tile_h + 4
+    # 2. Sillería de piedra al fondo — bloques rectangulares finos.
+    stone_h = LAYOUT.tile_h // 3
+    stone_w = LAYOUT.tile_w * 2 // 3
+    stone_col = _mix(PALETTE.bg_far, PALETTE.pillar, 0.35)
+    mortar_col = _mix(PALETTE.bg, PALETTE.bg_far, 0.6)
+    rows_back = (h // stone_h) + 1
+    for r in range(rows_back):
+        sy = top_y + r * stone_h
+        offset = (r % 2) * (stone_w // 2)
+        x = -offset
+        while x < w:
+            # Bloque (silueta tenue)
+            pygame.draw.rect(surface, stone_col, (x + 1, sy + 1, stone_w - 2, stone_h - 2), 1)
+            # Junta horizontal y vertical en mortero claro
+            pygame.draw.line(surface, mortar_col, (x, sy), (x + stone_w, sy), 1)
+            pygame.draw.line(surface, mortar_col, (x, sy), (x, sy + stone_h), 1)
+            x += stone_w
+
+    # 3. Antorchas: una cada 5 tiles, ardiendo en la fila superior.
+    for tile_c in range(2, w // LAYOUT.tile_w, 5):
+        tx = tile_c * LAYOUT.tile_w + LAYOUT.tile_w // 2
+        ty = top_y + LAYOUT.tile_h // 2
+        _draw_wall_torch(surface, tx, ty)
+
+    # 4. Arcos rebajados en la banda media — galería profunda.
+    arch_h = LAYOUT.tile_h - 14
+    arch_w = LAYOUT.tile_w * 2 - 10
+    arch_top = top_y + LAYOUT.tile_h + 6
     n_arches = max(1, w // (LAYOUT.tile_w * 2))
     for i in range(n_arches):
-        ax = i * LAYOUT.tile_w * 2 + 4
+        ax = i * LAYOUT.tile_w * 2 + 5
         rect = pygame.Rect(ax, arch_top, arch_w, arch_h)
-        # Hueco del arco: rectángulo con la parte superior redondeada
         pygame.draw.rect(
             surface,
             PALETTE.bg,
@@ -111,7 +139,7 @@ def _draw_back_wall(surface: pygame.Surface) -> None:
             border_top_left_radius=arch_w // 2,
             border_top_right_radius=arch_w // 2,
         )
-        # Marco del arco (línea de borde sutil)
+        # Marco de la dovela
         pygame.draw.rect(
             surface,
             PALETTE.bg_far,
@@ -120,6 +148,42 @@ def _draw_back_wall(surface: pygame.Surface) -> None:
             border_top_left_radius=arch_w // 2,
             border_top_right_radius=arch_w // 2,
         )
+        # Piedra clave central
+        key_w = 4
+        key_rect = pygame.Rect(
+            rect.centerx - key_w // 2,
+            arch_top - 1,
+            key_w,
+            4,
+        )
+        pygame.draw.rect(surface, PALETTE.bg_far, key_rect)
+
+
+def _draw_wall_torch(surface: pygame.Surface, cx: int, cy: int) -> None:
+    """Antorcha mural: brazo de hierro + cuenco + llama + halo."""
+    # Halo de luz cálido (alpha compuesto).
+    halo = pygame.Surface((36, 36), pygame.SRCALPHA)
+    for r, a in ((16, 18), (12, 30), (8, 50)):
+        pygame.draw.circle(halo, (*PALETTE.warning, a), (18, 18), r)
+    surface.blit(halo, (cx - 18, cy - 18), special_flags=pygame.BLEND_ADD)
+
+    # Brazo de hierro saliendo del muro.
+    pygame.draw.line(surface, PALETTE.brick_dark, (cx, cy + 2), (cx, cy + 6), 2)
+    # Cuenco metálico.
+    pygame.draw.rect(surface, PALETTE.guard_armor, (cx - 3, cy + 1, 6, 2))
+    # Llama: lóbulo amarillo + núcleo rojo.
+    pygame.draw.polygon(
+        surface,
+        PALETTE.warning,
+        [(cx - 3, cy + 1), (cx, cy - 6), (cx + 3, cy + 1)],
+    )
+    pygame.draw.polygon(
+        surface,
+        PALETTE.error,
+        [(cx - 2, cy), (cx, cy - 4), (cx + 2, cy)],
+    )
+    # Chispa central.
+    pygame.draw.circle(surface, PALETTE.primary, (cx, cy - 3), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -155,13 +219,23 @@ def _draw_floor(surface: pygame.Surface, x: int, y: int) -> None:
     # Sombra inferior — efecto de profundidad pegado al borde.
     pygame.draw.rect(surface, PALETTE.brick_dark, (x, y + th - 3, tw, 3))
 
-    # Borde superior iluminado (línea brillante + sub-pixel highlight).
-    pygame.draw.line(surface, PALETTE.brick_top, (x, top), (x + tw - 1, top), 2)
+    # "Shelf" superior: banda más clara que sobresale 3 px sobre el
+    # ladrillo y crea la silueta del suelo flotante característica.
+    shelf_h = 4
+    pygame.draw.rect(surface, PALETTE.brick_top, (x, top, tw, shelf_h))
     pygame.draw.line(
         surface,
-        _mix(PALETTE.brick_top, PALETTE.primary, 0.3),
-        (x + 2, top + 1),
-        (x + tw - 3, top + 1),
+        _mix(PALETTE.brick_top, PALETTE.primary, 0.5),
+        (x, top),
+        (x + tw - 1, top),
+        1,
+    )
+    # Sombra fina justo debajo del shelf para separarlo del cuerpo.
+    pygame.draw.line(
+        surface,
+        PALETTE.brick_dark,
+        (x, top + shelf_h),
+        (x + tw - 1, top + shelf_h),
         1,
     )
 
@@ -212,34 +286,47 @@ def _draw_loose_floor(surface: pygame.Surface, x: int, y: int) -> None:
 
 
 def _draw_spikes(surface: pygame.Surface, x: int, y: int) -> None:
-    """Pinchos: array de hojas triangulares emergiendo del suelo.
+    """Pinchos: hojas alargadas de hierro emergiendo de un nicho oscuro.
 
-    Cada hoja tiene filo iluminado y sombra al lado contrario para
-    sugerir biselado metálico.
+    Cada hoja tiene un cuerpo ligeramente cóncavo (no triangular puro),
+    filo iluminado al lado izquierdo, lado oscuro al derecho y brillo
+    en la punta. La banda inferior es un nicho metálico donde se
+    anclan, sugiriendo que salen del suelo.
     """
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    base_y = y + th - 2
-    n_spikes = 5
-    spike_w = tw // n_spikes
+    base_y = y + th - 3
+    # Nicho metálico oscuro donde se alojan las hojas.
+    pygame.draw.rect(surface, PALETTE.mortar, (x, base_y - 2, tw, 4))
+
+    n_spikes = 4
+    spike_w = (tw - 4) // n_spikes
     for i in range(n_spikes):
-        sx = x + i * spike_w
+        sx = x + 2 + i * spike_w
         tip_x = sx + spike_w // 2
-        tip_y = base_y - 16
-        # Cuerpo de la hoja
+        tip_y = base_y - 20
+        mid_y = base_y - 6
+
+        # Hoja con forma de daga: ancha en base, cuello angosto, punta.
         pygame.draw.polygon(
             surface,
             PALETTE.blade,
-            [(sx + 1, base_y), (tip_x, tip_y), (sx + spike_w - 1, base_y)],
+            [
+                (sx + 1, base_y),
+                (tip_x - 2, mid_y),
+                (tip_x, tip_y),
+                (tip_x + 2, mid_y),
+                (sx + spike_w - 1, base_y),
+            ],
         )
-        # Filo iluminado izquierdo
+        # Filo iluminado izquierdo (acaba en la punta).
         pygame.draw.line(
             surface,
-            _mix(PALETTE.blade, PALETTE.primary, 0.5),
-            (sx + 1, base_y),
+            _mix(PALETTE.blade, PALETTE.primary, 0.55),
             (tip_x, tip_y),
+            (sx + 1, base_y),
             1,
         )
-        # Sombra derecha
+        # Lado en sombra derecho.
         pygame.draw.line(
             surface,
             PALETTE.guard_armor,
@@ -247,10 +334,18 @@ def _draw_spikes(surface: pygame.Surface, x: int, y: int) -> None:
             (sx + spike_w - 1, base_y),
             1,
         )
-        # Mancha oscura en la base (sangre seca / suciedad)
-        pygame.draw.circle(surface, PALETTE.error, (tip_x, base_y - 1), 1)
-    # Base de hierro oscuro donde están clavados los pinchos.
-    pygame.draw.rect(surface, PALETTE.brick_dark, (x, base_y, tw, 2))
+        # Brillo de la punta.
+        pygame.draw.circle(surface, PALETTE.primary, (tip_x, tip_y + 1), 1)
+
+    # Banda metálica oscura en la base (donde están clavados).
+    pygame.draw.rect(surface, PALETTE.brick_dark, (x, base_y, tw, 3))
+    pygame.draw.line(
+        surface,
+        _mix(PALETTE.brick_dark, PALETTE.primary, 0.2),
+        (x, base_y),
+        (x + tw, base_y),
+        1,
+    )
 
 
 def _draw_gate(surface: pygame.Surface, x: int, y: int, *, open_: bool) -> None:
@@ -416,11 +511,75 @@ def _draw_exit(surface: pygame.Surface, x: int, y: int) -> None:
 
 
 def _draw_pillar(surface: pygame.Surface, col: int) -> None:
-    """Pilar vertical de fondo en una columna concreta."""
-    x = col * LAYOUT.tile_w + LAYOUT.tile_w // 2 - 2
+    """Columna arquitectónica con capitel + fuste estriado + basa.
+
+    Estética de pilar de madera oscura con relieves: capitel en cabecera
+    (más ancho), fuste con dos acanaladuras verticales en sombra y
+    realce y basa cuadrada al pie.
+    """
+    cx = col * LAYOUT.tile_w + LAYOUT.tile_w // 2
     top = LAYOUT.hud_top
     bot = LAYOUT.hud_top + LAYOUT.rows * LAYOUT.tile_h
-    pygame.draw.rect(surface, PALETTE.pillar, (x, top, 4, bot - top))
+    shaft_w = 6
+    cap_w = 10
+    cap_h = 6
+    base_h = 5
+
+    # Fuste principal.
+    pygame.draw.rect(
+        surface, PALETTE.pillar, (cx - shaft_w // 2, top + cap_h, shaft_w, bot - top - cap_h)
+    )
+    # Acanaladuras verticales (sombra al centro + realce a izquierda).
+    pygame.draw.line(
+        surface,
+        PALETTE.mortar,
+        (cx, top + cap_h),
+        (cx, bot - base_h),
+        1,
+    )
+    pygame.draw.line(
+        surface,
+        _mix(PALETTE.pillar, PALETTE.primary, 0.25),
+        (cx - 2, top + cap_h + 1),
+        (cx - 2, bot - base_h - 1),
+        1,
+    )
+
+    # Capitel (cabecera) ligeramente más ancho.
+    pygame.draw.rect(
+        surface,
+        _mix(PALETTE.pillar, PALETTE.brick_top, 0.15),
+        (cx - cap_w // 2, top, cap_w, cap_h),
+    )
+    pygame.draw.line(
+        surface,
+        PALETTE.brick_top,
+        (cx - cap_w // 2, top),
+        (cx + cap_w // 2 - 1, top),
+        1,
+    )
+    pygame.draw.line(
+        surface,
+        PALETTE.mortar,
+        (cx - cap_w // 2, top + cap_h - 1),
+        (cx + cap_w // 2 - 1, top + cap_h - 1),
+        1,
+    )
+
+    # Basa cuadrada al pie del fuste.
+    base_y = bot - base_h
+    pygame.draw.rect(
+        surface,
+        _mix(PALETTE.pillar, PALETTE.brick_dark, 0.3),
+        (cx - cap_w // 2, base_y, cap_w, base_h),
+    )
+    pygame.draw.line(
+        surface,
+        PALETTE.brick_dark,
+        (cx - cap_w // 2, bot - 1),
+        (cx + cap_w // 2 - 1, bot - 1),
+        1,
+    )
 
 
 def _draw_ceiling_strip(surface: pygame.Surface) -> None:
