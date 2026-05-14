@@ -43,7 +43,8 @@ class AppConfig:
     headless: bool = False
     max_frames: int = 0
     start_level: int = 1
-    crt: bool = True
+    crt: bool = False
+    """Overlay CRT desactivado por defecto (homenaje Apple II: HGR no tiene scanlines)."""
     mute: bool = False
     skip_title: bool = False
     difficulty: str = "normal"

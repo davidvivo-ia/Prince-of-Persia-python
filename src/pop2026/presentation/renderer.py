@@ -96,55 +96,55 @@ def _draw_back_wall(surface: pygame.Surface) -> None:
 
 
 def _draw_floor(surface: pygame.Surface, x: int, y: int) -> None:
-    """Dibuja un tile de suelo con base de ladrillo, mortero y borde."""
+    """Dibuja un tile de suelo: el ladrillo llena toda la celda.
+
+    Estilo Apple II HGR: tres cursos horizontales de ladrillo, mortero
+    oscuro alternando verticalmente, brillo superior y sombra inferior.
+    """
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    top = y + th - FLOOR_THICKNESS
+    top = y  # el ladrillo ocupa la celda entera
 
-    # Cuerpo del ladrillo
-    pygame.draw.rect(surface, PALETTE.brick, (x, top, tw, FLOOR_THICKNESS))
+    # Cuerpo del ladrillo (toda la celda).
+    pygame.draw.rect(surface, PALETTE.brick, (x, top, tw, th))
 
-    # Sombra inferior (debajo de la celda) — efecto de profundidad
+    # Sombra inferior — efecto de profundidad pegado al borde.
     pygame.draw.rect(surface, PALETTE.brick_dark, (x, y + th - 3, tw, 3))
 
-    # Borde superior iluminado
-    pygame.draw.line(
-        surface,
-        PALETTE.brick_top,
-        (x, top),
-        (x + tw - 1, top),
-        2,
-    )
+    # Borde superior iluminado.
+    pygame.draw.line(surface, PALETTE.brick_top, (x, top), (x + tw - 1, top), 2)
 
-    # Líneas de mortero: dos filas horizontales
-    mortar_y1 = top + FLOOR_THICKNESS // 3
-    mortar_y2 = top + 2 * FLOOR_THICKNESS // 3
+    # Tres cursos de mortero horizontal.
+    course = th // 3
+    mortar_y1 = top + course
+    mortar_y2 = top + 2 * course
     pygame.draw.line(surface, PALETTE.mortar, (x, mortar_y1), (x + tw, mortar_y1), 1)
     pygame.draw.line(surface, PALETTE.mortar, (x, mortar_y2), (x + tw, mortar_y2), 1)
 
-    # Mortero vertical alternado (ladrillos desalineados)
-    offset = (x // tw) % 2  # cada cell alterna
+    # Mortero vertical alternado (ladrillos en aparejo soga).
+    offset = (x // tw) % 2  # filas pares vs impares
     half = tw // 2
+    # Curso superior (top → mortar_y1): junta en x+half
     pygame.draw.line(surface, PALETTE.mortar, (x + half, top), (x + half, mortar_y1), 1)
-    pygame.draw.line(
-        surface,
-        PALETTE.mortar,
-        (x + (0 if offset else half), mortar_y1),
-        (x + (0 if offset else half), mortar_y2),
-        1,
-    )
+    # Curso medio (mortar_y1 → mortar_y2): junta desplazada
+    mid_jx = x if offset else x + half
+    pygame.draw.line(surface, PALETTE.mortar, (mid_jx, mortar_y1), (mid_jx, mortar_y2), 1)
+    # Curso inferior (mortar_y2 → bottom): junta en x+half
+    pygame.draw.line(surface, PALETTE.mortar, (x + half, mortar_y2), (x + half, y + th), 1)
     pygame.draw.line(
         surface, PALETTE.mortar, (x + half, mortar_y2), (x + half, top + FLOOR_THICKNESS), 1
     )
 
 
 def _draw_loose_floor(surface: pygame.Surface, x: int, y: int) -> None:
-    """Suelo suelto: como FLOOR pero con grietas."""
+    """Suelo suelto: como FLOOR pero con grieta diagonal a lo largo de toda la celda."""
     _draw_floor(surface, x, y)
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    top = y + th - FLOOR_THICKNESS
-    # Grieta diagonal
     pygame.draw.line(
-        surface, PALETTE.bg, (x + tw // 4, top + 2), (x + 3 * tw // 4, top + FLOOR_THICKNESS - 4), 2
+        surface,
+        PALETTE.bg,
+        (x + tw // 4, y + 4),
+        (x + 3 * tw // 4, y + th - 6),
+        2,
     )
 
 
@@ -281,28 +281,28 @@ def _draw_humanoid(
     """
     fdir = 1 if facing is Facing.RIGHT else -1
 
-    # Posicionado del cuerpo
-    body_h = 44
-    head_r = 6
-    torso_w = 14
-    torso_h = 20
+    # Posicionado del cuerpo — silueta compacta tipo POP1 Apple II (~28 px alto).
+    body_h = 28
+    head_r = 4
+    torso_w = 10
+    torso_h = 12
 
     # Si pose == "dead": tumbado horizontal
     if pose == "dead":
-        pygame.draw.rect(surface, skin, (feet_x - 16, feet_y - 8, 32, 6))
-        pygame.draw.circle(surface, skin, (feet_x - 16 * fdir, feet_y - 5), head_r)
+        pygame.draw.rect(surface, skin, (feet_x - 12, feet_y - 5, 24, 4))
+        pygame.draw.circle(surface, skin, (feet_x - 12 * fdir, feet_y - 3), head_r)
         return
 
     # Ajuste de altura si está agachado, golpeado o aterrizando.
     if pose == "crouch":
-        body_h = 28
-        torso_h = 12
+        body_h = 18
+        torso_h = 8
     if pose == "land":
         # Compresión moderada al aterrizar.
-        body_h = 34
-        torso_h = 14
+        body_h = 22
+        torso_h = 9
     if pose == "hurt":
-        body_h = 40
+        body_h = 26
 
     # Pose "hang": cuelga del borde con brazos arriba.
     if pose == "hang":
@@ -518,16 +518,16 @@ def _smooth_feet(
 def _continuous_feet(p: Prince, viewport_x: int = 0) -> tuple[int, int]:
     """Calcula los píxeles del pie del príncipe desde su posición continua.
 
-    El centro del cuerpo es ``body.pos``; los pies están a ``+half_h``
-    en celdas. Lo convertimos a píxeles y aplicamos el desplazamiento
-    visual ``- FLOOR_THICKNESS`` para alinear con el borde superior del
-    ladrillo del suelo.
+    Con el ladrillo llenando la celda entera, el borde superior del
+    suelo está en ``row * tile_h + hud_top``. Los pies del príncipe
+    grounded tienen ``body.pos.y + half_h == row``, así que el píxel
+    coincide directamente con la multiplicación: sin offset adicional.
     """
     from pop2026.domain.physics import PRINCE_H
 
     half_h = PRINCE_H / 2.0
     feet_x = int((p.body.pos.x - viewport_x) * LAYOUT.tile_w)
-    feet_y = int((p.body.pos.y + half_h) * LAYOUT.tile_h - FLOOR_THICKNESS + LAYOUT.hud_top)
+    feet_y = int((p.body.pos.y + half_h) * LAYOUT.tile_h + LAYOUT.hud_top)
     return feet_x, feet_y
 
 

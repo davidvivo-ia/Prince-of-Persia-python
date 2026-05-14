@@ -13,61 +13,68 @@ RGB = tuple[int, int, int]
 
 @dataclass(frozen=True, slots=True)
 class Palette:
-    """Paleta Persia Nocturna refinada para silueta tipo POP."""
+    """Paleta-homenaje a la presentación Apple II HGR del original.
 
-    bg: RGB = (0x14, 0x0E, 0x1F)
-    """Fondo profundo, casi negro violáceo."""
+    HGR sólo permitía 6 colores (negro, blanco, violeta, naranja, verde,
+    azul) y obligaba a alternarlos por línea. Esta paleta toma esa
+    severidad cromática como inspiración: tonos saturados, dominio del
+    naranja-ladrillo y el violeta de fondo, contrastes altos. Los hex
+    son originales — ningún tono se copia de ningún asset existente.
+    """
 
-    bg_far: RGB = (0x22, 0x18, 0x33)
-    """Pared lejana de fondo, ligeramente más clara."""
+    bg: RGB = (0x0A, 0x06, 0x18)
+    """Fondo profundo (negro con tinte violeta HGR)."""
 
-    brick: RGB = (0x6E, 0x4A, 0x2A)
-    """Color principal del ladrillo del suelo."""
+    bg_far: RGB = (0x18, 0x10, 0x28)
+    """Pared lejana, ligeramente más clara."""
 
-    brick_top: RGB = (0xA8, 0x7C, 0x4E)
-    """Borde superior iluminado del suelo."""
+    brick: RGB = (0xC4, 0x5A, 0x24)
+    """Naranja-ladrillo saturado (artifact HGR clásico)."""
 
-    brick_dark: RGB = (0x3C, 0x26, 0x14)
+    brick_top: RGB = (0xE8, 0x8A, 0x40)
+    """Brillo superior del ladrillo."""
+
+    brick_dark: RGB = (0x5C, 0x28, 0x0C)
     """Sombra inferior del ladrillo."""
 
-    mortar: RGB = (0x1A, 0x10, 0x08)
-    """Líneas entre ladrillos."""
+    mortar: RGB = (0x10, 0x08, 0x04)
+    """Líneas oscuras entre ladrillos."""
 
-    pillar: RGB = (0x46, 0x33, 0x22)
-    """Pilares de columna vertical."""
+    pillar: RGB = (0x3C, 0x24, 0x14)
+    """Pilares de columna vertical (madera oscura)."""
 
-    primary: RGB = (0xE8, 0xD9, 0xA8)
-    """Skin/ropa del príncipe (pergamino dorado)."""
+    primary: RGB = (0xE8, 0xDC, 0xB0)
+    """Túnica clara del príncipe (blanco-pergamino)."""
 
-    primary_dark: RGB = (0x8C, 0x6E, 0x3F)
+    primary_dark: RGB = (0x80, 0x6C, 0x40)
     """Sombras del príncipe."""
 
-    cloth: RGB = (0xB8, 0x4A, 0x2E)
-    """Cinturón / banda roja del príncipe (acento clásico de POP)."""
+    cloth: RGB = (0xD8, 0x2C, 0x18)
+    """Faja roja del príncipe — acento icónico."""
 
-    accent: RGB = (0xC7, 0x7D, 0xFF)
-    """Violeta para halos, salida, magia."""
+    accent: RGB = (0xA8, 0x40, 0xC8)
+    """Violeta HGR — exits, magia, acentos."""
 
-    success: RGB = (0x6F, 0xD8, 0x5F)
-    """Verde de poción curativa."""
+    success: RGB = (0x44, 0xC8, 0x44)
+    """Verde HGR — pociones curativas."""
 
-    warning: RGB = (0xF2, 0xC1, 0x4E)
+    warning: RGB = (0xE8, 0xB8, 0x40)
     """Oro polvoriento — reloj, rejas."""
 
-    error: RGB = (0xE6, 0x39, 0x46)
+    error: RGB = (0xE0, 0x20, 0x20)
     """Rojo — daño, guardia, sangre."""
 
-    muted: RGB = (0x6E, 0x5F, 0x8A)
+    muted: RGB = (0x5C, 0x4C, 0x6C)
     """Lila apagado — tile inactivo, sombras."""
 
-    guard_skin: RGB = (0xB5, 0x8A, 0x5C)
-    """Tono del guardia."""
+    guard_skin: RGB = (0xA0, 0x70, 0x50)
+    """Tono del guardia — distinguible del príncipe."""
 
-    guard_armor: RGB = (0x4C, 0x4C, 0x58)
+    guard_armor: RGB = (0x40, 0x40, 0x50)
     """Armadura plomiza del guardia."""
 
-    blade: RGB = (0xDD, 0xDD, 0xE8)
-    """Filo del sable."""
+    blade: RGB = (0xE0, 0xE0, 0xE8)
+    """Filo del sable — blanco metálico."""
 
 
 PALETTE = Palette()

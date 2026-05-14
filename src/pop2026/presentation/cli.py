@@ -37,7 +37,9 @@ def _main(
         1, "--start-level", min=1, max=total_levels(), help=f"Nivel inicial (1..{total_levels()})."
     ),
     headless: bool = typer.Option(False, "--headless", help="Sin ventana ni audio (CI / scripts)."),
-    no_crt: bool = typer.Option(False, "--no-crt", help="Desactiva el overlay CRT."),
+    crt_overlay: bool = typer.Option(
+        False, "--crt", help="Activa el overlay CRT (off por defecto: homenaje Apple II HGR)."
+    ),
     mute: bool = typer.Option(False, "--mute", help="Sin audio."),
     skip_title: bool = typer.Option(False, "--skip-title", help="Salta la pantalla de título."),
     difficulty: str = typer.Option(
@@ -62,7 +64,7 @@ def _main(
         headless=headless,
         max_frames=frames,
         start_level=start_level,
-        crt=not no_crt,
+        crt=crt_overlay,
         mute=mute,
         skip_title=skip_title,
         difficulty=difficulty,
@@ -83,7 +85,9 @@ def preview(
     out: Path = typer.Option(  # noqa: B008
         _PREVIEW_DEFAULT, "--out", "-o", help="Ruta del PNG de salida."
     ),
-    no_crt: bool = typer.Option(False, "--no-crt", help="Desactiva el overlay CRT."),
+    crt_overlay: bool = typer.Option(
+        False, "--crt", help="Activa el overlay CRT (off por defecto: homenaje Apple II HGR)."
+    ),
 ) -> None:
     """Renderiza un nivel a PNG sin abrir ventana (útil para README y debug)."""
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -108,7 +112,7 @@ def preview(
         game = new_game(level, level_index=1)
         surface = pygame.Surface((LAYOUT.width_px, LAYOUT.height_px))
         font = pygame.font.Font(None, 22)
-        renderer.render(surface, game, font, crt=not no_crt)
+        renderer.render(surface, game, font, crt=crt_overlay)
         out.parent.mkdir(parents=True, exist_ok=True)
         pygame.image.save(surface, str(out))
         typer.echo(f"Preview guardada en {out}")
