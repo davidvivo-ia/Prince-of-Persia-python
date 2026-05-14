@@ -23,13 +23,17 @@ simbólico (``action``) que el renderer y los SFX necesitan.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
-from pop2026.domain.actions import Action
+from pop2026.domain.actions import Action, duration_ticks
 from pop2026.domain.geometry import Facing, Position, PositionF, Velocity
 from pop2026.domain.input import InputFrame, PlayerCommand
 from pop2026.domain.level import Level, LevelState
 from pop2026.domain.physics import (
+    ADVANCE_IMPULSE,
+    ADVANCE_WINDOW,
     AIR_ACCEL,
+    COMBAT_NEAR_CELLS,
     COYOTE_TICKS,
     GRAVITY,
     GROUND_ACCEL,
@@ -45,6 +49,9 @@ from pop2026.domain.physics import (
     integrate,
     is_grounded,
 )
+
+if TYPE_CHECKING:
+    from pop2026.domain.guard import Guard
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,8 +162,16 @@ def step(
     level: Level,
     state: LevelState,
     inp: InputFrame,
+    guards: tuple[Guard, ...] = (),
 ) -> PhysicsPrince:
-    """Avanza un tick aplicando input + game-feel + integrador."""
+    """Avanza un tick aplicando input + game-feel + integrador.
+
+    El argumento opcional ``guards`` se usa para detectar combate cuerpo
+    a cuerpo: si el príncipe tiene espada y hay un guardia vivo en la
+    misma fila a ``COMBAT_NEAR_CELLS`` celdas, las teclas LEFT/RIGHT se
+    interpretan como :data:`Action.ADVANCE` / :data:`Action.RETREAT` —
+    micro-pasos de medio tile en lugar de carrera completa.
+    """
     if prince.action is Action.DEAD:
         return prince
 
@@ -165,66 +180,70 @@ def step(
 
     # --- Coyote y jump buffer -------------------------------------------------
     new_coyote = COYOTE_TICKS if grounded else max(0, prince.coyote_left - 1)
-    # JUMP_BUFFER: si se pulsa JUMP, recarga el buffer.
     jump_pressed_this_tick = cmd is PlayerCommand.JUMP
     new_buffer = JUMP_BUFFER_TICKS if jump_pressed_this_tick else max(0, prince.buffer_left - 1)
 
-    # Knockback: decrementa, bloquea input horizontal mientras > 0
     new_knockback = max(0, prince.knockback_left - 1)
     input_blocked = prince.knockback_left > 0
 
-    # --- Input horizontal -----------------------------------------------------
-    target_vx = 0.0
-    new_facing = prince.facing
-    if not input_blocked:
-        if cmd is PlayerCommand.LEFT:
-            target_vx = -(WALK_SPEED if inp.walk_modifier else RUN_SPEED)
-            new_facing = Facing.LEFT
-        elif cmd is PlayerCommand.RIGHT:
-            target_vx = WALK_SPEED if inp.walk_modifier else RUN_SPEED
-            new_facing = Facing.RIGHT
-
-    accel = GROUND_ACCEL if grounded else AIR_ACCEL
-    cur_vx = prince.body.vel.vx
-    desired_vx = cur_vx + (target_vx - cur_vx) * accel * 10.0
-    # Limitar a la velocidad máxima del modo (suelo o aire).
-    max_vx = WALK_SPEED if inp.walk_modifier else RUN_SPEED
-    desired_vx = max(-max_vx, min(max_vx, desired_vx))
-    # Durante knockback la velocidad horizontal viene de el propio
-    # impulso, no del input.
-    if input_blocked:
-        desired_vx = prince.body.vel.vx
-
-    # --- Salto: coyote + buffer + variable jump -------------------------------
-    new_vy = prince.body.vel.vy
-    jump_consumed = False
-    if (grounded or prince.coyote_left > 0) and new_buffer > 0 and not input_blocked:
-        new_vy = JUMP_VEL
-        jump_consumed = True
-        new_coyote = 0
-        new_buffer = 0
-
-    # Variable jump height: soltar la tecla mientras subes corta el salto.
-    if prince.prev_jump_held and not inp.jump_held and new_vy < 0 and not jump_consumed:
-        new_vy = new_vy * VAR_JUMP_CUT
-
-    # --- Decidir acción simbólica para renderer / SFX -------------------------
-    new_action = _decide_action(
+    # --- Micro-pasos de combate (ADVANCE / RETREAT) ---------------------------
+    guard_dir = _nearest_guard_dir(prince, guards)
+    combat = _combat_micro_step(
         prince=prince,
         cmd=cmd,
         grounded=grounded,
-        desired_vx=desired_vx,
-        new_vy=new_vy,
+        guard_dir=guard_dir,
         input_blocked=input_blocked,
-        walk_modifier=inp.walk_modifier,
     )
+
+    if combat is not None:
+        new_action, new_facing, desired_vx = combat
+        new_vy = prince.body.vel.vy
+    else:
+        # --- Input horizontal --------------------------------------------------
+        target_vx = 0.0
+        new_facing = prince.facing
+        if not input_blocked:
+            if cmd is PlayerCommand.LEFT:
+                target_vx = -(WALK_SPEED if inp.walk_modifier else RUN_SPEED)
+                new_facing = Facing.LEFT
+            elif cmd is PlayerCommand.RIGHT:
+                target_vx = WALK_SPEED if inp.walk_modifier else RUN_SPEED
+                new_facing = Facing.RIGHT
+
+        accel = GROUND_ACCEL if grounded else AIR_ACCEL
+        cur_vx = prince.body.vel.vx
+        desired_vx = cur_vx + (target_vx - cur_vx) * accel * 10.0
+        max_vx = WALK_SPEED if inp.walk_modifier else RUN_SPEED
+        desired_vx = max(-max_vx, min(max_vx, desired_vx))
+        if input_blocked:
+            desired_vx = prince.body.vel.vx
+
+        # --- Salto: coyote + buffer + variable jump ----------------------------
+        new_vy = prince.body.vel.vy
+        jump_consumed = False
+        if (grounded or prince.coyote_left > 0) and new_buffer > 0 and not input_blocked:
+            new_vy = JUMP_VEL
+            jump_consumed = True
+            new_coyote = 0
+            new_buffer = 0
+
+        if prince.prev_jump_held and not inp.jump_held and new_vy < 0 and not jump_consumed:
+            new_vy = new_vy * VAR_JUMP_CUT
+
+        new_action = _decide_action(
+            prince=prince,
+            cmd=cmd,
+            grounded=grounded,
+            desired_vx=desired_vx,
+            new_vy=new_vy,
+            input_blocked=input_blocked,
+            walk_modifier=inp.walk_modifier,
+        )
 
     # --- Integrador -----------------------------------------------------------
     pre_body = replace(prince.body, vel=Velocity(desired_vx, new_vy))
     result = integrate(pre_body, level, state, accel_x=0.0, accel_y=GRAVITY)
-
-    # Si toca suelo y aún teníamos buffer pendiente, lo consumimos al
-    # siguiente tick (mantener el buffer aquí; el `if` de arriba lo gastará).
 
     new_ticks = prince.ticks_in_action + 1 if new_action is prince.action else 0
     return PhysicsPrince(
@@ -241,6 +260,73 @@ def step(
         knockback_left=new_knockback,
         last_impact_vy=result.impact_vy if result.hit_ground else 0.0,
     )
+
+
+def _nearest_guard_dir(prince: PhysicsPrince, guards: tuple[Guard, ...]) -> int | None:
+    """``+1`` / ``-1`` si hay un guardia vivo cercano en la misma fila."""
+    best_dir: int | None = None
+    best_dist = COMBAT_NEAR_CELLS
+    for g in guards:
+        if not g.alive:
+            continue
+        if abs(prince.body.pos.y - (g.pos.row + 0.5)) > 0.6:
+            continue
+        dx = (g.pos.col + 0.5) - prince.body.pos.x
+        d = abs(dx)
+        if d <= best_dist:
+            best_dist = d
+            best_dir = 1 if dx >= 0 else -1
+    return best_dir
+
+
+def _combat_micro_step(
+    *,
+    prince: PhysicsPrince,
+    cmd: PlayerCommand,
+    grounded: bool,
+    guard_dir: int | None,
+    input_blocked: bool,
+) -> tuple[Action, Facing, float] | None:
+    """Si procede, devuelve ``(action, facing, vx)`` para un tick ADVANCE/RETREAT.
+
+    Continúa una acción ya en curso (lock por duración) o arranca una
+    nueva si hay sable + guardia adyacente + LEFT/RIGHT pulsado.
+    """
+    continuing = prince.action in (
+        Action.ADVANCE,
+        Action.RETREAT,
+    ) and prince.ticks_in_action + 1 < duration_ticks(prince.action)
+    can_start = (
+        not continuing
+        and not input_blocked
+        and grounded
+        and prince.has_sword
+        and guard_dir is not None
+        and cmd in (PlayerCommand.LEFT, PlayerCommand.RIGHT)
+    )
+    if not continuing and not can_start:
+        return None
+
+    if continuing:
+        action = prince.action
+        ticks_within = prince.ticks_in_action + 1
+    else:
+        assert guard_dir is not None
+        cmd_dir = -1 if cmd is PlayerCommand.LEFT else 1
+        action = Action.ADVANCE if cmd_dir == guard_dir else Action.RETREAT
+        ticks_within = 0
+
+    # Facing mira al guardia más cercano si lo hay; si no, conserva.
+    if guard_dir is not None:
+        facing = Facing.RIGHT if guard_dir > 0 else Facing.LEFT
+    else:
+        facing = prince.facing
+
+    sign_to_guard = guard_dir if guard_dir is not None else int(facing)
+    impulse_sign = sign_to_guard if action is Action.ADVANCE else -sign_to_guard
+    in_window = ADVANCE_WINDOW[0] <= ticks_within < ADVANCE_WINDOW[1]
+    desired_vx = float(impulse_sign) * ADVANCE_IMPULSE if in_window else 0.0
+    return action, facing, desired_vx
 
 
 def _decide_action(

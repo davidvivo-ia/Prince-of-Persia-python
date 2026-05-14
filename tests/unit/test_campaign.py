@@ -36,7 +36,7 @@ class TestHandCraftedFirst12:
 
 
 class TestProceduralEntries:
-    @pytest.mark.parametrize("idx", [13, 25, 26, 50, 51, 75, 76, 100])
+    @pytest.mark.parametrize("idx", [16, 25, 26, 50, 51, 75, 76, 100])
     def test_titles_use_act_theme(self, idx: int) -> None:
         info = CAMPAIGN[idx - 1]
         theme = ACT_THEMES[act_for_level(idx)]

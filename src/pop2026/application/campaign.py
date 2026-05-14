@@ -49,8 +49,11 @@ _HAND_CRAFTED: tuple[LevelInfo, ...] = (
     LevelInfo("10_patrol", "La Patrulla", "Tres centinelas en un pasillo largo."),
     LevelInfo("11_spikes", "Camino de Pinchos", "Cada paso, una decisión."),
     LevelInfo("12_jaffar", "El Visir", "Una hora ha pasado. Termina."),
+    LevelInfo("13_shadow", "La Sombra", "Tu reflejo también empuña un sable."),
+    LevelInfo("14_throne", "El Trono", "El visir te espera entre cortinas y placas."),
+    LevelInfo("15_escape", "La Huida", "Última carrera. No mires atrás."),
 )
-"""Doce niveles narrativos hand-crafted. Forman el Acto I (parte 1)."""
+"""Quince niveles narrativos hand-crafted. Acto I (parte 1) + cierre."""
 
 
 # Subtítulos procedurales por acto. Frase corta y atmosférica.

@@ -6,6 +6,33 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [4.1.0] — 2026-05-14
+
+### Híbrido pragmático: micro-pasos + sombra + multi-pantalla
+
+- **`Action.ADVANCE` / `Action.RETREAT`** — micro-pasos de medio
+  tile cuando el príncipe tiene sable y un guardia está a
+  ≤ `COMBAT_NEAR_CELLS` (2 celdas). LEFT/RIGHT pasan a ser
+  paso corto en lugar de carrera, evocando el duelo del original.
+- **Mirror guard** — `Guard.is_mirror`: clon-espejo que copia el
+  input del príncipe con LEFT↔RIGHT invertidos. Nuevo
+  `Tile.SPAWN_MIRROR` (carácter `'m'`).
+- **`L13 'La Sombra'`** — duelo cuerpo a cuerpo contra el clon.
+- **`L14 'El Trono'` y `L15 'La Huida'`** — niveles finales
+  hand-crafted. `HAND_CRAFTED_COUNT` sube de 12 a 15.
+- **Multi-pantalla por defecto** — `NARROW_COLS=40` (antes 20),
+  `WIDE_COLS=60` (antes 40). Todos los `.poplv` built-in
+  reescalados a 40 columnas.
+
+### Tests
+
+- `test_advance_moves_half_cell_forward`,
+  `test_retreat_moves_half_cell_back`,
+  `test_advance_only_triggers_with_sword_and_guard_near`.
+- `test_mirror_walks_opposite_when_prince_moves_left/right`,
+  `test_mirror_copies_strike`.
+- Suite total: **310 verdes**.
+
 ## [4.0.0] — 2026-05-14
 
 ### Cambio fundamental — platformer real

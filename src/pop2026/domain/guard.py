@@ -16,6 +16,7 @@ from enum import IntEnum
 
 from pop2026.domain.actions import Action, duration_ticks
 from pop2026.domain.geometry import Facing, Position
+from pop2026.domain.input import PlayerCommand
 from pop2026.domain.level import Level, LevelState, effective_tile
 from pop2026.domain.ports import Rng
 from pop2026.domain.tiles import SOLID
@@ -44,6 +45,9 @@ class Guard:
     patrol_steps_left: int = 3
     is_skeleton: bool = False
     """Variante inmortal: nunca llega a HP 0; se recupera tras HURT."""
+
+    is_mirror: bool = False
+    """Clon-espejo: copia el input del príncipe con LEFT↔RIGHT invertidos."""
 
     @property
     def alive(self) -> bool:
@@ -89,8 +93,13 @@ def step(
     state: LevelState,
     prince_pos: Position,
     rng: Rng,
+    prince_cmd: PlayerCommand = PlayerCommand.NONE,
 ) -> Guard:
-    """Avanza el guardia un tick."""
+    """Avanza el guardia un tick.
+
+    Para guardias normales ``prince_cmd`` se ignora; sólo el clon-espejo
+    (``is_mirror``) lo lee para reflejarlo (LEFT↔RIGHT).
+    """
     if not guard.alive:
         return guard
 
@@ -98,7 +107,53 @@ def step(
     if new_ticks < duration_ticks(guard.action):
         return replace(guard, ticks_in_action=new_ticks)
 
+    if guard.is_mirror:
+        return _mirror_next(guard, level, state, prince_cmd)
     return _next_action(guard, level, state, prince_pos, rng)
+
+
+def _mirror_next(
+    guard: Guard,
+    level: Level,
+    state: LevelState,
+    prince_cmd: PlayerCommand,
+) -> Guard:
+    """Decide la acción del clon-espejo a partir del input del príncipe.
+
+    Mapeo:
+
+    - ``LEFT``  → mirror anda a la derecha.
+    - ``RIGHT`` → mirror anda a la izquierda.
+    - ``STRIKE`` / ``PARRY`` → mismo gesto.
+    - resto → ``STAND``.
+    """
+    if prince_cmd is PlayerCommand.LEFT:
+        target = guard.pos.step(Facing.RIGHT)
+        if _is_solid(level, state, target):
+            return replace(guard, facing=Facing.RIGHT, action=Action.STAND, ticks_in_action=0)
+        return replace(
+            guard,
+            pos=target,
+            facing=Facing.RIGHT,
+            action=Action.WALK,
+            ticks_in_action=0,
+        )
+    if prince_cmd is PlayerCommand.RIGHT:
+        target = guard.pos.step(Facing.LEFT)
+        if _is_solid(level, state, target):
+            return replace(guard, facing=Facing.LEFT, action=Action.STAND, ticks_in_action=0)
+        return replace(
+            guard,
+            pos=target,
+            facing=Facing.LEFT,
+            action=Action.WALK,
+            ticks_in_action=0,
+        )
+    if prince_cmd is PlayerCommand.STRIKE:
+        return replace(guard, action=Action.STRIKE, ticks_in_action=0)
+    if prince_cmd is PlayerCommand.PARRY:
+        return replace(guard, action=Action.PARRY, ticks_in_action=0)
+    return replace(guard, action=Action.STAND, ticks_in_action=0)
 
 
 def _next_action(

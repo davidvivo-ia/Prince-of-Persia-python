@@ -69,8 +69,9 @@ def new_game(
         Guard(
             pos=pos,
             skill=max(1, skill),
-            hp=(2 if skill == -1 else 2 + skill),
+            hp=(2 if skill in (-1, -2) else 2 + skill),
             is_skeleton=skill == -1,
+            is_mirror=skill == -2,
         )
         for pos, skill in level.guard_spawns
     )
@@ -175,11 +176,13 @@ def advance(g: Game, inp: InputFrame, rng: Rng) -> Game:
     if not g.running:
         return g
 
-    # 1. Step físico del príncipe
-    new_prince = prince_module.step(g.prince, g.level, g.state, inp)
+    # 1. Step físico del príncipe (con guardias para detectar micro-pasos)
+    new_prince = prince_module.step(g.prince, g.level, g.state, inp, g.guards)
 
-    # 2. Step de cada guardia
-    new_guards = tuple(guard.step(gd, g.level, g.state, new_prince.pos, rng) for gd in g.guards)
+    # 2. Step de cada guardia (mirror guards leen el input del príncipe)
+    new_guards = tuple(
+        guard.step(gd, g.level, g.state, new_prince.pos, rng, inp.command) for gd in g.guards
+    )
 
     g2 = replace(g, prince=new_prince, guards=new_guards, time_left=max(0, g.time_left - 1))
 

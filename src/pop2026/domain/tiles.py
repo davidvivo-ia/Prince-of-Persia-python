@@ -33,6 +33,8 @@ class Tile(IntEnum):
     SWORD = 12
     POTION_MAXHP = 13
     SPAWN_SKELETON = 14
+    SPAWN_MIRROR = 15
+    """Marcador del clon-espejo que copia al príncipe (homenaje L13 'sombra')."""
 
 
 SOLID: frozenset[Tile] = frozenset({Tile.FLOOR, Tile.LOOSE_FLOOR, Tile.GATE})
@@ -69,6 +71,7 @@ CHAR_TO_TILE: dict[str, Tile] = {
     "g": Tile.SPAWN_GUARD,
     "G": Tile.SPAWN_BOSS,
     "K": Tile.SPAWN_SKELETON,
+    "m": Tile.SPAWN_MIRROR,
 }
 """Mapeo carácter → Tile para el formato ``.poplv``."""
 

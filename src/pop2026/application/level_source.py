@@ -13,7 +13,7 @@ from pop2026.domain.errors import LevelLoadError
 from pop2026.domain.level import Level
 from pop2026.infrastructure.levels import load_builtin
 
-HAND_CRAFTED_COUNT: int = 12
+HAND_CRAFTED_COUNT: int = 15
 """Niveles con ``.poplv`` propio. Los demás son procedurales."""
 
 

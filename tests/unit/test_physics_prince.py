@@ -292,6 +292,92 @@ class TestAirControl:
         )
 
 
+class TestAdvanceRetreat:
+    """H1: micro-pasos de combate cuando hay sable + guardia adyacente."""
+
+    @staticmethod
+    def _make_with_sword() -> PhysicsPrince:
+        from dataclasses import replace as _r
+
+        # Asienta al príncipe sobre el suelo del CORRIDOR.
+        p = initial(Position(3, 5))
+        for _ in range(10):
+            p = step(p, CORRIDOR, LevelState(), InputFrame())
+        return _r(p, has_sword=True)
+
+    @staticmethod
+    def _guard_at(col: int) -> tuple[object, ...]:
+        from pop2026.domain.guard import Guard
+
+        return (Guard(pos=Position(3, col), facing=Facing.LEFT, hp=2),)
+
+    def test_advance_moves_half_cell_forward(self) -> None:
+        p = self._make_with_sword()
+        guards = self._guard_at(col=7)
+        start_x = p.body.pos.x
+        for _ in range(8):
+            p = step(
+                p,
+                CORRIDOR,
+                LevelState(),
+                InputFrame(command=PlayerCommand.RIGHT),
+                guards,
+            )
+        # Total = (5-2) * 0.18 = 0.54 ≈ medio tile hacia la derecha.
+        delta = p.body.pos.x - start_x
+        assert 0.35 < delta < 0.65, f"ADVANCE total = {delta}, esperado ~0.5"
+
+    def test_retreat_moves_half_cell_back(self) -> None:
+        p = self._make_with_sword()
+        guards = self._guard_at(col=7)
+        start_x = p.body.pos.x
+        for _ in range(8):
+            p = step(
+                p,
+                CORRIDOR,
+                LevelState(),
+                InputFrame(command=PlayerCommand.LEFT),
+                guards,
+            )
+        delta = p.body.pos.x - start_x
+        assert -0.65 < delta < -0.35, f"RETREAT total = {delta}, esperado ~-0.5"
+
+    def test_advance_only_triggers_with_sword_and_guard_near(self) -> None:
+        from dataclasses import replace as _r
+
+        # Sin sable: cmd RIGHT → RUN, no ADVANCE.
+        p_no_sword = _r(self._make_with_sword(), has_sword=False)
+        guards = self._guard_at(col=7)
+        p_no_sword = step(
+            p_no_sword,
+            CORRIDOR,
+            LevelState(),
+            InputFrame(command=PlayerCommand.RIGHT),
+            guards,
+        )
+        assert p_no_sword.action is not Action.ADVANCE
+
+        # Con sable pero sin guardia cerca: cmd RIGHT → RUN.
+        p_no_guard = step(
+            self._make_with_sword(),
+            CORRIDOR,
+            LevelState(),
+            InputFrame(command=PlayerCommand.RIGHT),
+            (),
+        )
+        assert p_no_guard.action is not Action.ADVANCE
+
+        # Con sable Y guardia: cmd RIGHT → ADVANCE.
+        p_combat = step(
+            self._make_with_sword(),
+            CORRIDOR,
+            LevelState(),
+            InputFrame(command=PlayerCommand.RIGHT),
+            guards,
+        )
+        assert p_combat.action is Action.ADVANCE
+
+
 class TestKnockback:
     def test_knockback_blocks_input(self) -> None:
         # Aplica daño con dirección y verifica que el input horizontal queda

@@ -48,6 +48,10 @@ class Action(IntEnum):
     DEAD = 14
     LUNGE = 15
     """Estocada de mayor alcance (jefe). Dos celdas de distancia válida."""
+    ADVANCE = 16
+    """Micro-paso adelante con sable empuñado (medio tile)."""
+    RETREAT = 17
+    """Micro-paso atrás con sable empuñado (medio tile)."""
 
 
 _DURATIONS: dict[Action, int] = {
@@ -67,6 +71,8 @@ _DURATIONS: dict[Action, int] = {
     Action.HURT: 6,
     Action.DEAD: 1_000_000,  # absorbente
     Action.LUNGE: 9,  # mayor alcance, también más tiempo expuesto al final
+    Action.ADVANCE: 8,
+    Action.RETREAT: 8,
 }
 
 
@@ -127,7 +133,7 @@ def duration_ticks(action: Action) -> int:
 
 
 COMBAT_ACTIONS: frozenset[Action] = frozenset(
-    {Action.STRIKE, Action.PARRY, Action.HURT, Action.LUNGE}
+    {Action.STRIKE, Action.PARRY, Action.HURT, Action.LUNGE, Action.ADVANCE, Action.RETREAT}
 )
 """Acciones en las que el actor está empuñando el sable."""
 
@@ -145,6 +151,8 @@ LOCKED_ACTIONS: frozenset[Action] = frozenset(
         Action.HANG,
         Action.DEAD,
         Action.LUNGE,
+        Action.ADVANCE,
+        Action.RETREAT,
     }
 )
 """Acciones que no aceptan re-comando hasta su tick final."""

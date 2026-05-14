@@ -28,7 +28,7 @@ class TestHandCrafted:
 
 
 class TestProcedural:
-    @pytest.mark.parametrize("idx", [13, 25, 50, 75, 88, 100])
+    @pytest.mark.parametrize("idx", [16, 25, 50, 75, 88, 100])
     def test_loads_procedural(self, idx: int) -> None:
         lv = load_level(idx, seed=42)
         assert lv.prince_spawn is not None

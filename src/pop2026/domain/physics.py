@@ -88,6 +88,18 @@ KNOCKBACK_TICKS: int = 10
 SPIKE_LETHAL_VY: float = 0.30
 """Velocidad vertical mínima al pisar pinchos para que sean letales."""
 
+COMBAT_NEAR_CELLS: float = 2.0
+"""Distancia horizontal (celdas) bajo la cual el príncipe pasa a micro-pasos."""
+
+ADVANCE_IMPULSE: float = 0.18
+"""Velocidad horizontal aplicada durante la ventana activa de ADVANCE/RETREAT."""
+
+ADVANCE_WINDOW: tuple[int, int] = (2, 5)
+"""Ticks (semi-abierto) en los que ADVANCE/RETREAT desplaza al príncipe.
+
+Total: ``(5-2) * ADVANCE_IMPULSE`` ≈ 0.54 celdas — medio tile.
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class BodyState:

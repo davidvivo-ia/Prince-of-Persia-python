@@ -360,7 +360,7 @@ def _draw_humanoid(
 
     # Piernas
     leg_sway = 0.0
-    if pose in ("walk", "run"):
+    if pose in ("walk", "run", "advance", "retreat"):
         leg_sway = math.sin(phase * math.pi * 2) * 5
     if pose == "jump":
         leg_sway = -4
@@ -392,7 +392,7 @@ def _draw_humanoid(
 
     # Brazos
     arm_swing = 0.0
-    if pose in ("walk", "run"):
+    if pose in ("walk", "run", "advance", "retreat"):
         arm_swing = -math.sin(phase * math.pi * 2) * 4
     shoulder_l = (head_cx - torso_w // 2, torso_top + 3)
     shoulder_r = (head_cx + torso_w // 2, torso_top + 3)
@@ -489,6 +489,8 @@ def _pose_from_action(p: Prince | Guard) -> str:
         return "fall"
     if a in (Action.WALK, Action.RUN):
         return "walk"
+    if a in (Action.ADVANCE, Action.RETREAT):
+        return "advance" if a is Action.ADVANCE else "retreat"
     return "stand"
 
 

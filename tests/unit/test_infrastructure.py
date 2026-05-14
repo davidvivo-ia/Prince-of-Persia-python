@@ -56,10 +56,12 @@ class TestLfsrRng:
 class TestLevelLoader:
     def test_list_builtin_returns_known_levels(self) -> None:
         names = levels.list_builtin()
-        # La campaña tiene 12 niveles built-in
-        assert len(names) == 12
+        # La campaña tiene 15 niveles built-in tras v4.1 (hibridos).
+        assert len(names) == 15
         assert "01_cell" in names
         assert "12_jaffar" in names
+        assert "13_shadow" in names
+        assert "15_escape" in names
 
     def test_load_builtin_parses(self) -> None:
         lv = levels.load_builtin("01_cell")

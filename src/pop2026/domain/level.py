@@ -85,6 +85,10 @@ class Level:
                     # skill -1 marca esqueleto en el spawn list
                     guards.append((Position(r, c), -1))
                     row_tiles.append(Tile.EMPTY)
+                elif tile is Tile.SPAWN_MIRROR:
+                    # skill -2 marca clon-espejo del príncipe
+                    guards.append((Position(r, c), -2))
+                    row_tiles.append(Tile.EMPTY)
                 else:
                     row_tiles.append(tile)
             rows.append(tuple(row_tiles))

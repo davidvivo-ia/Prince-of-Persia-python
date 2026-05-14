@@ -34,11 +34,11 @@ from pop2026.domain.tiles import Tile
 ROWS: int = 6
 """Altura fija del nivel."""
 
-NARROW_COLS: int = 20
-"""Anchura del modo single-room."""
+NARROW_COLS: int = 40
+"""Anchura por defecto del nivel (multi-pantalla mínimo)."""
 
-WIDE_COLS: int = 40
-"""Anchura del modo multi-room (dos pantallas)."""
+WIDE_COLS: int = 60
+"""Anchura del modo amplio (tres pantallas)."""
 
 MAX_RETRIES: int = 12
 """Reintentos antes de fallback."""

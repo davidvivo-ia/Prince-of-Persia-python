@@ -7,6 +7,7 @@ from dataclasses import replace
 from pop2026.domain.actions import Action
 from pop2026.domain.geometry import Facing, Position
 from pop2026.domain.guard import Guard, GuardMode, step
+from pop2026.domain.input import PlayerCommand
 from pop2026.domain.level import Level, LevelState
 
 
@@ -96,3 +97,37 @@ class TestGuardAI:
         # Tras patrullar y encontrar un obstáculo debería haber cambiado de cara
         # (o seguir vivo, depende de la disposición)
         assert g.alive
+
+
+class TestMirrorGuard:
+    """H2: el clon-espejo invierte horizontalmente el input del príncipe."""
+
+    def test_mirror_walks_opposite_when_prince_moves_left(self) -> None:
+        g = Guard(
+            pos=Position(1, 5),
+            facing=Facing.LEFT,
+            action=Action.STAND,
+            is_mirror=True,
+        )
+        # Avanza varios ticks con prince moviendo LEFT; mirror debe acabar a la derecha.
+        for _ in range(10):
+            g = step(g, LEVEL, LevelState(), Position(1, 1), FixedRng(), PlayerCommand.LEFT)
+        assert g.pos.col > 5, f"mirror no se movió a la derecha: col={g.pos.col}"
+        assert g.facing is Facing.RIGHT
+
+    def test_mirror_walks_opposite_when_prince_moves_right(self) -> None:
+        g = Guard(
+            pos=Position(1, 5),
+            facing=Facing.RIGHT,
+            action=Action.STAND,
+            is_mirror=True,
+        )
+        for _ in range(10):
+            g = step(g, LEVEL, LevelState(), Position(1, 1), FixedRng(), PlayerCommand.RIGHT)
+        assert g.pos.col < 5, f"mirror no se movió a la izquierda: col={g.pos.col}"
+        assert g.facing is Facing.LEFT
+
+    def test_mirror_copies_strike(self) -> None:
+        g = Guard(pos=Position(1, 5), action=Action.STAND, is_mirror=True)
+        g2 = step(g, LEVEL, LevelState(), Position(1, 1), FixedRng(), PlayerCommand.STRIKE)
+        assert g2.action is Action.STRIKE
