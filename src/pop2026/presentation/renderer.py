@@ -607,6 +607,7 @@ def _draw_humanoid(
     weapon: bool,
     pose: str,
     phase: float,
+    extra_ticks: int = 0,
 ) -> None:
     """Dibuja un humanoide con poses variables.
 
@@ -629,10 +630,49 @@ def _draw_humanoid(
     torso_w = 10
     torso_h = 12
 
-    # Si pose == "dead": tumbado horizontal
+    # Si pose == "dead": colapso gradual durante 30 ticks y luego
+    # postura horizontal final.
     if pose == "dead":
-        pygame.draw.rect(surface, skin, (feet_x - 12, feet_y - 5, 24, 4))
-        pygame.draw.circle(surface, skin, (feet_x - 12 * fdir, feet_y - 3), head_r)
+        # progress 0..1: rotación desde de pie a tumbado.
+        progress = min(1.0, extra_ticks / 30.0)
+        # Lerp del torso desde vertical (ángulo 0) a horizontal (ángulo pi/2).
+        angle = progress * (math.pi / 2)
+        sin_a = math.sin(angle)
+        cos_a = math.cos(angle)
+        # Cabeza desciende y se separa lateralmente al colapsar.
+        head_off_x = int(12 * sin_a) * fdir
+        head_off_y = -int(20 * cos_a) - 3
+        # Torso como rect inclinado (interpolación visual con dos segmentos).
+        body_len = 22
+        body_dx = int(body_len * sin_a) * fdir
+        body_dy = -int(body_len * cos_a)
+        # Cuerpo del torso (línea gruesa).
+        pygame.draw.line(
+            surface,
+            skin,
+            (feet_x, feet_y - 1),
+            (feet_x - body_dx // 4, feet_y + body_dy + 3),
+            5,
+        )
+        # Pierna doblada bajo el cuerpo.
+        pygame.draw.line(
+            surface,
+            shadow,
+            (feet_x, feet_y - 1),
+            (feet_x + 6 * fdir, feet_y),
+            3,
+        )
+        # Cabeza
+        pygame.draw.circle(surface, skin, (feet_x + head_off_x, feet_y + head_off_y), head_r)
+        # Charco oscuro creciente bajo el cuerpo (cuando ya está caído).
+        if progress > 0.7:
+            pool_w = int(28 * (progress - 0.7) / 0.3)
+            pool = pygame.Surface((pool_w + 4, 4), pygame.SRCALPHA)
+            pygame.draw.ellipse(pool, (*PALETTE.error, 100), pool.get_rect())
+            surface.blit(pool, (feet_x - pool_w // 2 - 2, feet_y - 1))
+        # Sash al final (si tiene)
+        if sash is not None and progress > 0.5:
+            pygame.draw.rect(surface, sash, (feet_x - 2, feet_y + body_dy + 3, 6, 2))
         return
 
     # Ajuste de altura si está agachado, golpeado o aterrizando.
@@ -751,23 +791,27 @@ def _draw_humanoid(
         pygame.draw.line(surface, skin, back_shoulder, (head_cx - fdir * 6, torso_top + 10), 3)
         if weapon:
             blade_end = (hand_x + fdir * blade_extra, hand_y - 2)
-            # Trail (estela) del sable durante la ventana de impacto.
-            if 0.4 <= phase <= 0.85:
-                trail_col = _mix(PALETTE.blade, PALETTE.accent, 0.5)
-                pygame.draw.line(
-                    surface,
-                    trail_col,
-                    (hand_x, hand_y - 3),
-                    blade_end,
-                    2,
+            # Trail aditivo del sable durante la ventana de impacto.
+            if 0.35 <= phase <= 0.85:
+                # Stack de 3 estelas cada vez más tenue, dibujadas como
+                # arcos detrás del sable, en BLEND_ADD para que destaque.
+                trail_surf = pygame.Surface(
+                    (abs(fdir * (blade_extra + 8)) + 4, 20), pygame.SRCALPHA
                 )
-                pygame.draw.line(
-                    surface,
-                    _mix(trail_col, PALETTE.bg, 0.6),
-                    (hand_x - fdir * 2, hand_y + 3),
-                    (blade_end[0] - fdir * 2, blade_end[1] + 3),
-                    1,
-                )
+                origin_x = 2 if fdir > 0 else trail_surf.get_width() - 2
+                for layer, alpha in ((0, 140), (2, 90), (4, 50)):
+                    col = (*PALETTE.accent, alpha)
+                    pygame.draw.line(
+                        trail_surf,
+                        col,
+                        (origin_x, 8 + layer),
+                        (origin_x + fdir * (blade_extra + 6 - layer), 6 + layer),
+                        2,
+                    )
+                blit_x = hand_x - origin_x
+                surface.blit(trail_surf, (blit_x, hand_y - 8), special_flags=pygame.BLEND_ADD)
+                # Chispa en la punta del sable.
+                pygame.draw.circle(surface, PALETTE.primary, blade_end, 2)
             pygame.draw.line(
                 surface, PALETTE.blade, (hand_x, hand_y), blade_end, 3 if is_lunge else 2
             )
@@ -990,10 +1034,15 @@ def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> Non
         ph = p.ticks_in_action / max(1, duration_ticks(Action.HURT))
         _draw_hit_flash(surface, feet_x, feet_y, ph)
 
+    # Respiración sutil en idle (STAND, PARRY) — pequeño bob de 1 px.
+    breath_y = 0
+    if p.action is Action.STAND:
+        breath_y = int(math.sin(p.ticks_in_action * 0.06) * 1)
+
     _draw_humanoid(
         surface,
         feet_x,
-        feet_y,
+        feet_y + breath_y,
         p.facing,
         skin=PALETTE.primary,
         shadow=PALETTE.primary_dark,
@@ -1001,6 +1050,7 @@ def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> Non
         weapon=p.has_sword,
         pose=_pose_from_action(p),
         phase=_phase(p),
+        extra_ticks=p.ticks_in_action,
     )
 
 
@@ -1028,6 +1078,7 @@ def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
             weapon=False,
             pose="dead",
             phase=0.0,
+            extra_ticks=g.ticks_in_action,
         )
         return
     feet_x, feet_y = _smooth_feet(

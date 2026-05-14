@@ -6,6 +6,34 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [4.2.0] — 2026-05-14
+
+### Pulido jugable + polish visual
+
+**Gameplay:**
+
+- `input_device.poll()` ahora emite `jump_pressed` / `jump_held`
+  como canal independiente de `command`, permitiendo *running jump*
+  real para el jugador humano (antes una sola tecla a la vez).
+- Knockback equilibrado tras experimentar bajadas (mantenido
+  `VX=0.30`, `TICKS=10` para asegurar separación de combatientes).
+- Test de integración `test_demo_bot_wins.py` parametrizado con
+  10 niveles fáciles: garantiza que cambios futuros no rompen
+  jugabilidad básica con seed determinista.
+
+**Visuales:**
+
+- Animación de muerte: colapso gradual del torso durante 30 ticks
+  con interpolación lineal y charco de sangre creciente bajo el
+  cuerpo a partir del 70% de la animación.
+- Respiración sutil del príncipe en pose `STAND`: bob vertical
+  de 1 px usando `sin(ticks * 0.06)`.
+- Estela del sable durante la ventana de impacto (STRIKE/LUNGE):
+  3 capas con `BLEND_ADD` en color acento + chispa blanca en la
+  punta. Mucho más legible que la línea simple anterior.
+
+**Tests**: 320 verdes (310 anteriores + 10 nuevos bot wins).
+
 ## [4.1.0] — 2026-05-14
 
 ### Híbrido pragmático: micro-pasos + sombra + multi-pantalla
