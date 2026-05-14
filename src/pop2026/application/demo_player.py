@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from pop2026.domain.actions import Action, duration_ticks
+from pop2026.domain.actions import Action
 from pop2026.domain.game import Game, advance
 from pop2026.domain.geometry import Facing, Position
 from pop2026.domain.input import InputFrame, PlayerCommand

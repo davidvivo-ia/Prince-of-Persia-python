@@ -77,17 +77,49 @@ def total_rooms(level_cols: int) -> int:
 
 
 def _draw_back_wall(surface: pygame.Surface) -> None:
-    """Pinta la pared trasera del calabozo: degradado vertical sutil."""
+    """Pinta la pared trasera del calabozo: degradado + arcos repetidos.
+
+    Estilo POP1: la pared del fondo no es plana. Lleva una serie de
+    arcos rebajados en una banda media (sombras del pasillo) y un
+    degradado vertical sutil arriba-abajo para sugerir profundidad.
+    """
     w = surface.get_width()
     top_y = LAYOUT.hud_top
     h = LAYOUT.height_px - LAYOUT.hud_top
-    # Degradado: arriba bg_far, abajo bg
+
+    # 1. Degradado vertical: arriba bg_far, abajo bg.
     steps = 16
     band = max(1, h // steps)
     for i in range(steps):
         t = i / max(1, steps - 1)
         col = tuple(int(PALETTE.bg_far[k] * (1 - t) + PALETTE.bg[k] * t * 0.6) for k in range(3))
         pygame.draw.rect(surface, col, (0, top_y + i * band, w, band + 1))
+
+    # 2. Arcos rebajados en el muro del fondo. Repiten cada 2 columnas.
+    arch_h = LAYOUT.tile_h - 12
+    arch_w = LAYOUT.tile_w * 2 - 8
+    arch_top = top_y + LAYOUT.tile_h + 4
+    n_arches = max(1, w // (LAYOUT.tile_w * 2))
+    for i in range(n_arches):
+        ax = i * LAYOUT.tile_w * 2 + 4
+        rect = pygame.Rect(ax, arch_top, arch_w, arch_h)
+        # Hueco del arco: rectángulo con la parte superior redondeada
+        pygame.draw.rect(
+            surface,
+            PALETTE.bg,
+            rect,
+            border_top_left_radius=arch_w // 2,
+            border_top_right_radius=arch_w // 2,
+        )
+        # Marco del arco (línea de borde sutil)
+        pygame.draw.rect(
+            surface,
+            PALETTE.bg_far,
+            rect,
+            1,
+            border_top_left_radius=arch_w // 2,
+            border_top_right_radius=arch_w // 2,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -98,40 +130,71 @@ def _draw_back_wall(surface: pygame.Surface) -> None:
 def _draw_floor(surface: pygame.Surface, x: int, y: int) -> None:
     """Dibuja un tile de suelo: el ladrillo llena toda la celda.
 
-    Estilo Apple II HGR: tres cursos horizontales de ladrillo, mortero
-    oscuro alternando verticalmente, brillo superior y sombra inferior.
+    Estilo Apple II HGR: cuatro cursos horizontales de ladrillo en
+    aparejo soga (juntas verticales desplazadas tile a tile), borde
+    superior iluminado, sombra inferior y juntas de mortero oscuro.
+    Cada tile aporta una variación determinista para evitar el efecto
+    "tablero" cuando el suelo se repite.
     """
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    top = y  # el ladrillo ocupa la celda entera
+    top = y
 
     # Cuerpo del ladrillo (toda la celda).
     pygame.draw.rect(surface, PALETTE.brick, (x, top, tw, th))
 
+    # Veta clara horizontal a media altura (variación de tono).
+    streak_y = top + th // 4
+    pygame.draw.line(
+        surface,
+        _mix(PALETTE.brick, PALETTE.brick_top, 0.35),
+        (x + 2, streak_y),
+        (x + tw - 3, streak_y),
+        1,
+    )
+
     # Sombra inferior — efecto de profundidad pegado al borde.
     pygame.draw.rect(surface, PALETTE.brick_dark, (x, y + th - 3, tw, 3))
 
-    # Borde superior iluminado.
+    # Borde superior iluminado (línea brillante + sub-pixel highlight).
     pygame.draw.line(surface, PALETTE.brick_top, (x, top), (x + tw - 1, top), 2)
-
-    # Tres cursos de mortero horizontal.
-    course = th // 3
-    mortar_y1 = top + course
-    mortar_y2 = top + 2 * course
-    pygame.draw.line(surface, PALETTE.mortar, (x, mortar_y1), (x + tw, mortar_y1), 1)
-    pygame.draw.line(surface, PALETTE.mortar, (x, mortar_y2), (x + tw, mortar_y2), 1)
-
-    # Mortero vertical alternado (ladrillos en aparejo soga).
-    offset = (x // tw) % 2  # filas pares vs impares
-    half = tw // 2
-    # Curso superior (top → mortar_y1): junta en x+half
-    pygame.draw.line(surface, PALETTE.mortar, (x + half, top), (x + half, mortar_y1), 1)
-    # Curso medio (mortar_y1 → mortar_y2): junta desplazada
-    mid_jx = x if offset else x + half
-    pygame.draw.line(surface, PALETTE.mortar, (mid_jx, mortar_y1), (mid_jx, mortar_y2), 1)
-    # Curso inferior (mortar_y2 → bottom): junta en x+half
-    pygame.draw.line(surface, PALETTE.mortar, (x + half, mortar_y2), (x + half, y + th), 1)
     pygame.draw.line(
-        surface, PALETTE.mortar, (x + half, mortar_y2), (x + half, top + FLOOR_THICKNESS), 1
+        surface,
+        _mix(PALETTE.brick_top, PALETTE.primary, 0.3),
+        (x + 2, top + 1),
+        (x + tw - 3, top + 1),
+        1,
+    )
+
+    # Cuatro cursos de mortero horizontal.
+    courses = 4
+    course_h = th // courses
+    mortar_ys = [top + i * course_h for i in range(1, courses)]
+    for my in mortar_ys:
+        pygame.draw.line(surface, PALETTE.mortar, (x, my), (x + tw, my), 1)
+
+    # Mortero vertical en aparejo soga: junta desplazada por curso.
+    col_idx = x // tw
+    half = tw // 2
+    course_tops = [top, *mortar_ys, y + th]
+    for i in range(courses):
+        cy0 = course_tops[i]
+        cy1 = course_tops[i + 1]
+        # Patrón soga: filas pares junta en mitad, impares al borde.
+        if (i + col_idx) % 2 == 0:
+            jx = x + half
+        else:
+            jx = x
+            # también dibuja la otra mitad en el borde derecho
+            pygame.draw.line(surface, PALETTE.mortar, (x + tw, cy0), (x + tw, cy1), 1)
+        pygame.draw.line(surface, PALETTE.mortar, (jx, cy0), (jx, cy1), 1)
+
+
+def _mix(a: RGB, b: RGB, t: float) -> RGB:
+    """Mezcla lineal entre dos colores (``t=0`` → ``a``, ``t=1`` → ``b``)."""
+    return (
+        int(a[0] * (1 - t) + b[0] * t),
+        int(a[1] * (1 - t) + b[1] * t),
+        int(a[2] * (1 - t) + b[2] * t),
     )
 
 
@@ -149,87 +212,207 @@ def _draw_loose_floor(surface: pygame.Surface, x: int, y: int) -> None:
 
 
 def _draw_spikes(surface: pygame.Surface, x: int, y: int) -> None:
-    """Spikes: triángulos puntiagudos saliendo del suelo."""
+    """Pinchos: array de hojas triangulares emergiendo del suelo.
+
+    Cada hoja tiene filo iluminado y sombra al lado contrario para
+    sugerir biselado metálico.
+    """
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    base_y = y + th - 4
+    base_y = y + th - 2
     n_spikes = 5
     spike_w = tw // n_spikes
     for i in range(n_spikes):
         sx = x + i * spike_w
+        tip_x = sx + spike_w // 2
+        tip_y = base_y - 16
+        # Cuerpo de la hoja
         pygame.draw.polygon(
             surface,
             PALETTE.blade,
-            [
-                (sx + 1, base_y),
-                (sx + spike_w // 2, base_y - 14),
-                (sx + spike_w - 1, base_y),
-            ],
+            [(sx + 1, base_y), (tip_x, tip_y), (sx + spike_w - 1, base_y)],
         )
-        # base oscura
-    pygame.draw.rect(surface, PALETTE.brick_dark, (x, base_y, tw, 4))
+        # Filo iluminado izquierdo
+        pygame.draw.line(
+            surface,
+            _mix(PALETTE.blade, PALETTE.primary, 0.5),
+            (sx + 1, base_y),
+            (tip_x, tip_y),
+            1,
+        )
+        # Sombra derecha
+        pygame.draw.line(
+            surface,
+            PALETTE.guard_armor,
+            (tip_x, tip_y),
+            (sx + spike_w - 1, base_y),
+            1,
+        )
+        # Mancha oscura en la base (sangre seca / suciedad)
+        pygame.draw.circle(surface, PALETTE.error, (tip_x, base_y - 1), 1)
+    # Base de hierro oscuro donde están clavados los pinchos.
+    pygame.draw.rect(surface, PALETTE.brick_dark, (x, base_y, tw, 2))
 
 
 def _draw_gate(surface: pygame.Surface, x: int, y: int, *, open_: bool) -> None:
-    """Reja vertical de barrotes. Si está abierta, dibuja media bajada."""
+    """Portcullis: barrotes verticales con puntas puntiagudas + marco.
+
+    Cuando está abierta sube a la mitad superior y deja paso libre.
+    """
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    bars_top = y + (th // 2 if open_ else 0)
+    bars_top = y + (-th // 4 if open_ else 0)
     bars_bot = y + th - FLOOR_THICKNESS
-    # Travesaños
-    pygame.draw.line(surface, PALETTE.warning, (x, bars_top), (x + tw, bars_top), 2)
-    pygame.draw.line(surface, PALETTE.warning, (x, bars_bot), (x + tw, bars_bot), 2)
-    # Barrotes verticales
+    # Marco (jambas laterales)
+    pygame.draw.rect(surface, PALETTE.brick_dark, (x, y, 3, bars_bot - y))
+    pygame.draw.rect(surface, PALETTE.brick_dark, (x + tw - 3, y, 3, bars_bot - y))
+    # Dintel superior (cabecero)
+    pygame.draw.rect(surface, PALETTE.brick_dark, (x, y, tw, 4))
+    # Travesaño superior dorado de la reja
+    pygame.draw.line(surface, PALETTE.warning, (x + 3, bars_top), (x + tw - 3, bars_top), 2)
+    # Barrotes verticales con punta de lanza inferior
     n = 5
     for i in range(n):
-        bx = x + tw * (i + 1) // (n + 1)
-        pygame.draw.line(surface, PALETTE.warning, (bx, bars_top), (bx, bars_bot), 2)
+        bx = x + 4 + (tw - 8) * (i + 1) // (n + 1)
+        pygame.draw.line(surface, PALETTE.warning, (bx, bars_top), (bx, bars_bot - 3), 2)
+        # Punta puntiaguda inferior
+        pygame.draw.polygon(
+            surface,
+            PALETTE.warning,
+            [(bx - 2, bars_bot - 3), (bx, bars_bot + 1), (bx + 2, bars_bot - 3)],
+        )
+    # Brillo sutil en cada barrote
+    for i in range(n):
+        bx = x + 4 + (tw - 8) * (i + 1) // (n + 1)
+        pygame.draw.line(
+            surface,
+            _mix(PALETTE.warning, PALETTE.primary, 0.4),
+            (bx - 1, bars_top + 1),
+            (bx - 1, bars_bot - 5),
+            1,
+        )
 
 
 def _draw_pressure(surface: pygame.Surface, x: int, y: int) -> None:
-    """Placa de presión sobre el suelo."""
+    """Placa de presión: piedra empotrada al ras del suelo con bordes biselados."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    top = y + th - FLOOR_THICKNESS - 2
-    pygame.draw.rect(surface, PALETTE.muted, (x + 4, top, tw - 8, 4))
-    pygame.draw.rect(surface, PALETTE.accent, (x + tw // 3, top - 2, tw // 3, 2))
+    top = y + th - FLOOR_THICKNESS - 3
+    plate = pygame.Rect(x + 4, top, tw - 8, 5)
+    pygame.draw.rect(surface, PALETTE.muted, plate)
+    # Bisel superior iluminado
+    pygame.draw.line(
+        surface,
+        _mix(PALETTE.muted, PALETTE.primary, 0.4),
+        (plate.x, plate.y),
+        (plate.right - 1, plate.y),
+        1,
+    )
+    # Bisel inferior en sombra
+    pygame.draw.line(
+        surface,
+        PALETTE.brick_dark,
+        (plate.x, plate.bottom - 1),
+        (plate.right - 1, plate.bottom - 1),
+        1,
+    )
+    # Marca arcana violeta (runa central)
+    pygame.draw.line(
+        surface,
+        PALETTE.accent,
+        (plate.centerx - 4, plate.centery),
+        (plate.centerx + 4, plate.centery),
+        1,
+    )
 
 
 def _draw_potion(surface: pygame.Surface, x: int, y: int, *, color: RGB) -> None:
-    """Frasco de poción con cuello y burbuja."""
+    """Frasco de poción: corcho + cuello + cuerpo bulboso + brillo + líquido."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     cx = x + tw // 2
-    cy = y + th - FLOOR_THICKNESS - 14
-    # Cuello
-    pygame.draw.rect(surface, PALETTE.primary_dark, (cx - 3, cy - 8, 6, 6))
+    cy = y + th - FLOOR_THICKNESS - 12
+    # Corcho marrón
+    pygame.draw.rect(surface, PALETTE.brick_dark, (cx - 3, cy - 12, 6, 3))
+    # Cuello del frasco
+    pygame.draw.rect(surface, _mix(color, PALETTE.bg, 0.35), (cx - 2, cy - 9, 4, 4))
     # Cuerpo bulboso
-    pygame.draw.circle(surface, color, (cx, cy), 8)
-    # Brillo
-    pygame.draw.circle(surface, PALETTE.primary, (cx - 3, cy - 3), 2)
+    pygame.draw.circle(surface, color, (cx, cy), 7)
+    # Sombra inferior del cuerpo
+    pygame.draw.circle(surface, _mix(color, PALETTE.bg, 0.5), (cx + 2, cy + 2), 5, 1)
+    # Brillo superior izquierdo
+    pygame.draw.circle(surface, PALETTE.primary, (cx - 3, cy - 3), 1)
+    # Burbuja flotando dentro
+    pygame.draw.circle(surface, _mix(color, PALETTE.primary, 0.5), (cx + 1, cy - 1), 1)
 
 
 def _draw_sword_pickup(surface: pygame.Surface, x: int, y: int) -> None:
-    """Sable tirado en el suelo, recogible."""
+    """Sable tirado: hoja, contraguardia + pomo + halo arcano."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     base_y = y + th - FLOOR_THICKNESS - 4
     blade_x0 = x + 6
     blade_x1 = x + tw - 10
+    # Hoja con filo iluminado
     pygame.draw.line(surface, PALETTE.blade, (blade_x0, base_y), (blade_x1, base_y), 2)
-    # Empuñadura
-    pygame.draw.line(surface, PALETTE.warning, (blade_x1, base_y - 2), (blade_x1, base_y + 2), 2)
-    pygame.draw.rect(surface, PALETTE.brick_dark, (blade_x1, base_y - 1, 4, 3))
-    # Halo violeta tenue
-    pygame.draw.circle(surface, PALETTE.accent, ((blade_x0 + blade_x1) // 2, base_y - 2), 1)
+    pygame.draw.line(
+        surface,
+        _mix(PALETTE.blade, PALETTE.primary, 0.4),
+        (blade_x0 + 1, base_y - 1),
+        (blade_x1 - 1, base_y - 1),
+        1,
+    )
+    # Contraguardia (cruceta)
+    pygame.draw.line(
+        surface,
+        PALETTE.warning,
+        (blade_x1, base_y - 3),
+        (blade_x1, base_y + 3),
+        2,
+    )
+    # Empuñadura envuelta + pomo
+    pygame.draw.rect(surface, PALETTE.brick_dark, (blade_x1 + 1, base_y - 1, 3, 3))
+    pygame.draw.circle(surface, PALETTE.warning, (blade_x1 + 5, base_y), 2)
+    # Halo arcano violeta tenue por encima
+    halo_cx = (blade_x0 + blade_x1) // 2
+    for r, a in ((4, 1), (3, 2), (2, 3)):
+        col = _mix(PALETTE.accent, PALETTE.bg, 1 - 0.18 * a)
+        pygame.draw.circle(surface, col, (halo_cx, base_y - 4), r, 1)
 
 
 def _draw_exit(surface: pygame.Surface, x: int, y: int) -> None:
-    """Arco de salida con halo violeta."""
+    """Arco de salida: portal con dovelas + halo violeta interno."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     arch_top = y + 4
     arch_bot = y + th - FLOOR_THICKNESS
-    # Arco con borde grueso
-    rect = pygame.Rect(x + 4, arch_top, tw - 8, arch_bot - arch_top)
-    pygame.draw.rect(surface, PALETTE.accent, rect, 3, border_radius=12)
-    # Halo
-    inner = rect.inflate(-8, -8)
-    pygame.draw.rect(surface, PALETTE.bg_far, inner, border_radius=8)
+    rect = pygame.Rect(x + 3, arch_top, tw - 6, arch_bot - arch_top)
+    radius = (tw - 6) // 2
+
+    # Halo interior (gradiente desde violeta a fondo).
+    for inset, alpha in ((0, 0.45), (3, 0.3), (6, 0.15)):
+        r = rect.inflate(-inset * 2, -inset * 2)
+        col = _mix(PALETTE.bg_far, PALETTE.accent, alpha)
+        pygame.draw.rect(
+            surface,
+            col,
+            r,
+            border_top_left_radius=max(0, radius - inset),
+            border_top_right_radius=max(0, radius - inset),
+        )
+
+    # Marco grueso del arco (dovelas).
+    pygame.draw.rect(
+        surface,
+        PALETTE.accent,
+        rect,
+        3,
+        border_top_left_radius=radius,
+        border_top_right_radius=radius,
+    )
+    # Piedra clave (dovela central iluminada).
+    key_w = 6
+    key_rect = pygame.Rect(rect.centerx - key_w // 2, arch_top - 1, key_w, 5)
+    pygame.draw.rect(surface, _mix(PALETTE.accent, PALETTE.primary, 0.4), key_rect)
+    # Antorchas a los lados del arco.
+    for tx in (rect.x - 2, rect.right + 1):
+        pygame.draw.line(surface, PALETTE.brick_dark, (tx, arch_top + 8), (tx, arch_top + 16), 2)
+        pygame.draw.circle(surface, PALETTE.warning, (tx, arch_top + 6), 2)
+        pygame.draw.circle(surface, PALETTE.error, (tx, arch_top + 5), 1)
 
 
 def _draw_pillar(surface: pygame.Surface, col: int) -> None:
@@ -409,6 +592,23 @@ def _draw_humanoid(
         pygame.draw.line(surface, skin, back_shoulder, (head_cx - fdir * 6, torso_top + 10), 3)
         if weapon:
             blade_end = (hand_x + fdir * blade_extra, hand_y - 2)
+            # Trail (estela) del sable durante la ventana de impacto.
+            if 0.4 <= phase <= 0.85:
+                trail_col = _mix(PALETTE.blade, PALETTE.accent, 0.5)
+                pygame.draw.line(
+                    surface,
+                    trail_col,
+                    (hand_x, hand_y - 3),
+                    blade_end,
+                    2,
+                )
+                pygame.draw.line(
+                    surface,
+                    _mix(trail_col, PALETTE.bg, 0.6),
+                    (hand_x - fdir * 2, hand_y + 3),
+                    (blade_end[0] - fdir * 2, blade_end[1] + 3),
+                    1,
+                )
             pygame.draw.line(
                 surface, PALETTE.blade, (hand_x, hand_y), blade_end, 3 if is_lunge else 2
             )
@@ -450,15 +650,74 @@ def _draw_humanoid(
 
     # Cabeza
     pygame.draw.circle(surface, skin, (head_cx, head_cy), head_r)
-    # Pañuelo / pelo
-    pygame.draw.arc(
-        surface,
-        shadow,
-        (head_cx - head_r, head_cy - head_r, head_r * 2, head_r * 2),
-        math.pi * (0.0 if fdir > 0 else 1.0),
-        math.pi * (1.0 if fdir > 0 else 2.0),
-        2,
-    )
+
+    # Turbante / casco — más visible cuando es príncipe (sash != None) o
+    # guardia (sash == None pero con armadura).
+    if sash is not None:
+        # Príncipe: turbante con pliegue diagonal y banda violeta.
+        turban_color = _mix(skin, shadow, 0.45)
+        # Banda principal del turbante (arco arriba de la cabeza)
+        pygame.draw.arc(
+            surface,
+            turban_color,
+            (head_cx - head_r - 1, head_cy - head_r - 2, (head_r + 1) * 2, (head_r + 2) * 2),
+            0,
+            math.pi,
+            2,
+        )
+        # Pliegue lateral del turbante (vuela hacia atrás del facing)
+        flap_x = head_cx - fdir * (head_r + 1)
+        pygame.draw.polygon(
+            surface,
+            turban_color,
+            [
+                (flap_x, head_cy - 1),
+                (flap_x - fdir * 3, head_cy - 3),
+                (flap_x - fdir * 2, head_cy + 1),
+            ],
+        )
+        # Banda decorativa violeta
+        pygame.draw.line(
+            surface,
+            PALETTE.accent,
+            (head_cx - head_r, head_cy - head_r),
+            (head_cx + head_r, head_cy - head_r),
+            1,
+        )
+        # Capa ondeando atrás (visible al correr / saltar)
+        if pose in ("walk", "run", "jump", "fall", "advance", "retreat"):
+            cape_back_x = head_cx - fdir * (torso_w // 2 + 1)
+            cape_amp = int(math.sin(phase * math.pi * 2) * 2)
+            pygame.draw.polygon(
+                surface,
+                sash,
+                [
+                    (cape_back_x, torso_top + 2),
+                    (cape_back_x - fdir * (4 + cape_amp), torso_top + 6),
+                    (cape_back_x - fdir * (3 + cape_amp), hip_y - 2),
+                    (cape_back_x, hip_y - 4),
+                ],
+            )
+    else:
+        # Guardia: casco con cresta lateral oscura.
+        helmet_top = head_cy - head_r - 1
+        pygame.draw.arc(
+            surface,
+            shadow,
+            (head_cx - head_r - 1, helmet_top, (head_r + 1) * 2, (head_r + 1) * 2),
+            0,
+            math.pi,
+            2,
+        )
+        # Cresta del casco (línea vertical breve)
+        pygame.draw.line(
+            surface,
+            shadow,
+            (head_cx, helmet_top - 2),
+            (head_cx, head_cy - head_r),
+            2,
+        )
+
     # Ojo
     eye_x = head_cx + fdir * 3
     eye_y = head_cy - 1
@@ -533,8 +792,45 @@ def _continuous_feet(p: Prince, viewport_x: int = 0) -> tuple[int, int]:
     return feet_x, feet_y
 
 
+def _draw_landing_dust(surface: pygame.Surface, feet_x: int, feet_y: int, phase: float) -> None:
+    """Nubecilla de polvo expandiéndose al aterrizar (fase 0..1)."""
+    radius = 3 + int(phase * 4)
+    alpha = max(0, int(180 * (1 - phase)))
+    dust = pygame.Surface((radius * 4, radius * 2), pygame.SRCALPHA)
+    col = (*PALETTE.muted, alpha)
+    for dx in (-radius, 0, radius):
+        pygame.draw.circle(dust, col, (radius * 2 + dx, radius), max(1, radius - 1))
+    surface.blit(dust, (feet_x - radius * 2, feet_y - radius + 2))
+
+
+def _draw_hit_flash(surface: pygame.Surface, feet_x: int, feet_y: int, phase: float) -> None:
+    """Flash rojo radial al recibir golpe (fase 0..1)."""
+    if phase > 0.6:
+        return
+    intensity = int(160 * (1 - phase / 0.6))
+    flash = pygame.Surface((48, 48), pygame.SRCALPHA)
+    pygame.draw.circle(flash, (*PALETTE.error, intensity), (24, 24), 20)
+    pygame.draw.circle(flash, (*PALETTE.error, intensity // 2), (24, 24), 12)
+    surface.blit(flash, (feet_x - 24, feet_y - 38), special_flags=pygame.BLEND_ADD)
+
+
 def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> None:
     feet_x, feet_y = _continuous_feet(p, viewport_x=viewport_x)
+
+    # Efecto: polvo al aterrizar (durante la animación LAND).
+    if p.action is Action.LAND:
+        from pop2026.domain.actions import duration_ticks
+
+        ph = p.ticks_in_action / max(1, duration_ticks(Action.LAND))
+        _draw_landing_dust(surface, feet_x, feet_y, ph)
+
+    # Efecto: flash rojo al recibir golpe.
+    if p.action is Action.HURT:
+        from pop2026.domain.actions import duration_ticks
+
+        ph = p.ticks_in_action / max(1, duration_ticks(Action.HURT))
+        _draw_hit_flash(surface, feet_x, feet_y, ph)
+
     _draw_humanoid(
         surface,
         feet_x,
@@ -597,6 +893,28 @@ def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _draw_heart(surface: pygame.Surface, cx: int, cy: int, color: RGB) -> None:
+    """Corazón de pixel art: dos círculos arriba + triángulo abajo + brillo."""
+    # Dos lóbulos superiores
+    pygame.draw.circle(surface, color, (cx - 3, cy - 1), 3)
+    pygame.draw.circle(surface, color, (cx + 3, cy - 1), 3)
+    # Triángulo inferior
+    pygame.draw.polygon(
+        surface,
+        color,
+        [(cx - 5, cy), (cx + 5, cy), (cx, cy + 6)],
+    )
+    # Brillo en lóbulo izquierdo
+    pygame.draw.circle(surface, _mix(color, PALETTE.primary, 0.4), (cx - 4, cy - 2), 1)
+
+
+def _draw_sword_icon(surface: pygame.Surface, cx: int, cy: int) -> None:
+    """Icono pequeño de sable empuñado para indicar que lo lleva."""
+    pygame.draw.line(surface, PALETTE.blade, (cx - 6, cy), (cx + 4, cy), 2)
+    pygame.draw.line(surface, PALETTE.warning, (cx + 4, cy - 3), (cx + 4, cy + 3), 2)
+    pygame.draw.circle(surface, PALETTE.warning, (cx + 7, cy), 2)
+
+
 def _draw_hud(
     surface: pygame.Surface,
     game: Game,
@@ -604,13 +922,23 @@ def _draw_hud(
     *,
     viewport_x: int = 0,
 ) -> None:
-    # Banda superior
-    pygame.draw.rect(surface, PALETTE.bg, (0, 0, surface.get_width(), LAYOUT.hud_top))
+    # Banda superior con degradado tenue para no quedar plana.
+    w = surface.get_width()
+    pygame.draw.rect(surface, PALETTE.bg, (0, 0, w, LAYOUT.hud_top))
+    pygame.draw.rect(surface, _mix(PALETTE.bg, PALETTE.bg_far, 0.5), (0, LAYOUT.hud_top - 4, w, 4))
+    # Línea dorada de separación
     pygame.draw.line(
         surface,
         PALETTE.warning,
         (0, LAYOUT.hud_top - 1),
-        (surface.get_width(), LAYOUT.hud_top - 1),
+        (w, LAYOUT.hud_top - 1),
+        1,
+    )
+    pygame.draw.line(
+        surface,
+        _mix(PALETTE.warning, PALETTE.bg, 0.5),
+        (0, LAYOUT.hud_top),
+        (w, LAYOUT.hud_top),
         1,
     )
 
@@ -619,29 +947,35 @@ def _draw_hud(
 
     secs = game.time_left // 60
     mm, ss = divmod(secs, 60)
-    sword_txt = "  SABLE" if game.prince.has_sword else ""
     rooms = total_rooms(game.level.cols)
     room_txt = ""
     if rooms > 1:
         current_room = viewport_x // LAYOUT.cols + 1
-        room_txt = f"  SALA {current_room}/{rooms}"
+        room_txt = f"   SALA {current_room}/{rooms}"
     # Acto + N/100 (limita el cálculo al rango válido por seguridad)
     act_txt = ""
     if 1 <= game.level_index <= TOTAL_LEVELS:
         act = act_for_level(game.level_index)
         act_txt = f"{ACT_THEMES[act].upper()}  ·  "
-    title = (
-        f"{act_txt}NIVEL {game.level_index}/{TOTAL_LEVELS}   {mm:02d}:{ss:02d}{sword_txt}{room_txt}"
-    )
+    title = f"{act_txt}NIVEL {game.level_index}/{TOTAL_LEVELS}   {mm:02d}:{ss:02d}{room_txt}"
     surface.blit(font.render(title, True, PALETTE.primary), (10, 8))
 
-    # Corazones (cada HP es un pequeño rombo rojo)
-    hp_x = surface.get_width() - 16 - game.prince.max_hp * 14
+    # Icono de sable (si lo lleva) entre título y corazones.
+    icon_x = w - 16 - game.prince.max_hp * 14 - 30
+    if game.prince.has_sword:
+        _draw_sword_icon(surface, icon_x, 16)
+
+    # Corazones reales en lugar de rombos.
+    hp_x = w - 16 - game.prince.max_hp * 14
     for i in range(game.prince.max_hp):
         cx = hp_x + i * 14 + 6
-        cy = 16
-        col = PALETTE.error if i < game.prince.hp else PALETTE.muted
-        pygame.draw.polygon(surface, col, [(cx, cy - 5), (cx + 5, cy), (cx, cy + 5), (cx - 5, cy)])
+        cy = 14
+        if i < game.prince.hp:
+            _draw_heart(surface, cx, cy, PALETTE.error)
+        else:
+            # Corazón vacío (silueta gris).
+            _draw_heart(surface, cx, cy, PALETTE.muted)
+            pygame.draw.circle(surface, PALETTE.bg, (cx, cy), 2)
 
     # Mensaje grande de estado
     msg: str | None
