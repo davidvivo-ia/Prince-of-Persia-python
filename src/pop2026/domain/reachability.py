@@ -26,11 +26,20 @@ from pop2026.domain.geometry import Position
 from pop2026.domain.level import Level
 from pop2026.domain.tiles import SOLID, Tile
 
-MAX_FALL_DROP: int = 3
-"""Caída máxima en celdas que se considera supervivible para BFS."""
+MAX_FALL_DROP: int = 8
+"""Caída máxima en celdas que se considera supervivible para BFS.
 
-JUMP_REACH: int = 2
-"""Cuántas celdas puede salvar un salto direccional."""
+Con física continua, caer sobre suelo regular no daña — solo los
+pinchos matan al impactar a más de ``SPIKE_LETHAL_VY``. Por eso
+elevamos el rango respecto al modelo discreto antiguo (3).
+"""
+
+JUMP_REACH: int = 4
+"""Celdas horizontales que cubre un salto con la nueva parábola.
+
+Con ``JUMP_VEL=-0.55`` y ``GRAVITY=0.06``, el príncipe permanece en el
+aire ~18 ticks. A ``RUN_SPEED=0.22`` eso son ~4 celdas horizontales.
+"""
 
 
 def _is_solid_static(level: Level, pos: Position, open_gates: frozenset[Position]) -> bool:

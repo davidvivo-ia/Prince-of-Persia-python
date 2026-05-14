@@ -43,8 +43,12 @@ WALK_SPEED: float = 0.10
 RUN_SPEED: float = 0.22
 """Velocidad de correr (celdas/tick). ~ 13 cells/s."""
 
-JUMP_VEL: float = -0.42
-"""Velocidad inicial de salto vertical (celdas/tick, negativa = arriba)."""
+JUMP_VEL: float = -0.55
+"""Velocidad inicial de salto vertical (celdas/tick, negativa = arriba).
+
+Pico alcanzado: ``|v|² / (2 * gravity)`` = ~2.5 celdas. Ofrece margen
+para saltar plataformas 2-celdas más altas con la nueva curva.
+"""
 
 MAX_FALL_VEL: float = 0.45
 """Velocidad de caída máxima (celdas/tick) — terminal velocity."""

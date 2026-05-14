@@ -508,17 +508,31 @@ def _smooth_feet(
     *,
     viewport_x: int = 0,
 ) -> tuple[int, int]:
-    """Calcula píxeles ``(feet_x, feet_y)`` con offset sub-celda."""
+    """Calcula píxeles ``(feet_x, feet_y)`` con offset sub-celda (guards)."""
     dx, dy = offset_for(action=action, ticks=ticks, facing_value=int(facing))
     feet_x = int((col - viewport_x + dx) * LAYOUT.tile_w + LAYOUT.tile_w / 2)
     feet_y = int(_floor_top_y(row) + dy * LAYOUT.tile_h)
     return feet_x, feet_y
 
 
+def _continuous_feet(p: Prince, viewport_x: int = 0) -> tuple[int, int]:
+    """Calcula los píxeles del pie del príncipe desde su posición continua.
+
+    El centro del cuerpo es ``body.pos``; los pies están a ``+half_h``
+    en celdas. Lo convertimos a píxeles y aplicamos el desplazamiento
+    visual ``- FLOOR_THICKNESS`` para alinear con el borde superior del
+    ladrillo del suelo.
+    """
+    from pop2026.domain.physics import PRINCE_H
+
+    half_h = PRINCE_H / 2.0
+    feet_x = int((p.body.pos.x - viewport_x) * LAYOUT.tile_w)
+    feet_y = int((p.body.pos.y + half_h) * LAYOUT.tile_h - FLOOR_THICKNESS + LAYOUT.hud_top)
+    return feet_x, feet_y
+
+
 def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> None:
-    feet_x, feet_y = _smooth_feet(
-        p.pos.col, p.pos.row, p.action, p.ticks_in_action, p.facing, viewport_x=viewport_x
-    )
+    feet_x, feet_y = _continuous_feet(p, viewport_x=viewport_x)
     _draw_humanoid(
         surface,
         feet_x,

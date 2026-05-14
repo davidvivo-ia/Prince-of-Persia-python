@@ -107,7 +107,7 @@ def decide(game: Game, rng: Rng) -> InputFrame:
 
     # Pinchos delante: saltar para evitar caer encima con velocidad.
     if _front_is_spike(game):
-        return InputFrame(command=PlayerCommand.JUMP)
+        return InputFrame(command=PlayerCommand.JUMP, jump_held=True)
 
     # Cornisa accesible: trepar.
     if _can_climb_up(game):
@@ -125,12 +125,12 @@ def decide(game: Game, rng: Rng) -> InputFrame:
 
     # Pared inmediata: probar salto vertical.
     if _front_solid(game):
-        return InputFrame(command=PlayerCommand.JUMP)
+        return InputFrame(command=PlayerCommand.JUMP, jump_held=True)
 
     # Hueco delante: saltar (salto direccional si veníamos corriendo).
     if _gap_under_front(game):
         if p.action in (Action.RUN, Action.WALK):
-            return InputFrame(command=PlayerCommand.JUMP)
+            return InputFrame(command=PlayerCommand.JUMP, jump_held=True)
         # Aún no corre: empieza a correr para llegar al salto con velocidad.
         return InputFrame(command=PlayerCommand.RIGHT)
 

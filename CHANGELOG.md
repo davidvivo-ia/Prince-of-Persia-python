@@ -6,6 +6,63 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [4.0.0] — 2026-05-14
+
+### Cambio fundamental — platformer real
+
+El motor pasa de FSM-por-celdas (esencialmente roguelike con
+disfraz de plataformas) a **physics-based platformer** con
+coordenadas continuas. `PhysicsPrince` reemplaza al `Prince`
+discreto como motor por defecto.
+
+### Game-feel platformer 2026
+
+- **Coyote time** (6 ticks): saltar después de dejar una plataforma.
+- **Jump buffer** (6 ticks): JUMP pulsado en el aire se consume al
+  aterrizar.
+- **Variable jump height**: soltar JUMP durante el ascenso corta
+  la velocidad vertical en 0.45×.
+- **Air control**: aceleración horizontal en el aire `0.025`
+  vs `0.10` en suelo.
+- **Knockback dirigido**: golpe del enemigo empuja al príncipe en
+  sentido opuesto y bloquea input por 10 ticks.
+- `JUMP_VEL=-0.55` (pico ~2.5 celdas), `JUMP_REACH=4` celdas.
+- `last_impact_vy` propaga la velocidad de aterrizaje; spikes
+  letales solo si vy ≥ `SPIKE_LETHAL_VY=0.30`.
+
+### Combate continuo (R4)
+
+- **Alcance Euclídeo**: STRIKE 1.0 celdas, LUNGE 2.0 celdas en
+  distancia float (no por adyacencia entera).
+- **Cono frontal de parada**: PARRY solo bloquea si el defensor
+  mira hacia el atacante.
+- **Knockback** aplicado vía `with_damage(from_direction=±1)`.
+
+### Verticalidad real
+
+- L8 y L11 rediseñados con plataformas intermedias que requieren
+  jump precision.
+- Reachability BFS ajustada a los nuevos rangos
+  (`JUMP_REACH=4`, `MAX_FALL_DROP=8`).
+
+### Tests
+
+- `test_physics_prince.py`: 5 tests nuevos sobre los game-feel
+  essentials (coyote, buffer, var jump, air, knockback).
+- `test_combat.py`: migrado a `PhysicsPrince`; 5 tests nuevos para
+  alcance Euclídeo, cono de parry y knockback.
+- 301 tests verdes, ruff/format/mypy --strict limpios.
+
+### Compat
+
+- `domain/prince.py` (Prince discreto) queda como módulo
+  deprecated. Sus tests siguen pasando como referencia histórica.
+- `physics_prince.PhysicsPrince` queda alias-importado como `Prince`
+  en `combat.py` y `renderer.py` para compatibilidad de tipos.
+- `InputFrame` gana `jump_held: bool` para soportar variable jump.
+
+---
+
 ## [3.0.0] — 2026-05-13
 
 ### Modernizado / añadido en v3.0
