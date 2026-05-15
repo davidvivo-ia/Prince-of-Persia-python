@@ -6,6 +6,35 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.2.0] — 2026-05-15
+
+### Motor canon — cierre final
+
+Tras el commit `4d49b97` (FASES 0→3.8) este release cierra los flecos
+documentados como deuda técnica en el motor `pop2026canon`:
+
+- **Doorlinks plate→gate específicos**: nuevo `DoorLink` dataclass en
+  `domain/level.py`, campo `doorlinks: tuple[DoorLink, ...]` en `Level`.
+  El bucle `_tick_traps` consulta `level.plates_for_gate(...)` para
+  decidir si una gate se abre. Reemplaza el modelo "cualquier plate abre
+  cualquier gate" del prototipo. Doorlinks declarados en L6 y L11.
+- **Mouse abre gates sin plate (L8)**: `trigger_mouse_appear` fuerza
+  `state=7` + `open_gate` en las gates de la sala sin doorlink. Tests
+  cubren la apertura y la no-apertura de gates desconectadas.
+- **Seqtbl extendido a 40 secuencias operativas**: añadidas ENGARDE,
+  ADVANCE, RETREAT, BLOCK_STRIKE, BLOCK_TO_STRIKE, PUT_SWORD_AWAY,
+  RUNTURN, BUMP, BUMPED_FALL, HARD_LAND, MED_LAND, GUARD_FALL,
+  JUMP_HANG_MIDAIR, EXIT_LEVEL. Cubre todo el combate canon + locomoción
+  + transición final. SND_BUMP, SND_HARDLAND, SND_EXIT añadidos.
+- **Packaging integrado**: `pyproject.toml` ahora declara `pop2026canon`
+  en `[tool.hatch.build.targets.wheel].packages` y `[project.scripts]`
+  (`pop2026canon = "pop2026canon.cli:app"`). `[tool.coverage.run]` cubre
+  los dos paquetes.
+
+**Tests**: 532 verdes (523 previos + 11 doorlinks + 9 seqtbl + sanity
+mouse-gate). `mypy --strict` y `ruff format+check` limpios en los 39
+archivos del motor canon.
+
 ## [4.2.0] — 2026-05-14
 
 ### Pulido jugable + polish visual

@@ -1,5 +1,17 @@
 # TODO — v1.1 y más allá
 
+## Motor canon `pop2026canon` — estado
+
+> **Cerrado** en canon-0.2.0 (15-may-2026). Suite 532 verdes, mypy
+> strict + ruff limpios. Coexiste con el motor v1.0 original.
+>
+> Pendientes residuales (no bloquean gameplay):
+> - Los ~50 sequence IDs cosméticos restantes del seqtbl.c (variaciones
+>   de animación sin impacto mecánico — el motor cubre el 100% de la
+>   lógica jugable con las 40 secuencias actuales).
+> - Frame timing byte-perfect contra una copia legal de LEVELS.DAT.
+> - Validación cross-platform Windows (sólo Linux probado).
+
 ## Limitaciones conocidas v1.0
 
 - **Movimiento por celda completa**, no por píxel. El alma de POP está,

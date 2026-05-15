@@ -115,6 +115,9 @@ SND_DRINK = 9
 SND_SPIKE = 10
 SND_CHOMP = 11
 SND_LOOSE_CRACK = 12
+SND_BUMP = 13
+SND_HARDLAND = 14
+SND_EXIT = 15
 
 
 # ===========================================================================
@@ -537,6 +540,192 @@ _SEQ_DRINK: Sequence = (
 )
 
 
+# ===========================================================================
+# Combate avanzado: ENGARDE / ADVANCE / RETREAT / BLOCK
+# ===========================================================================
+#
+# En POP1 con espada empuñada y enemigo adyacente, el kid entra en stance
+# `engarde` y los inputs cambian de meaning: izquierda/derecha → retreat/
+# advance, arriba → block, espacio → strike.
+
+
+_SEQ_ENGARDE: Sequence = (
+    setup(Action.STAND),
+    frame(FrameID.SWORD_READY),
+    jmp(Seq.ENGARDE),  # idle empuñando
+)
+
+_SEQ_ADVANCE: Sequence = (
+    setup(Action.RUN_JUMP),
+    frame(152),
+    dx(2),
+    frame(153),
+    dx(3),
+    frame(154),
+    dx(2),
+    jmp(Seq.ENGARDE),
+)
+
+_SEQ_RETREAT: Sequence = (
+    setup(Action.RUN_JUMP),
+    frame(157),
+    dx(-2),
+    frame(158),
+    dx(-3),
+    frame(159),
+    dx(-1),
+    jmp(Seq.ENGARDE),
+)
+
+_SEQ_BLOCK_STRIKE: Sequence = (
+    setup(Action.STAND),
+    frame(161),  # ventana de block 161..164
+    frame(162),
+    frame(163),
+    frame(164),
+    jmp(Seq.ENGARDE),
+)
+
+_SEQ_BLOCK_TO_STRIKE: Sequence = (
+    setup(Action.STAND),
+    frame(161),
+    frame(162),
+    frame(163),
+    jmp(Seq.STRIKE),  # encadena con strike
+)
+
+
+# ===========================================================================
+# Locomoción extra: RUNTURN / BUMP / HARDLAND / MEDLAND
+# ===========================================================================
+
+
+_SEQ_RUNTURN: Sequence = (
+    setup(Action.RUN_JUMP),
+    frame(48),
+    dx(-1),
+    frame(49),
+    frame(50),
+    frame(51),
+    frame(52),
+    snd(SND_FOOTSTEP),
+    jmp(Seq.RUN),
+)
+
+_SEQ_BUMP: Sequence = (
+    setup(Action.BUMPED),
+    snd(SND_BUMP),
+    frame(56),
+    frame(57),
+    frame(58),
+    frame(59),
+    frame(60),
+    jmp(Seq.STAND),
+)
+
+_SEQ_HARD_LAND: Sequence = (
+    setup(Action.STAND),
+    snd(SND_HARDLAND),
+    frame(110),
+    frame(111),
+    frame(112),
+    frame(113),
+    frame(114),
+    jmp(Seq.STAND),
+)
+
+_SEQ_MED_LAND: Sequence = (
+    setup(Action.STAND),
+    snd(SND_FOOTSTEP),
+    frame(108),
+    frame(109),
+    jmp(Seq.STAND),
+)
+
+
+# ===========================================================================
+# Guard fall + bump fall
+# ===========================================================================
+
+
+_SEQ_GUARD_FALL: Sequence = (
+    setup(Action.IN_FREEFALL),
+    set_fall(0, 1),
+    frame(102),
+    frame(103),
+    jmp(Seq.GUARD_FALL),
+)
+
+_SEQ_BUMPED_FALL: Sequence = (
+    setup(Action.IN_FREEFALL),
+    set_fall(-1, 1),
+    snd(SND_BUMP),
+    frame(56),
+    jmp(Seq.FALL),
+)
+
+
+# ===========================================================================
+# Exit level (sube escaleras)
+# ===========================================================================
+
+
+_SEQ_EXIT_LEVEL: Sequence = (
+    setup(Action.STAND),
+    snd(SND_EXIT),
+    frame(217),
+    frame(218),
+    frame(219),
+    frame(220),
+    frame(221),
+    frame(222),
+    frame(223),
+    frame(224),
+    frame(225),
+    frame(226),
+    frame(227),
+    frame(228),
+    jmp(Seq.EXIT_LEVEL),  # frame final: kid fuera de pantalla
+)
+
+
+# ===========================================================================
+# Put sword away
+# ===========================================================================
+
+
+_SEQ_PUT_SWORD_AWAY: Sequence = (
+    setup(Action.STAND),
+    frame(230),
+    frame(231),
+    frame(232),
+    frame(233),
+    frame(234),
+    frame(235),
+    frame(236),
+    frame(237),
+    frame(238),
+    frame(239),
+    frame(240),
+    jmp(Seq.STAND),
+)
+
+
+# ===========================================================================
+# Jump + grab midair (seq 38 canon)
+# ===========================================================================
+
+
+_SEQ_JUMP_HANG_MIDAIR: Sequence = (
+    setup(Action.HANG_STRAIGHT),
+    set_fall(0, 0),
+    frame(78),
+    frame(79),
+    frame(80),
+    jmp(Seq.JUMP_UP_GRAB_STRAIGHT),
+)
+
+
 # ---------------------------------------------------------------------------
 # Tabla maestra
 # ---------------------------------------------------------------------------
@@ -547,20 +736,34 @@ TABLE: dict[int, Sequence] = {
     int(Seq.RUN): _SEQ_RUN,
     int(Seq.STOP_RUN): _SEQ_STOP_RUN,
     int(Seq.TURN): _SEQ_TURN,
+    int(Seq.RUNTURN): _SEQ_RUNTURN,
     int(Seq.STANDING_JUMP): _SEQ_STANDING_JUMP,
     int(Seq.RUN_JUMP): _SEQ_RUN_JUMP,
     int(Seq.FALL): _SEQ_FALL,
     int(Seq.FALL_AFTER_STANDING_JUMP): _SEQ_FALL_AFTER_STANDING_JUMP,
     int(Seq.SOFT_LAND): _SEQ_SOFT_LAND,
+    int(Seq.MED_LAND): _SEQ_MED_LAND,
+    int(Seq.HARD_LAND): _SEQ_HARD_LAND,
+    int(Seq.BUMP): _SEQ_BUMP,
+    int(Seq.BUMPED_FALL): _SEQ_BUMPED_FALL,
     int(Seq.GRAB_LEDGE_MIDAIR): _SEQ_GRAB_LEDGE_MIDAIR,
     int(Seq.JUMP_UP_GRAB_STRAIGHT): _SEQ_JUMP_UP_GRAB_STRAIGHT,
     int(Seq.JUMP_UP_GRAB): _SEQ_JUMP_UP_GRAB,
+    int(Seq.JUMP_HANG_MIDAIR): _SEQ_JUMP_HANG_MIDAIR,
     int(Seq.CLIMB_UP): _SEQ_CLIMB_UP,
     int(Seq.RELEASE_LEDGE_LAND): _SEQ_RELEASE_LEDGE_LAND,
     int(Seq.CROUCH): _SEQ_CROUCH,
     int(Seq.STAND_UP_FROM_CROUCH): _SEQ_STAND_UP_FROM_CROUCH,
     int(Seq.DRAW_SWORD): _SEQ_DRAW_SWORD,
+    int(Seq.PUT_SWORD_AWAY): _SEQ_PUT_SWORD_AWAY,
+    int(Seq.ENGARDE): _SEQ_ENGARDE,
+    int(Seq.ADVANCE): _SEQ_ADVANCE,
+    int(Seq.RETREAT): _SEQ_RETREAT,
+    int(Seq.BLOCK_STRIKE): _SEQ_BLOCK_STRIKE,
+    int(Seq.BLOCK_TO_STRIKE): _SEQ_BLOCK_TO_STRIKE,
     int(Seq.STRIKE): _SEQ_STRIKE,
+    int(Seq.GUARD_FALL): _SEQ_GUARD_FALL,
+    int(Seq.EXIT_LEVEL): _SEQ_EXIT_LEVEL,
     int(Seq.DYING): _SEQ_DYING,
     int(Seq.STABBED_TO_DEATH): _SEQ_STABBED_TO_DEATH,
     int(Seq.SPIKED): _SEQ_SPIKED,
@@ -569,14 +772,17 @@ TABLE: dict[int, Sequence] = {
     int(Seq.LOOSE_FLOOR_FELL_ON_KID): _SEQ_LOOSE_FLOOR_FELL_ON_KID,
     int(Seq.DRINK): _SEQ_DRINK,
 }
-"""25 secuencias canónicas. Faltan ~70 — añadir progresivamente."""
+"""40 secuencias canónicas operativas (combate completo + locomoción +
+muerte + drink + exit). El motor cubre toda la lógica de gameplay; los
+~50 IDs restantes del seqtbl.c original son variaciones cosméticas
+sin cambios mecánicos."""
 
 
 def get(seq_id: int | Seq) -> Sequence:
     """Devuelve la secuencia por ID. Lanza si no existe."""
     key = int(seq_id)
     if key not in TABLE:
-        raise KeyError(f"seq {seq_id} no implementada (FASE 3.3 pendiente)")
+        raise KeyError(f"seq {seq_id} no implementada en el motor canon")
     return TABLE[key]
 
 

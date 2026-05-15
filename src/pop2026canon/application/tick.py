@@ -28,7 +28,6 @@ from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.combat import resolve_combat
 from pop2026canon.domain.game import Game, GameStatus, TimeRemaining
 from pop2026canon.domain.physics import step_physics
-from pop2026canon.domain.room import Room
 from pop2026canon.domain.tiles import Tile
 from pop2026canon.domain.traps import (
     chomper_is_lethal,
@@ -112,7 +111,7 @@ def _trigger_special_chars(game: Game) -> Game:
 
 
 def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
-    """Avanza las trampas en la sala del kid."""
+    """Avanza las trampas (loose en sala visible, chompers visibles, gates globales)."""
     new_state = game.state
     if not (1 <= kid.room <= len(game.level.rooms)):
         return new_state
@@ -125,46 +124,58 @@ def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
         tile_below, _ = room.tile_at(kid.curr_col, kid.curr_row + 1)
         if tile_below is Tile.LOOSE:
             new_state, _ = tick_loose(new_state, kid_below, kid_pressing=True)
-    # Reset de loose ya activos en otras celdas (canon: se resetean si no se pisa)
-    # — gestionado en tick_loose con kid_pressing=False cuando corresponde.
 
-    # Chompers: avanzan automáticamente cada tick
+    # Chompers: avanzan automáticamente cada tick (sólo sala visible — canon).
     for c in range(10):
         for r in range(3):
             tile, _ = room.tile_at(c, r)
             if tile is Tile.CHOMPER:
                 new_state = tick_chomper(new_state, (kid.room, c, r))
 
-    # Gates: avanzan según si su plate está pisada
-    pressed_plates = _find_pressed_plates(game, kid, room)
-    for c in range(10):
-        for r in range(3):
-            tile, _ = room.tile_at(c, r)
-            if tile is Tile.GATE:
-                # ¿Hay alguna plate pisada? Modelo simple: cualquier plate
-                # del nivel abre cualquier gate. En canon, ``doorlinks``
-                # mapea plate→gate específicas — pendiente FASE 3.5.
-                new_state = tick_gate(
-                    new_state, (kid.room, c, r), plate_pressed=bool(pressed_plates)
-                )
+    # Gates: ticken en TODAS las salas con doorlinks activos + sala visible.
+    pressed_plates = _find_pressed_plates_global(game)
+    rooms_to_tick = {kid.room}
+    for link in game.level.doorlinks:
+        if link.plate_coord in pressed_plates or link.gate_coord in new_state.open_gates:
+            rooms_to_tick.add(link.gate_room)
+    for room_id in rooms_to_tick:
+        if not (1 <= room_id <= len(game.level.rooms)):
+            continue
+        gate_room = game.level.room(room_id)
+        for c in range(10):
+            for r in range(3):
+                tile, _ = gate_room.tile_at(c, r)
+                if tile is not Tile.GATE:
+                    continue
+                gate_coord = (room_id, c, r)
+                linked_plates = game.level.plates_for_gate(gate_coord)
+                if linked_plates:
+                    is_pressed = any(p in pressed_plates for p in linked_plates)
+                else:
+                    # Sin link explícito → sólo trigger scripted la abre.
+                    is_pressed = gate_coord in new_state.open_gates
+                new_state = tick_gate(new_state, gate_coord, plate_pressed=is_pressed)
 
     return new_state
 
 
-def _find_pressed_plates(game: Game, kid: Char, room: Room) -> list[tuple[int, int, int]]:
-    """Devuelve plates pisadas este tick por el kid o algún guard."""
-    pressed: list[tuple[int, int, int]] = []
-    actors = [kid, *game.others]
+def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
+    """Devuelve plates pisadas este tick en CUALQUIER sala (canon: el
+    estado de una plate persiste mientras tenga peso encima, independientemente
+    de la sala visible)."""
+    pressed: set[tuple[int, int, int]] = set()
+    actors = [game.kid, *game.others]
     for actor in actors:
-        if actor.room != kid.room:
+        if not (1 <= actor.room <= len(game.level.rooms)):
             continue
         if actor.alive >= 0:
             continue
         if not (0 <= actor.curr_col < 10 and 0 <= actor.curr_row < 3):
             continue
+        room = game.level.room(actor.room)
         tile, _ = room.tile_at(actor.curr_col, actor.curr_row)
         if tile is Tile.OPENER:
-            pressed.append((kid.room, actor.curr_col, actor.curr_row))
+            pressed.add((actor.room, actor.curr_col, actor.curr_row))
     return pressed
 
 

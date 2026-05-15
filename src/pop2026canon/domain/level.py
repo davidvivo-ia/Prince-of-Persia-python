@@ -53,6 +53,33 @@ class Event:
 
 
 @dataclass(frozen=True, slots=True)
+class DoorLink:
+    """Asocia una plate (OPENER) con una gate específica.
+
+    Replica el ``doorlinks`` de SDLPoP: el modifier de la plate codifica
+    la coord de la gate que controla. Una plate puede activar varias gates
+    declarando un :class:`DoorLink` por cada destino. Si no hay link para
+    una plate, sigue siendo inerte (vs. el modelo "cualquier plate abre
+    cualquier gate" del prototipo).
+    """
+
+    plate_room: int
+    plate_col: int
+    plate_row: int
+    gate_room: int
+    gate_col: int
+    gate_row: int
+
+    @property
+    def plate_coord(self) -> tuple[int, int, int]:
+        return (self.plate_room, self.plate_col, self.plate_row)
+
+    @property
+    def gate_coord(self) -> tuple[int, int, int]:
+        return (self.gate_room, self.gate_col, self.gate_row)
+
+
+@dataclass(frozen=True, slots=True)
 class Level:
     """Nivel completo: 24 salas + start + eventos."""
 
@@ -75,6 +102,11 @@ class Level:
     events: tuple[Event, ...] = ()
     """Triggers scripted específicos del nivel."""
 
+    doorlinks: tuple[DoorLink, ...] = ()
+    """Asociaciones plate→gate. Sin link explícito, una gate sólo se
+    abre si recibe :class:`EventKind.MOUSE_APPEAR` u otro trigger
+    scripted (L8)."""
+
     def __post_init__(self) -> None:
         if not (1 <= self.number <= 14):
             raise ValueError(f"level number {self.number} fuera de [1, 14]")
@@ -88,3 +120,13 @@ class Level:
         if not (1 <= room_id <= len(self.rooms)):
             raise IndexError(f"room {room_id} fuera de rango 1..{len(self.rooms)}")
         return self.rooms[room_id - 1]
+
+    def gates_for_plate(
+        self, plate_coord: tuple[int, int, int]
+    ) -> tuple[tuple[int, int, int], ...]:
+        """Devuelve las coords de gates que abre la plate `plate_coord`."""
+        return tuple(d.gate_coord for d in self.doorlinks if d.plate_coord == plate_coord)
+
+    def plates_for_gate(self, gate_coord: tuple[int, int, int]) -> tuple[tuple[int, int, int], ...]:
+        """Devuelve las coords de plates que controlan la gate `gate_coord`."""
+        return tuple(d.plate_coord for d in self.doorlinks if d.gate_coord == gate_coord)

@@ -135,3 +135,72 @@ class TestDeadCharNoInput:
         kid = replace(_kid_standing(), alive=5)
         new_kid = apply_input(kid, Command(right=True))
         assert new_kid is kid
+
+
+class TestEngardeStance:
+    def _drawn_kid(self) -> Char:
+        return replace(_kid_standing(), sword=SwordStatus.DRAWN)
+
+    def test_stand_with_sword_shift_enters_engarde(self) -> None:
+        kid = self._drawn_kid()
+        new_kid = apply_input(kid, Command(shift=True))
+        assert new_kid.curr_seq_id == int(Seq.ENGARDE)
+
+    def test_engarde_strike_starts_strike(self) -> None:
+        kid = replace(self._drawn_kid(), curr_seq_id=int(Seq.ENGARDE))
+        new_kid = apply_input(kid, Command(strike=True))
+        assert new_kid.curr_seq_id == int(Seq.STRIKE)
+
+    def test_engarde_up_blocks(self) -> None:
+        kid = replace(self._drawn_kid(), curr_seq_id=int(Seq.ENGARDE))
+        new_kid = apply_input(kid, Command(up=True))
+        assert new_kid.curr_seq_id == int(Seq.BLOCK_STRIKE)
+
+    def test_engarde_forward_advances(self) -> None:
+        kid = replace(
+            self._drawn_kid(),
+            curr_seq_id=int(Seq.ENGARDE),
+            direction=int(Direction.RIGHT),
+        )
+        new_kid = apply_input(kid, Command(right=True))
+        assert new_kid.curr_seq_id == int(Seq.ADVANCE)
+
+    def test_engarde_backward_retreats(self) -> None:
+        kid = replace(
+            self._drawn_kid(),
+            curr_seq_id=int(Seq.ENGARDE),
+            direction=int(Direction.RIGHT),
+        )
+        new_kid = apply_input(kid, Command(left=True))
+        assert new_kid.curr_seq_id == int(Seq.RETREAT)
+
+    def test_engarde_left_facing_swaps_directions(self) -> None:
+        """Si el kid mira a la izquierda, LEFT es advance y RIGHT es retreat."""
+        kid = replace(
+            self._drawn_kid(),
+            curr_seq_id=int(Seq.ENGARDE),
+            direction=int(Direction.LEFT),
+        )
+        new_left = apply_input(kid, Command(left=True))
+        assert new_left.curr_seq_id == int(Seq.ADVANCE)
+        new_right = apply_input(kid, Command(right=True))
+        assert new_right.curr_seq_id == int(Seq.RETREAT)
+
+    def test_engarde_down_sheathes(self) -> None:
+        kid = replace(self._drawn_kid(), curr_seq_id=int(Seq.ENGARDE))
+        new_kid = apply_input(kid, Command(down=True))
+        assert new_kid.curr_seq_id == int(Seq.PUT_SWORD_AWAY)
+        assert new_kid.sword == SwordStatus.SHEATHED
+
+
+class TestStandWithSwordExtras:
+    def test_stand_down_with_sword_sheathes(self) -> None:
+        kid = replace(_kid_standing(), sword=SwordStatus.DRAWN)
+        new_kid = apply_input(kid, Command(down=True))
+        assert new_kid.curr_seq_id == int(Seq.PUT_SWORD_AWAY)
+        assert new_kid.sword == SwordStatus.SHEATHED
+
+    def test_stand_shift_without_sword_does_nothing(self) -> None:
+        kid = _kid_standing()  # SHEATHED
+        new_kid = apply_input(kid, Command(shift=True))
+        assert new_kid.curr_seq_id == int(Seq.STAND)

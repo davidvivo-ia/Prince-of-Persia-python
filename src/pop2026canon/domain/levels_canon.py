@@ -35,7 +35,7 @@ from pop2026canon.domain.constants import (
     SCREEN_TILECOUNT_X,
     TBL_GUARD_HP,
 )
-from pop2026canon.domain.level import Event, EventKind, Level
+from pop2026canon.domain.level import DoorLink, Event, EventKind, Level
 from pop2026canon.domain.room import Room
 from pop2026canon.domain.tiles import Tile, encode_tile
 
@@ -423,6 +423,9 @@ LEVEL_6 = Level(
     start_col=1,
     start_row=1,
     events=(Event(EventKind.SHADOW_STEP, room=1, extra=43),),
+    doorlinks=(
+        DoorLink(plate_room=3, plate_col=7, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
+    ),
 )
 
 
@@ -530,6 +533,9 @@ LEVEL_11 = Level(
     start_room=1,
     start_col=1,
     start_row=1,
+    doorlinks=(
+        DoorLink(plate_room=5, plate_col=2, plate_row=1, gate_room=5, gate_col=5, gate_row=1),
+    ),
 )
 
 

@@ -45,8 +45,8 @@ class Action(IntEnum):
 
 
 class Seq(IntEnum):
-    """Identificadores de secuencias `seqtbl.c`. Subconjunto crítico — el
-    resto se añade conforme se implementan.
+    """Identificadores de secuencias `seqtbl.c`. Conjunto canónico
+    operativo del motor.
     """
 
     START_RUN = 1
@@ -64,18 +64,44 @@ class Seq(IntEnum):
     SOFT_LAND = 17
     FALL_AFTER_STANDING_JUMP = 18
     CRUSHED = 22
+    RUNTURN = 25
+    """Giro mientras corres (frenado + 180°)."""
+    BUMP = 27
+    """Choque frontal contra pared."""
+    HARD_LAND = 30
+    """Aterrizaje duro tras caída larga (>10 unidades de fall_y)."""
+    MED_LAND = 33
+    """Aterrizaje medio (fall_y entre 4 y 10)."""
+    JUMP_HANG_MIDAIR = 38
+    """Salto + agarrarse a cornisa estando en el aire (canon: seq 38)."""
+    ENGARDE = 41
+    """En guardia, sword drawn — listo para combate."""
+    ADVANCE = 43
+    """Paso adelante con espada empuñada."""
+    RETREAT = 44
+    """Paso atrás con espada empuñada."""
+    BLOCK_TO_STRIKE = 45
+    """Bloqueo (parry) que prepara un strike inmediato."""
+    BLOCK_STRIKE = 46
+    """Bloqueo que neutraliza un strike entrante (frames 161-164)."""
     STAND_UP_FROM_CROUCH = 49
     CROUCH = 50
     SPIKED = 51
     LOOSE_FLOOR_FELL_ON_KID = 52
     CHOMPED = 54
     DRAW_SWORD = 55
+    PUT_SWORD_AWAY = 56
+    """Guardar espada (de DRAWN a SHEATHED)."""
+    EXIT_LEVEL = 64
+    """El kid entra por la puerta y sube las escaleras al siguiente nivel."""
     DYING = 71
     STRIKE = 75
     DRINK = 78
     GUARD_FALL = 83
     RUN = 84
     STABBED_TO_DEATH = 85
+    BUMPED_FALL = 86
+    """Bumped contra pared mientras está cerca de un borde — cae."""
 
 
 # ---------------------------------------------------------------------------

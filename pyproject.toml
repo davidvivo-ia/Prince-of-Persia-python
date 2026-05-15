@@ -43,13 +43,14 @@ dev = [
 
 [project.scripts]
 pop2026 = "pop2026.__main__:main"
+pop2026canon = "pop2026canon.cli:app"
 
 [project.urls]
 "Homepage" = "https://github.com/davidvivo-ia/Prince-of-Persia-python"
 "Source"   = "https://github.com/davidvivo-ia/Prince-of-Persia-python"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pop2026"]
+packages = ["src/pop2026", "src/pop2026canon"]
 include = ["src/pop2026/**/*.poplv", "src/pop2026/py.typed"]
 
 [tool.hatch.build.targets.sdist]
@@ -121,11 +122,13 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/pop2026"]
+source = ["src/pop2026", "src/pop2026canon"]
 branch = true
 omit = [
     "src/pop2026/presentation/*",
     "src/pop2026/__main__.py",
+    "src/pop2026canon/presentation/*",
+    "src/pop2026canon/__main__.py",
 ]
 
 [tool.coverage.report]

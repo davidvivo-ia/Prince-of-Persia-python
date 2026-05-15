@@ -59,9 +59,69 @@ class TestSequenceTable:
         for s in critical:
             assert int(s) in TABLE, f"falta seq {s.name}"
 
+    def test_combat_advanced_sequences(self) -> None:
+        """Combate avanzado: engarde, advance, retreat, block."""
+        for s in (
+            Seq.ENGARDE,
+            Seq.ADVANCE,
+            Seq.RETREAT,
+            Seq.BLOCK_STRIKE,
+            Seq.BLOCK_TO_STRIKE,
+            Seq.PUT_SWORD_AWAY,
+        ):
+            assert int(s) in TABLE, f"falta seq combate {s.name}"
+
+    def test_locomotion_extra_sequences(self) -> None:
+        """Locomoción extra: runturn, bump, hard/med land."""
+        for s in (
+            Seq.RUNTURN,
+            Seq.BUMP,
+            Seq.HARD_LAND,
+            Seq.MED_LAND,
+            Seq.JUMP_HANG_MIDAIR,
+            Seq.BUMPED_FALL,
+            Seq.GUARD_FALL,
+            Seq.EXIT_LEVEL,
+        ):
+            assert int(s) in TABLE, f"falta seq locomoción {s.name}"
+
+    def test_table_at_least_40_entries(self) -> None:
+        assert len(TABLE) >= 40
+
     def test_get_raises_on_unknown(self) -> None:
         with pytest.raises(KeyError, match="no implementada"):
             get(999)
+
+
+class TestNewSequenceShapes:
+    def test_advance_moves_right(self) -> None:
+        seq = get(Seq.ADVANCE)
+        dxs = [a.arg for a in seq if a.kind is ActKind.DX]
+        assert sum(dxs) > 0
+
+    def test_retreat_moves_left(self) -> None:
+        seq = get(Seq.RETREAT)
+        dxs = [a.arg for a in seq if a.kind is ActKind.DX]
+        assert sum(dxs) < 0
+
+    def test_engarde_loops_idle(self) -> None:
+        seq = get(Seq.ENGARDE)
+        assert seq[-1].kind is ActKind.JMP
+        assert seq[-1].arg == int(Seq.ENGARDE)
+
+    def test_block_strike_returns_to_engarde(self) -> None:
+        seq = get(Seq.BLOCK_STRIKE)
+        assert seq[-1].arg == int(Seq.ENGARDE)
+
+    def test_block_to_strike_chains_to_strike(self) -> None:
+        seq = get(Seq.BLOCK_TO_STRIKE)
+        assert seq[-1].arg == int(Seq.STRIKE)
+
+    def test_exit_level_uses_canonical_frames(self) -> None:
+        seq = get(Seq.EXIT_LEVEL)
+        frame_ids = [a.arg for a in seq if a.kind is ActKind.FRAME]
+        assert min(frame_ids) == 217
+        assert max(frame_ids) == 228
 
 
 class TestDSLConstructors:
