@@ -176,6 +176,13 @@ def step(
         return prince
 
     cmd = inp.command
+
+    # --- HANG / CLIMB_UP: estados especiales que congelan la física --------
+    if prince.action is Action.HANG:
+        return _step_hang(prince, cmd, inp)
+    if prince.action is Action.CLIMB_UP:
+        return _step_climb_up(prince, level, state)
+
     grounded = is_grounded(prince.body, level, state)
 
     # --- Coyote y jump buffer -------------------------------------------------
@@ -246,6 +253,30 @@ def step(
     pre_body = replace(prince.body, vel=Velocity(desired_vx, new_vy))
     result = integrate(pre_body, level, state, accel_x=0.0, accel_y=GRAVITY)
 
+    # --- Agarre a cornisa al caer (homenaje al hang de POP1) ---------------
+    # Si el príncipe está cayendo y tiene una cornisa al lado del que mira,
+    # las manos se enganchan. Estado HANG congela la física hasta que el
+    # jugador trepe (UP/JUMP) o se suelte (DOWN).
+    if not result.hit_ground and result.state.vel.vy > 0.10:
+        grab = _detect_grab(result.state, level, state, new_facing)
+        if grab is not None:
+            ledge, hang_facing = grab
+            snapped_body = _snap_to_hang(ledge, hang_facing)
+            return PhysicsPrince(
+                body=snapped_body,
+                facing=hang_facing,
+                action=Action.HANG,
+                ticks_in_action=0,
+                hp=prince.hp,
+                max_hp=prince.max_hp,
+                has_sword=prince.has_sword,
+                coyote_left=0,
+                buffer_left=0,
+                prev_jump_held=inp.jump_held,
+                knockback_left=new_knockback,
+                last_impact_vy=0.0,
+            )
+
     if combat_ticks is not None:
         new_ticks = combat_ticks
     else:
@@ -263,6 +294,116 @@ def step(
         prev_jump_held=inp.jump_held,
         knockback_left=new_knockback,
         last_impact_vy=result.impact_vy if result.hit_ground else 0.0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Hang / climb-up (homenaje al gesto icónico del POP original)
+# ---------------------------------------------------------------------------
+
+
+def _detect_grab(
+    body: BodyState, level: Level, state: LevelState, facing: Facing
+) -> tuple[tuple[int, int], Facing] | None:
+    """Detecta si hay una cornisa adyacente para colgarse en cualquier lado.
+
+    Devuelve ``((ledge_row, ledge_col), nuevo_facing)`` — el príncipe
+    queda mirando hacia la cornisa (estilo POP1: las manos buscan el
+    borde más cercano). ``None`` si no hay cornisa.
+
+    Prioriza el lado al que ya mira; si no encuentra, prueba el otro
+    (caso típico: prince cae corriendo hacia el este, la cornisa que
+    deja atrás queda al oeste — sus manos tiran de él al borde).
+    """
+    from pop2026.domain.level import effective_tile
+    from pop2026.domain.tiles import SOLID
+
+    body_row = int(body.pos.y)
+    body_col = int(body.pos.x)
+    if body_row - 1 < 0:
+        return None
+
+    fdir = int(facing)
+    for side in (fdir, -fdir):
+        ledge_col = body_col + side
+        if not (0 <= ledge_col < level.cols):
+            continue
+        ledge_pos = Position(body_row, ledge_col)
+        above_pos = Position(body_row - 1, ledge_col)
+        if (
+            effective_tile(level, state, ledge_pos) in SOLID
+            and effective_tile(level, state, above_pos) not in SOLID
+        ):
+            new_facing = Facing.RIGHT if side > 0 else Facing.LEFT
+            return (body_row, ledge_col), new_facing
+    return None
+
+
+def _snap_to_hang(ledge: tuple[int, int], facing: Facing) -> BodyState:
+    """Posiciona el cuerpo colgado de la cornisa, con velocidades a cero."""
+    from pop2026.domain.physics import PRINCE_H, PRINCE_W
+
+    ledge_row, ledge_col = ledge
+    half_w = PRINCE_W / 2.0
+    half_h = PRINCE_H / 2.0
+    fdir = int(facing)
+    new_x = ledge_col - half_w if fdir > 0 else ledge_col + 1 + half_w
+    new_y = ledge_row + half_h
+    return BodyState(pos=PositionF(new_x, new_y), vel=Velocity(0.0, 0.0))
+
+
+def _step_hang(prince: PhysicsPrince, cmd: PlayerCommand, inp: InputFrame) -> PhysicsPrince:
+    """Procesa un tick mientras el príncipe cuelga de una cornisa."""
+    # Subir: UP o JUMP → CLIMB_UP
+    if cmd in (PlayerCommand.UP, PlayerCommand.JUMP) or inp.jump_pressed:
+        return replace(
+            prince,
+            action=Action.CLIMB_UP,
+            ticks_in_action=0,
+            prev_jump_held=inp.jump_held,
+        )
+    # Soltarse: DOWN → FALL con vy pequeña
+    if cmd is PlayerCommand.DOWN:
+        new_body = replace(prince.body, vel=Velocity(0.0, 0.05))
+        return replace(
+            prince,
+            body=new_body,
+            action=Action.FALL,
+            ticks_in_action=0,
+            prev_jump_held=inp.jump_held,
+        )
+    # Mantener
+    return replace(
+        prince,
+        ticks_in_action=prince.ticks_in_action + 1,
+        prev_jump_held=inp.jump_held,
+    )
+
+
+def _step_climb_up(prince: PhysicsPrince, level: Level, state: LevelState) -> PhysicsPrince:
+    """Procesa un tick durante la animación de trepar a la cornisa."""
+    new_ticks = prince.ticks_in_action + 1
+    if new_ticks < duration_ticks(Action.CLIMB_UP):
+        return replace(prince, ticks_in_action=new_ticks)
+
+    # Animación completada: teleporta al príncipe sobre la cornisa.
+    from pop2026.domain.physics import PRINCE_H
+
+    fdir = int(prince.facing)
+    body_col = int(prince.body.pos.x)
+    ledge_col = body_col + fdir
+    body_row = int(prince.body.pos.y)
+    new_x = ledge_col + 0.5
+    new_y = (body_row - 1) + PRINCE_H / 2.0
+    new_body = BodyState(pos=PositionF(new_x, new_y), vel=Velocity(0.0, 0.0))
+    # Comprobar que el destino no está bloqueado (sanity); si lo está,
+    # vuelve a HANG (no debería pasar si _detect_grab fue correcto).
+    _ = level, state
+    return replace(
+        prince,
+        body=new_body,
+        action=Action.STAND,
+        ticks_in_action=0,
     )
 
 

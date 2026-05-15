@@ -393,3 +393,71 @@ class TestKnockback:
             p = step(p, CORRIDOR, LevelState(), InputFrame(command=PlayerCommand.RIGHT))
             # vx sigue siendo negativo (hacia la izquierda) — input bloqueado
             assert p.body.vel.vx <= 0, f"input bloqueó knockback en tick: vx={p.body.vel.vx}"
+
+
+# ---------------------------------------------------------------------------
+# Hang & climb-up (POP1 signature move)
+# ---------------------------------------------------------------------------
+
+
+HANG_LEVEL = Level.parse("##########\n..@.......\n##........\n..........\n##########\n")
+"""Plataforma alta a la izquierda (row 2 cols 0-1), prince spawn al borde."""
+
+
+class TestHangAndClimb:
+    @staticmethod
+    def _falling_prince() -> PhysicsPrince:
+        from pop2026.domain.geometry import PositionF, Velocity
+        from pop2026.domain.physics import BodyState
+
+        return PhysicsPrince(
+            body=BodyState(pos=PositionF(2.5, 1.5), vel=Velocity(0.20, 0.10)),
+            facing=Facing.RIGHT,
+            action=Action.FALL,
+        )
+
+    def test_grab_ledge_behind_when_falling(self) -> None:
+        """Al caer desde el borde, el prince se engancha de la cornisa
+        que deja atrás (lado opuesto al facing)."""
+        p = self._falling_prince()
+        for _ in range(10):
+            p = step(p, HANG_LEVEL, LevelState(), InputFrame())
+            if p.action is Action.HANG:
+                break
+        assert p.action is Action.HANG, f"no enganchó cornisa, acabó en {p.action.name}"
+        # Mira hacia la cornisa (a su izquierda)
+        assert p.facing is Facing.LEFT
+        # Velocidades a cero mientras cuelga
+        assert p.body.vel.vy == 0.0
+        assert p.body.vel.vx == 0.0
+
+    def test_climb_up_finishes_on_ledge(self) -> None:
+        """Trepar con UP completa la animación y aterriza sobre la cornisa."""
+        p = self._falling_prince()
+        for _ in range(10):
+            p = step(p, HANG_LEVEL, LevelState(), InputFrame())
+            if p.action is Action.HANG:
+                break
+        # Pulsa UP para trepar
+        p = step(p, HANG_LEVEL, LevelState(), InputFrame(command=PlayerCommand.UP))
+        assert p.action is Action.CLIMB_UP
+        # Tras la duración de CLIMB_UP, debe estar STAND sobre la cornisa.
+        from pop2026.domain.actions import duration_ticks
+
+        for _ in range(duration_ticks(Action.CLIMB_UP) + 2):
+            p = step(p, HANG_LEVEL, LevelState(), InputFrame())
+        assert p.action is Action.STAND
+        # Posición sobre la cornisa: cell (1, 1) — encima de col 1 row 2 (suelo)
+        assert int(p.body.pos.y) == 1
+        assert int(p.body.pos.x) == 1
+
+    def test_drop_from_hang_releases(self) -> None:
+        """Pulsar DOWN suelta el agarre y reanuda la caída."""
+        p = self._falling_prince()
+        for _ in range(10):
+            p = step(p, HANG_LEVEL, LevelState(), InputFrame())
+            if p.action is Action.HANG:
+                break
+        p = step(p, HANG_LEVEL, LevelState(), InputFrame(command=PlayerCommand.DOWN))
+        assert p.action is Action.FALL
+        assert p.body.vel.vy >= 0

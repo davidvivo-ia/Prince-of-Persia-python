@@ -83,13 +83,17 @@ _DURATIONS: dict[Action, int] = {
 # ---------------------------------------------------------------------------
 
 HIT_WINDOWS: dict[Action, tuple[int, int]] = {
-    Action.STRIKE: (3, 5),
-    Action.LUNGE: (4, 7),
+    Action.STRIKE: (2, 5),
+    Action.LUNGE: (3, 7),
 }
-"""Ventana activa (inicio inclusivo, fin exclusivo) por acción ofensiva."""
+"""Ventana activa (inicio inclusivo, fin exclusivo) por acción ofensiva.
+
+Ampliada de (3,5) a (2,5) para STRIKE — 3 ticks de impacto en lugar de 2.
+Combate más legible, menos frame-perfect.
+"""
 
 BLOCK_WINDOWS: dict[Action, tuple[int, int]] = {
-    Action.PARRY: (0, 4),
+    Action.PARRY: (0, 5),
 }
 """Ventana en la que la defensa absorbe el golpe del rival."""
 

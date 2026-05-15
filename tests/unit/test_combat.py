@@ -172,7 +172,7 @@ class TestHitWindows:
             hp=3,
             max_hp=3,
             action=Action.PARRY,
-            ticks_in_action=4,  # fuera de (0, 4)
+            ticks_in_action=5,  # fuera de (0, 5)
         )
         g = Guard(
             pos=Position(1, 4),
