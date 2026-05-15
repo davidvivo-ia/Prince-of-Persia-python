@@ -10,12 +10,12 @@ Canon (`types.h`):
 - `TILE_SIZEY = 63`
 - `SCREEN_TILECOUNTX = 10`, `SCREEN_TILECOUNTY = 3`
 
-Una sala = 10 × 3 = **30 tiles = 140 × 189 px** en resolución
+Una sala = 10 x 3 = **30 tiles = 140 x 189 px** en resolución
 canónica.
 
 **Decisión**: respetamos la proporción 14:63 (1:4.5) pero escalamos
-al doble (28×126 → sala 280×378 px). Razones:
-- Cabe en pantalla 1280×768 con HUD arriba de 48 px
+al doble (28x126 → sala 280x378 px). Razones:
+- Cabe en pantalla 1280x768 con HUD arriba de 48 px
 - Ratio idéntico — la silueta del nivel coincide con SDLPoP
 
 Constante final: `TILE_W = 28`, `TILE_H = 126` (revisable, en
@@ -136,7 +136,7 @@ Cuando el kid cruza el borde E/W/N/S de una sala:
 
 `tests/canon/test_01_tile_renderer.py`:
 - Cada `draw_<tile>` produce una `Surface` de tamaño esperado
-- Snapshot test: render de una sala 10×3 fija contra imagen-base
+- Snapshot test: render de una sala 10x3 fija contra imagen-base
 - Render con `tiles_4_gate` modifier 0..7 produce 8 imágenes
   distintas (gate progresivamente abriéndose)
 

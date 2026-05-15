@@ -33,8 +33,8 @@
 platformer 2D **tile-based** (no píxel-libre): el príncipe se mueve por
 celdas discretas siguiendo cadenas de frames (rotoscopiadas) que
 definen cuántos tiles avanza cada acción y en qué frame se aplica el
-desplazamiento. Las salas son rejillas fijas de **10 columnas × 3
-filas** de tile-size **14×63 px** (relación aspecto vertical
+desplazamiento. Las salas son rejillas fijas de **10 columnas x 3
+filas** de tile-size **14x63 px** (relación aspecto vertical
 característica). Cada nivel se compone de varias salas enlazadas
 N/S/E/W (hasta 24 por nivel).
 
@@ -168,9 +168,9 @@ TROBS_MAX = 30                    // trampas/objetos activos máx
 NUM_TIMERS = 3
 ```
 
-**Implicación crítica**: el tile **NO es cuadrado**. Es 14×63 (relación
-1:4.5). En el render, una sala es **140×189 px**. El prince ocupa ~1
-tile horizontal × ~2 tiles vertical aproximadamente.
+**Implicación crítica**: el tile **NO es cuadrado**. Es 14x63 (relación
+1:4.5). En el render, una sala es **140x189 px**. El prince ocupa ~1
+tile horizontal x ~2 tiles vertical aproximadamente.
 
 ### 4.2 Tipos enumerados (`types.h`)
 
@@ -392,7 +392,7 @@ salto/empujón. La aceleración es de 3 px/tick² a 60 FPS.
 
 | Campo | Tamaño | Uso |
 |---|---|---|
-| `fg[720]` | 720 bytes | Foreground tiles (24 salas × 30 tiles) |
+| `fg[720]` | 720 bytes | Foreground tiles (24 salas x 30 tiles) |
 | `bg[720]` | 720 bytes | Modifiers / overlays |
 | `doorlinks` | variable | Links entre puertas y botones |
 | `roomlinks[24]` | 24*N bytes | N/S/E/W de cada sala |
@@ -436,8 +436,8 @@ documentar y planificar.
 
 | Aspecto | Canon POP1 / SDLPoP | `pop2026` actual | Estado |
 |---|---|---|---|
-| Tile size | 14×63 px | 48×64 px | ⚠️ ratio incorrecto |
-| Room size | 10×3 tiles | 20×6 tiles | ⚠️ doble densidad |
+| Tile size | 14x63 px | 48x64 px | ⚠️ ratio incorrecto |
+| Room size | 10x3 tiles | 20x6 tiles | ⚠️ doble densidad |
 | Max rooms/nivel | 24 | irrelevante (single grid) | ⚠️ no hay grafo de salas |
 | Camera | Room-flick (salto en bloque) | Room-flick (ya implementado) | ✓ |
 | Físicas | Tile-based + frame chains | **Continua float (Celeste)** | ⚠️ pivot grande |
@@ -452,7 +452,7 @@ documentar y planificar.
 | HP guard nivel 1 | 4 | 2-3 (random) ⚠️ |
 | HP guard nivel 8 (jaffar bro) | 4 | 2 ⚠️ |
 | HP guard nivel 12 (vizier) | 5 | 4 ⚠️ |
-| Time límit | 60 min | DEFAULT_TIME_LIMIT_TICKS = 216000 (60min × 60s × 60tick) ✓ |
+| Time límit | 60 min | DEFAULT_TIME_LIMIT_TICKS = 216000 (60min x 60s x 60tick) ✓ |
 | Loose floor delay | 11 frames | 12 ticks ✓ |
 | Falling accel | 3 px/tick² | 0.06 cells/tick² (continuous) ⚠️ unidades distintas |
 | Falling max | 33 px/tick | 0.45 cells/tick ⚠️ |
@@ -472,7 +472,7 @@ documentar y planificar.
 |---|---|---|
 | Layouts | 14 niveles (1-12 + final) | 15 hand-crafted **diseñados por nosotros** |
 | Formato | `levels.dat` binario | `.poplv` ASCII (incompatible) |
-| Multi-room por nivel | Hasta 24 salas con links | 1 grid grande (20×6 a 60×6) |
+| Multi-room por nivel | Hasta 24 salas con links | 1 grid grande (20x6 a 60x6) |
 | Trampas | chomper, slicer, freezing-block, pillar-up | spike + loose + gate (3 tipos) ⚠️ faltan chomper/slicer |
 | Potions | 5 tipos | 3 tipos (heal, poison, maxHP) ⚠️ faltan time, float |
 

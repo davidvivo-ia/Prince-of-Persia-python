@@ -230,7 +230,7 @@ No es 1-a-1 con los 180 sprites de POP1 pero captura la silueta.
 
 ## 8. Riesgos
 
-- **Reverso completo de seqtbl.c**: 94 secuencias × 10-50 acts cada
+- **Reverso completo de seqtbl.c**: 94 secuencias x 10-50 acts cada
   una = ~2000 acts. Extracción mecánica del C posible con script.
 - **Atlas procedural**: 180 frames procedurales son trabajo de
   ilustración. Aceptable como tributo si captura silueta.

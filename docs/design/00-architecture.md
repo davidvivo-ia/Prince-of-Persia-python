@@ -47,7 +47,7 @@ src/pop2026canon/
 │   ├── physics.py         # gravity, collision, frame advance
 │   ├── combat.py          # take_hp, sword_strike, parry resolution
 │   ├── traps.py           # chomper, slicer, loose_floor, spike state machines
-│   ├── room.py            # Room (10×3 grid + links N/S/E/W)
+│   ├── room.py            # Room (10x3 grid + links N/S/E/W)
 │   ├── level.py           # Level (24 rooms + guards + start_pos + exit)
 │   ├── shadow.py          # Triggers de shadow encounters
 │   ├── skeleton.py        # Skeleton wake-up logic
@@ -147,7 +147,7 @@ Coincide 1-a-1 con `char_type` de `types.h`.
 ```python
 @dataclass(frozen=True, slots=True)
 class Room:
-    fg: tuple[int, ...]            # 30 tiles foreground (10×3)
+    fg: tuple[int, ...]            # 30 tiles foreground (10x3)
     bg: tuple[int, ...]            # 30 tiles background/modifier
     links: tuple[int, int, int, int]  # N, S, E, W → room idx o 0 (wall)
     guards: tuple[GuardSpawn, ...]

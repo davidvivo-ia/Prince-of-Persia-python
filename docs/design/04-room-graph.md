@@ -19,7 +19,7 @@ class GuardSpawn:
 @dataclass(frozen=True, slots=True)
 class Room:
     id: int           # 1..24 (0 = "no room" / wall)
-    fg: tuple[int, ...]    # 30 tiles foreground (3 filas × 10 cols)
+    fg: tuple[int, ...]    # 30 tiles foreground (3 filas x 10 cols)
     bg: tuple[int, ...]    # 30 modifiers o overlays
     link_n: int       # room id N o 0
     link_s: int
@@ -54,13 +54,13 @@ class Event:
 ## 2. Formato `levels.dat`
 
 Verificado: `sizeof(level_type) == 2305` bytes (de `types.h`). 14
-niveles. Total = 14 × 2305 = 32 270 bytes + checksum.
+niveles. Total = 14 x 2305 = 32 270 bytes + checksum.
 
 Layout aproximado por nivel (extraído de `level_type` en SDLPoP):
 
 | Offset | Bytes | Campo |
 |---|---|---|
-| 0    | 720 | `fg[720]` — foreground tiles (24 rooms × 30 tiles) |
+| 0    | 720 | `fg[720]` — foreground tiles (24 rooms x 30 tiles) |
 | 720  | 720 | `bg[720]` — modifiers / overlays |
 | 1440 | ~256 | `doorlinks_1`, `doorlinks_2` — links plate↔gate |
 | 1696 | 96  | `roomlinks[24]` — 4 bytes/room (N, S, E, W) |
