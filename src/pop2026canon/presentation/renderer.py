@@ -137,10 +137,7 @@ def _draw_hud(surf: pygame.Surface, game: Game, font: pygame.font.Font) -> None:
         pygame.draw.polygon(surf, col, [(cx - 5, cy), (cx + 5, cy), (cx, cy + 6)])
 
     # Texto: nivel y sala
-    label = (
-        f"{game.level.name} L{game.level.number}/14 "
-        f"S{game.kid.room}/{len(game.level.rooms)}"
-    )
+    label = f"{game.level.name} L{game.level.number}/14 S{game.kid.room}/{len(game.level.rooms)}"
     surf.blit(font.render(label, True, PALETTE.primary), (w // 3, 14))
 
     # Tiempo (sólo el último minuto visible — canon ocultaba el resto)

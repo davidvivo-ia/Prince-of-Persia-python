@@ -56,6 +56,13 @@ def advance(game: Game, cmd: Command) -> Game:
     # 7. Avanzar trampas de la sala actual
     new_state = _tick_traps(game, new_kid)
 
+    # 7b. Eventos canon scripted: shadow, skeleton, vizier, princess, mouse
+    interim = replace(game, kid=new_kid, others=new_others, state=new_state)
+    interim = _trigger_special_chars(interim)
+    new_kid = interim.kid
+    new_others = interim.others
+    new_state = interim.state
+
     # 8. Combate kid vs guards adyacentes (mismo room + mismo row + dist 1)
     new_kid, new_others = _resolve_room_combat(new_kid, new_others)
 
@@ -86,6 +93,22 @@ def advance(game: Game, cmd: Command) -> Game:
 # ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------
+
+
+def _trigger_special_chars(game: Game) -> Game:
+    """Dispara los eventos canon scripted del nivel actual."""
+    from pop2026canon.domain.princess import trigger_mouse_appear, trigger_princess_reunion
+    from pop2026canon.domain.shadow import trigger_shadow_encounters
+    from pop2026canon.domain.skeleton import step_skeleton_ai, trigger_skeleton_wake
+    from pop2026canon.domain.vizier import trigger_vizier_spawn
+
+    game = trigger_skeleton_wake(game)
+    game = step_skeleton_ai(game)
+    game = trigger_shadow_encounters(game)
+    game = trigger_vizier_spawn(game)
+    game = trigger_mouse_appear(game)
+    game = trigger_princess_reunion(game)
+    return game
 
 
 def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
