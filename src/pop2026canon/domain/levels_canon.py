@@ -315,80 +315,288 @@ LEVEL_3 = Level(
 
 
 # ===========================================================================
-# Niveles 4-14 — STUBS canónicos
+# Niveles 4-14 — multi-room canon
 #
-# Cada uno con estructura mínima + eventos correctos. Layouts a refinar.
+# Cada nivel tiene 5-12 salas con la mecánica/evento canónico apropiado.
+# Los layouts son inspirados en walkthroughs comunidad (no byte-perfect
+# vs LEVELS.DAT, pero reconocibles por un fan).
 # ===========================================================================
 
 
-def _stub_level(number: int, name: str, events: tuple[Event, ...] = ()) -> Level:
-    """Stub mínimo: 1 sala con spawn, plate, exit door, evento marcado."""
-    return Level(
-        number=number,
-        name=name,
-        rooms=(
-            _room(
-                1,
-                rows=(
-                    [F, F, F, F, F, F, F, F, F, F],
-                    [E, E, E, E, E, E, E, E, DL, DR],
-                    [F, F, F, F, F, F, F, F, F, F],
-                ),
-            ),
-        ),
-        start_room=1,
-        start_col=1,
-        start_row=1,
-        events=events,
+def _corridor(
+    room_id: int,
+    *,
+    link_e: int = 0,
+    link_w: int = 0,
+    link_s: int = 0,
+    link_n: int = 0,
+    extras: dict[tuple[int, int], Tile] | None = None,
+    guards: tuple[GuardSpawn, ...] = (),
+) -> Room:
+    """Sala-corredor estándar con techo + suelo + extras opcionales."""
+    rows: list[list[Tile | int]] = [
+        [F, F, F, F, F, F, F, F, F, F],
+        [E, E, E, E, E, E, E, E, E, E],
+        [F, F, F, F, F, F, F, F, F, F],
+    ]
+    if extras:
+        for (col, row), tile in extras.items():
+            rows[row][col] = tile
+    return _room(
+        room_id,
+        rows=(rows[0], rows[1], rows[2]),
+        link_n=link_n,
+        link_s=link_s,
+        link_e=link_e,
+        link_w=link_w,
+        guards=guards,
     )
 
 
-# Nivel 4 — The Mirror: espejo en sala 4 (estructura, no aún implementado)
-LEVEL_4 = _stub_level(
-    4,
-    "The Mirror",
-    events=(Event(EventKind.SHADOW_MIRROR, room=4, col=4),),
+# ---------------------------------------------------------------------------
+# Nivel 4 — The Mirror
+# ---------------------------------------------------------------------------
+# 6 salas: spawn → corredor con pinchos → sala mirror (sala 4) → after-mirror →
+# tras pasar el mirror, shadow nace y huye al oeste → exit.
+
+LEVEL_4 = Level(
+    number=4,
+    name="The Mirror",
+    rooms=(
+        _corridor(1, link_e=2),
+        _corridor(2, link_w=1, link_e=3, extras={(4, 1): S, (5, 1): E}),
+        _corridor(3, link_w=2, link_e=4),
+        # Sala 4 — MIRROR en col 5 row 1
+        _corridor(4, link_w=3, link_e=5, extras={(5, 1): M}),
+        _corridor(5, link_w=4, link_e=6, extras={(4, 1): P}),  # plate
+        _corridor(6, link_w=5, extras={(7, 1): DL, (8, 1): DR}),  # exit
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+    events=(Event(EventKind.SHADOW_MIRROR, room=4, col=5),),
 )
 
-# Nivel 5 — The Thief: shadow steal en sala 24
-LEVEL_5 = _stub_level(
-    5,
-    "The Thief",
-    events=(Event(EventKind.SHADOW_STEAL, room=24),),
+
+# ---------------------------------------------------------------------------
+# Nivel 5 — The Thief
+# ---------------------------------------------------------------------------
+# 7 salas: shadow roba potion en sala "24" (en nuestro layout, la sala con
+# la potion central).
+
+LEVEL_5 = Level(
+    number=5,
+    name="The Thief",
+    rooms=(
+        _corridor(1, link_e=2, guards=(GuardSpawn(col=4, row=1, direction=-1, skill=3),)),
+        _corridor(2, link_w=1, link_e=3, extras={(3, 1): L, (4, 1): L}),
+        _corridor(3, link_w=2, link_e=4, extras={(5, 1): C}),
+        _corridor(4, link_w=3, link_e=5, extras={(4, 1): PO}),
+        _corridor(5, link_w=4, link_e=6),
+        _corridor(6, link_w=5, link_e=7, extras={(3, 1): P}),
+        _corridor(7, link_w=6, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+    events=(Event(EventKind.SHADOW_STEAL, room=4),),
 )
 
-# Nivel 6 — The Steps: shadow jumps when kid in frame_43
-LEVEL_6 = _stub_level(
-    6,
-    "The Steps",
+
+# ---------------------------------------------------------------------------
+# Nivel 6 — The Steps
+# ---------------------------------------------------------------------------
+# 5 salas: en sala 1 hay un salto largo con un pit; cuando el kid
+# está en frame_43 (mid-runjump), el shadow aparece desde el otro lado.
+
+LEVEL_6 = Level(
+    number=6,
+    name="The Steps",
+    rooms=(
+        _corridor(1, link_e=2, extras={(5, 2): E, (6, 2): E}),  # pit central
+        _corridor(2, link_w=1, link_e=3, extras={(3, 1): G}),  # gate
+        _corridor(3, link_w=2, link_e=4, extras={(7, 1): P}),  # plate
+        _corridor(4, link_w=3, link_e=5, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=4),)),
+        _corridor(5, link_w=4, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
     events=(Event(EventKind.SHADOW_STEP, room=1, extra=43),),
 )
 
-LEVEL_7 = _stub_level(7, "The Mountains")
-LEVEL_8 = _stub_level(
-    8,
-    "The Caverns",
-    events=(Event(EventKind.MOUSE_APPEAR, room=24),),
-)
-LEVEL_9 = _stub_level(9, "The Tomb")
-LEVEL_10 = _stub_level(10, "The Tower")
-LEVEL_11 = _stub_level(11, "The Tower II")
 
-# Nivel 12 — The Vizier: shadow fusion + jaffar
-LEVEL_12 = _stub_level(
-    12,
-    "The Vizier",
+# ---------------------------------------------------------------------------
+# Nivel 7 — The Mountains
+# ---------------------------------------------------------------------------
+
+LEVEL_7 = Level(
+    number=7,
+    name="The Mountains",
+    rooms=(
+        _corridor(1, link_e=2, link_s=4),
+        _corridor(2, link_w=1, link_e=3, extras={(4, 1): S, (5, 1): E, (6, 1): S}),
+        _corridor(3, link_w=2, link_s=5, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=5),)),
+        _corridor(4, link_n=1, link_e=5, extras={(3, 1): L, (4, 1): L}),
+        _corridor(5, link_n=3, link_w=4, link_e=6, extras={(2, 1): C}),
+        _corridor(6, link_w=5, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+)
+
+
+# ---------------------------------------------------------------------------
+# Nivel 8 — The Caverns
+# ---------------------------------------------------------------------------
+# Mouse aparece en sala 24 (en nuestro layout, sala 6) para abrir la última gate
+
+LEVEL_8 = Level(
+    number=8,
+    name="The Caverns",
+    rooms=(
+        _corridor(1, link_e=2, link_s=3),
+        _corridor(2, link_w=1, link_e=4, extras={(5, 1): C}),
+        _corridor(3, link_n=1, link_e=5, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=4),)),
+        _corridor(4, link_w=2, link_s=6, extras={(3, 1): L, (4, 1): L, (5, 1): L}),
+        _corridor(5, link_w=3, link_e=6),
+        _corridor(6, link_n=4, link_w=5, extras={(2, 1): G, (7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+    events=(Event(EventKind.MOUSE_APPEAR, room=6),),
+)
+
+
+# ---------------------------------------------------------------------------
+# Nivel 9 — The Tomb
+# ---------------------------------------------------------------------------
+
+LEVEL_9 = Level(
+    number=9,
+    name="The Tomb",
+    rooms=(
+        _corridor(1, link_e=2, extras={(4, 1): SK}),  # skeleton tile
+        _corridor(2, link_w=1, link_e=3, link_s=4, extras={(3, 1): S, (4, 1): E, (5, 1): S}),
+        _corridor(3, link_w=2, link_e=5, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=5),)),
+        _corridor(4, link_n=2, link_e=6, extras={(2, 1): C, (6, 1): C}),
+        _corridor(5, link_w=3, link_s=6, extras={(5, 1): SK}),  # another skel
+        _corridor(6, link_n=5, link_w=4, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+)
+
+
+# ---------------------------------------------------------------------------
+# Nivel 10 — The Tower
+# ---------------------------------------------------------------------------
+# Vertical: spawn arriba, baja por gaps hasta el exit.
+
+LEVEL_10 = Level(
+    number=10,
+    name="The Tower",
+    rooms=(
+        _corridor(1, link_s=2, extras={(5, 2): E}),  # gap en suelo
+        _corridor(2, link_n=1, link_s=3, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=5),)),
+        _corridor(3, link_n=2, link_s=4, extras={(3, 1): S, (5, 1): S, (7, 1): S}),
+        _corridor(4, link_n=3, link_e=5, guards=(GuardSpawn(col=4, row=1, direction=-1, skill=5),)),
+        _corridor(5, link_w=4, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+)
+
+
+# ---------------------------------------------------------------------------
+# Nivel 11 — The Tower II
+# ---------------------------------------------------------------------------
+
+LEVEL_11 = Level(
+    number=11,
+    name="The Tower II",
+    rooms=(
+        _corridor(1, link_e=2, link_s=3),
+        _corridor(2, link_w=1, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=5),)),
+        _corridor(3, link_n=1, link_e=4, extras={(3, 1): C, (6, 1): C}),
+        _corridor(4, link_w=3, link_s=5, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=5),)),
+        _corridor(5, link_n=4, link_e=6, extras={(5, 1): G, (2, 1): P}),
+        _corridor(6, link_w=5, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+)
+
+
+# ---------------------------------------------------------------------------
+# Nivel 12 — The Vizier
+# ---------------------------------------------------------------------------
+# Shadow fusion en sala 5; vizier en sala 7 (último combate).
+# (Canon real: sala 15 y 23, pero adaptamos a nuestro tamaño 8 salas.)
+
+LEVEL_12 = Level(
+    number=12,
+    name="The Vizier",
+    rooms=(
+        _corridor(1, link_e=2, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=6),)),
+        _corridor(2, link_w=1, link_e=3, extras={(3, 1): C, (6, 1): C}),
+        _corridor(3, link_w=2, link_e=4, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=7),)),
+        _corridor(4, link_w=3, link_e=5, extras={(4, 1): L, (5, 1): L}),
+        # Sala 5 — fusion shadow
+        _corridor(5, link_w=4, link_e=6, extras={(5, 1): M}),  # mirror para fusión
+        _corridor(6, link_w=5, link_e=7),
+        # Sala 7 — vizier (Jaffar) combate final
+        _corridor(
+            7, link_w=6, link_e=8, guards=(GuardSpawn(col=5, row=1, direction=-1, skill=11),)
+        ),
+        _corridor(8, link_w=7, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
     events=(
-        Event(EventKind.SHADOW_FUSION, room=15),
-        Event(EventKind.VIZIER_INIT, room=23),
+        Event(EventKind.SHADOW_FUSION, room=5, col=5),
+        Event(EventKind.VIZIER_INIT, room=7),
     ),
 )
 
-# Niveles 13-14 — cinemáticas finales (estructura mínima)
-LEVEL_13 = _stub_level(13, "Final Run")
-LEVEL_14 = _stub_level(
-    14,
-    "Ending",
+
+# ---------------------------------------------------------------------------
+# Nivel 13 — Final Run (carrera tras vencer Jaffar)
+# ---------------------------------------------------------------------------
+
+LEVEL_13 = Level(
+    number=13,
+    name="Final Run",
+    rooms=(
+        _corridor(1, link_e=2, extras={(4, 1): C, (6, 1): C}),
+        _corridor(2, link_w=1, link_e=3, extras={(3, 1): S, (5, 1): S, (7, 1): S}),
+        _corridor(3, link_w=2, extras={(7, 1): DL, (8, 1): DR}),
+    ),
+    start_room=1,
+    start_col=1,
+    start_row=1,
+)
+
+
+# ---------------------------------------------------------------------------
+# Nivel 14 — Ending (cinemática princesa)
+# ---------------------------------------------------------------------------
+
+LEVEL_14 = Level(
+    number=14,
+    name="Ending",
+    rooms=(
+        _corridor(1, extras={(5, 1): T}),  # antorcha, princesa
+    ),
+    start_room=1,
+    start_col=2,
+    start_row=1,
     events=(Event(EventKind.PRINCESS_REUNION, room=1),),
 )
 
