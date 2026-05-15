@@ -22,12 +22,19 @@ from pop2026.infrastructure.rng import LfsrRng
 EASY_LEVELS: tuple[str, ...] = (
     "01_cell",
     "02_sword",
+    "03_guard",
     "04_traps",
     "05_plate",
+    "06_loose",
+    "07_duo",
     "09_maze",
+    "10_patrol",
     "11_spikes",
     "13_shadow",
+    "15_escape",
 )
+"""``14_throne`` queda fuera: tiene un esqueleto inmortal (``K``) que
+el bot naive ataca indefinidamente. Un humano simplemente lo esquiva."""
 """Niveles que el bot debe ganar con seed=42 en menos de 12_000 ticks.
 
 Tras el rediseño puzzle-based (`puzzles.md`), los demás niveles

@@ -139,10 +139,21 @@ def _process_tile_interactions(g: Game) -> Game:
                 state = state.with_open(gate)
     state = state.with_pressed(frozenset(pressed))
 
-    # loose-floor bajo el príncipe: si lo pisa, se rompe
+    # loose-floor bajo el príncipe: tras `loose_press_threshold` ticks
+    # consecutivos de presión, cede. Antes el prince puede pasar
+    # corriendo sin que caiga si no se detiene.
+    loose_press_threshold = 12
     below = p.pos.shifted(drow=1)
     if g.level.tile_at(below) is Tile.LOOSE_FLOOR and below not in state.fallen_floors:
-        state = state.with_floor_fallen(below)
+        prev_ticks = state.loose_ticks_at(below)
+        new_ticks = prev_ticks + 1
+        if new_ticks >= loose_press_threshold:
+            state = state.with_floor_fallen(below)
+            state = state.with_loose_press(below, 0)
+        else:
+            state = state.with_loose_press(below, new_ticks)
+    elif state.loose_press_ticks:
+        state = replace(state, loose_press_ticks=())
 
     # spikes: si está parado sobre celda con spikes con caída previa, muere
     from pop2026.domain.physics import SPIKE_LETHAL_VY

@@ -99,8 +99,9 @@ class TestLooseFloor:
         # Verifica que (2,3) es LOOSE_FLOOR antes de jugar
         assert lv.tile_at(lv.prince_spawn.shifted(drow=1)) is Tile.LOOSE_FLOOR
         g = new_game(lv, time_limit=10_000)
-        g2 = _run(g, PlayerCommand.NONE, 5)
-        # tras unos ticks la celda debajo del príncipe debería haber caído
+        # Con LOOSE_PRESS_THRESHOLD=12 hace falta presionar durante ~12 ticks
+        # consecutivos para que ceda. Pasar corriendo no debería tirarlo.
+        g2 = _run(g, PlayerCommand.NONE, 20)
         assert len(g2.state.fallen_floors) >= 1
 
 

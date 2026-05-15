@@ -71,6 +71,22 @@ def total_rooms(level_cols: int) -> int:
     return max(1, (level_cols + LAYOUT.cols - 1) // LAYOUT.cols)
 
 
+def viewport_row(prince_row: int, level_rows: int) -> int:
+    """Fila lógica donde empieza la pantalla visible (vertical room-flick)."""
+    if level_rows <= LAYOUT.rows:
+        return 0
+    room = max(0, prince_row // LAYOUT.rows)
+    max_room = max(0, (level_rows - 1) // LAYOUT.rows)
+    return min(room, max_room) * LAYOUT.rows
+
+
+def total_vertical_rooms(level_rows: int) -> int:
+    """Cuántas habitaciones lógicas verticales tiene el nivel."""
+    if level_rows <= 0:
+        return 0
+    return max(1, (level_rows + LAYOUT.rows - 1) // LAYOUT.rows)
+
+
 # ---------------------------------------------------------------------------
 # Fondo: pared trasera con sombreado
 # ---------------------------------------------------------------------------
@@ -971,27 +987,23 @@ def _smooth_feet(
     facing: Facing,
     *,
     viewport_x: int = 0,
+    viewport_y: int = 0,
 ) -> tuple[int, int]:
     """Calcula píxeles ``(feet_x, feet_y)`` con offset sub-celda (guards)."""
     dx, dy = offset_for(action=action, ticks=ticks, facing_value=int(facing))
     feet_x = int((col - viewport_x + dx) * LAYOUT.tile_w + LAYOUT.tile_w / 2)
-    feet_y = int(_floor_top_y(row) + dy * LAYOUT.tile_h)
+    # _floor_top_y(r) ya incluye hud_top; restamos viewport_y * tile_h
+    feet_y = int(_floor_top_y(row) + dy * LAYOUT.tile_h - viewport_y * LAYOUT.tile_h)
     return feet_x, feet_y
 
 
-def _continuous_feet(p: Prince, viewport_x: int = 0) -> tuple[int, int]:
-    """Calcula los píxeles del pie del príncipe desde su posición continua.
-
-    Con el ladrillo llenando la celda entera, el borde superior del
-    suelo está en ``row * tile_h + hud_top``. Los pies del príncipe
-    grounded tienen ``body.pos.y + half_h == row``, así que el píxel
-    coincide directamente con la multiplicación: sin offset adicional.
-    """
+def _continuous_feet(p: Prince, viewport_x: int = 0, viewport_y: int = 0) -> tuple[int, int]:
+    """Calcula los píxeles del pie del príncipe desde su posición continua."""
     from pop2026.domain.physics import PRINCE_H
 
     half_h = PRINCE_H / 2.0
     feet_x = int((p.body.pos.x - viewport_x) * LAYOUT.tile_w)
-    feet_y = int((p.body.pos.y + half_h) * LAYOUT.tile_h + LAYOUT.hud_top)
+    feet_y = int((p.body.pos.y + half_h - viewport_y) * LAYOUT.tile_h + LAYOUT.hud_top)
     return feet_x, feet_y
 
 
@@ -1017,8 +1029,10 @@ def _draw_hit_flash(surface: pygame.Surface, feet_x: int, feet_y: int, phase: fl
     surface.blit(flash, (feet_x - 24, feet_y - 38), special_flags=pygame.BLEND_ADD)
 
 
-def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> None:
-    feet_x, feet_y = _continuous_feet(p, viewport_x=viewport_x)
+def _draw_prince(
+    surface: pygame.Surface, p: Prince, viewport_x: int = 0, viewport_y: int = 0
+) -> None:
+    feet_x, feet_y = _continuous_feet(p, viewport_x=viewport_x, viewport_y=viewport_y)
 
     # Efecto: polvo al aterrizar (durante la animación LAND).
     if p.action is Action.LAND:
@@ -1054,7 +1068,9 @@ def _draw_prince(surface: pygame.Surface, p: Prince, viewport_x: int = 0) -> Non
     )
 
 
-def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
+def _draw_guard(
+    surface: pygame.Surface, g: Guard, viewport_x: int = 0, viewport_y: int = 0
+) -> None:
     # Esqueleto: paleta espectral (gris perla / violeta apagado).
     if g.is_skeleton:
         skin = (0xCF, 0xCF, 0xDC)
@@ -1065,7 +1081,13 @@ def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
 
     if g.mode is GuardMode.DEAD:
         feet_x, feet_y = _smooth_feet(
-            g.pos.col, g.pos.row, Action.DEAD, 0, g.facing, viewport_x=viewport_x
+            g.pos.col,
+            g.pos.row,
+            Action.DEAD,
+            0,
+            g.facing,
+            viewport_x=viewport_x,
+            viewport_y=viewport_y,
         )
         _draw_humanoid(
             surface,
@@ -1082,7 +1104,13 @@ def _draw_guard(surface: pygame.Surface, g: Guard, viewport_x: int = 0) -> None:
         )
         return
     feet_x, feet_y = _smooth_feet(
-        g.pos.col, g.pos.row, g.action, g.ticks_in_action, g.facing, viewport_x=viewport_x
+        g.pos.col,
+        g.pos.row,
+        g.action,
+        g.ticks_in_action,
+        g.facing,
+        viewport_x=viewport_x,
+        viewport_y=viewport_y,
     )
     _draw_humanoid(
         surface,
@@ -1131,6 +1159,7 @@ def _draw_hud(
     font: pygame.font.Font,
     *,
     viewport_x: int = 0,
+    viewport_y: int = 0,
 ) -> None:
     # Banda superior con degradado tenue para no quedar plana.
     w = surface.get_width()
@@ -1157,11 +1186,16 @@ def _draw_hud(
 
     secs = game.time_left // 60
     mm, ss = divmod(secs, 60)
-    rooms = total_rooms(game.level.cols)
+    rooms_h = total_rooms(game.level.cols)
+    rooms_v = total_vertical_rooms(game.level.rows)
     room_txt = ""
-    if rooms > 1:
-        current_room = viewport_x // LAYOUT.cols + 1
-        room_txt = f"   SALA {current_room}/{rooms}"
+    if rooms_h > 1 or rooms_v > 1:
+        current_h = viewport_x // LAYOUT.cols + 1
+        current_v = viewport_y // LAYOUT.rows + 1
+        if rooms_v > 1:
+            room_txt = f"   SALA {current_h}/{rooms_h} · {current_v}/{rooms_v}"
+        else:
+            room_txt = f"   SALA {current_h}/{rooms_h}"
     # Acto + N/100 (limita el cálculo al rango válido por seguridad)
     act_txt = ""
     if 1 <= game.level_index <= TOTAL_LEVELS:
@@ -1249,6 +1283,7 @@ def render(
     """
     surface.fill(PALETTE.bg)
     viewport_x = viewport_col(game.prince.pos.col, game.level.cols)
+    viewport_y = viewport_row(game.prince.pos.row, game.level.rows)
 
     # Pared trasera + banda de techo
     _draw_back_wall(surface)
@@ -1258,13 +1293,16 @@ def render(
     for local_c in range(0, LAYOUT.cols, 5):
         _draw_pillar(surface, local_c)
 
-    # Tiles visibles (solo las columnas de la habitación actual)
+    # Tiles visibles (sólo las celdas de la habitación actual — recortando
+    # tanto en columnas como en filas, para soportar niveles taller-than-6).
     col_start = viewport_x
     col_end = min(viewport_x + LAYOUT.cols, game.level.cols)
-    for r in range(game.level.rows):
+    row_start = viewport_y
+    row_end = min(viewport_y + LAYOUT.rows, game.level.rows)
+    for r in range(row_start, row_end):
         for c in range(col_start, col_end):
             tile = effective_tile(game.level, game.state, Position(r, c))
-            x, y = _cell_to_px(c - viewport_x, r)
+            x, y = _cell_to_px(c - viewport_x, r - viewport_y)
             if tile is Tile.FLOOR:
                 _draw_floor(surface, x, y)
             elif tile is Tile.LOOSE_FLOOR:
@@ -1287,13 +1325,13 @@ def render(
             elif tile is Tile.EXIT:
                 _draw_exit(surface, x, y)
 
-    # Actores visibles
+    # Actores visibles (recortados a la habitación actual)
     for g in game.guards:
-        if col_start - 1 <= g.pos.col <= col_end:
-            _draw_guard(surface, g, viewport_x=viewport_x)
-    _draw_prince(surface, game.prince, viewport_x=viewport_x)
+        if col_start - 1 <= g.pos.col <= col_end and row_start - 1 <= g.pos.row <= row_end:
+            _draw_guard(surface, g, viewport_x=viewport_x, viewport_y=viewport_y)
+    _draw_prince(surface, game.prince, viewport_x=viewport_x, viewport_y=viewport_y)
 
-    _draw_hud(surface, game, font, viewport_x=viewport_x)
+    _draw_hud(surface, game, font, viewport_x=viewport_x, viewport_y=viewport_y)
 
     if crt:
         _draw_crt(surface)

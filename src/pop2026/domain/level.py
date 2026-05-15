@@ -118,6 +118,22 @@ class LevelState:
     pressed_plates: frozenset[Position] = field(default_factory=frozenset)
     """Placas pisadas en el tick anterior."""
 
+    loose_press_ticks: tuple[tuple[Position, int], ...] = ()
+    """Contador de ticks consecutivos sobre cada loose floor (presión)."""
+
+    def loose_ticks_at(self, pos: Position) -> int:
+        """Devuelve los ticks de presión acumulados en ``pos`` (0 si ninguno)."""
+        for p, t in self.loose_press_ticks:
+            if p == pos:
+                return t
+        return 0
+
+    def with_loose_press(self, pos: Position, ticks: int) -> LevelState:
+        """Set/reset del contador de presión sobre ``pos``."""
+        other = tuple((p, t) for p, t in self.loose_press_ticks if p != pos)
+        new = (*other, (pos, ticks)) if ticks > 0 else other
+        return replace(self, loose_press_ticks=new)
+
     def with_open(self, pos: Position) -> LevelState:
         """Devuelve un nuevo estado con ``pos`` añadida a gates abiertas."""
         return replace(self, open_gates=self.open_gates | {pos})
