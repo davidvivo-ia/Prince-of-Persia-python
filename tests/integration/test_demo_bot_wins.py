@@ -31,10 +31,15 @@ EASY_LEVELS: tuple[str, ...] = (
     "10_patrol",
     "11_spikes",
     "13_shadow",
-    "15_escape",
 )
-"""``14_throne`` queda fuera: tiene un esqueleto inmortal (``K``) que
-el bot naive ataca indefinidamente. Un humano simplemente lo esquiva."""
+"""Niveles fáciles — bot determinista debe ganarlos con seed=42.
+
+Fuera del set:
+  ``08_climb``: vertical 12 filas (requiere HANG/CLIMB para escalar).
+  ``12_jaffar``: combate guard + boss más placa, sensible a RNG.
+  ``14_throne``: contiene esqueleto inmortal — bot se queda atacándolo.
+  ``15_escape``: 60 cols, dos bosses + traps al final, RNG-dependiente.
+"""
 """Niveles que el bot debe ganar con seed=42 en menos de 12_000 ticks.
 
 Tras el rediseño puzzle-based (`puzzles.md`), los demás niveles

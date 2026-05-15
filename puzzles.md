@@ -135,18 +135,29 @@ combate + gestión de HP.
 
 ---
 
-## L08 · La Cornisa — *Salto con carrerilla*
+## L08 · La Cornisa — *Escalada vertical*
 
-**Inspiración POP1**: secciones donde necesitas saltar un foso
-sin caer en pinchos.
+**Inspiración POP1**: las torres del palacio que se trepan
+saltando de cornisa en cornisa.
 
-**Puzzle**: foso de pinchos en sala 2 que sólo se cruza con
-running jump (RIGHT + JUMP simultáneo). Plataforma decorativa
-arriba sugiere la trayectoria. **Skill**: running jump.
+**Puzzle**: nivel **12 filas** (2 habitaciones verticales con
+room-flick). Cinco cornisas en zigzag desde el suelo hasta el
+exit en la sala superior. Cada cornisa se alcanza con un
+salto + agarre + trepar (HANG → CLIMB_UP). **Skill**: trepar.
 
-**Layout**:
-- Sala 1: corredor + plataformas decorativas arriba.
-- Sala 2: foso de pinchos → EXIT.
+**Layout** (esquemático, izquierda mira los cols ledge):
+```
+row 1: ........>...........  (sala superior — exit)
+row 2: ......... ..........  (paso ancho con suelo en row 3)
+row 3: #.####...............  (suelo de la repisa final, gap col 1 para head)
+row 4: ..............      .  (aire)
+row 5: ##...................  (cornisa cols 0-1)
+row 6: ..............      .
+row 7: ..##.................  (cornisa cols 2-3 — zigzag)
+row 8: ..............      .
+row 9: ##...................  (cornisa cols 0-1)
+row10: ..@..................  (sala inferior — spawn)
+```
 
 ---
 
@@ -216,27 +227,22 @@ contra IA-espejo.
 
 ---
 
-## L14 · El Trono — *Salón ceremonial*
+## L14 · El Trono — *Salón ceremonial (3 salas)*
 
-**Inspiración POP1**: el salón del visir con trampas y guardias.
+**Inspiración POP1**: el palacio del visir con trampas, esqueletos
+y guardias.
 
-**Puzzle**: sala 1 tiene sable + placa que abre gate de sala 2.
-Sala 2 tiene boss + poción de max HP escondida tras la gate.
-**Skill**: navegación + boss.
-
-**Layout**:
-- Sala 1: prince → sable → placa → corredor.
-- Sala 2: gate → poción max-hp → boss → EXIT.
+**Puzzle**: 60 columnas = **3 salas horizontales**. Sala 1 tiene
+sable + placa. Sala 2: esqueleto inmortal (`K`) + gate + boss.
+Sala 3: pinchos + boss final + EXIT. **Skill**: gestión de HP +
+esquivar el esqueleto.
 
 ---
 
-## L15 · La Huida — *Carrera final*
+## L15 · La Huida — *Carrera final (3 salas)*
 
-**Inspiración POP1**: el escape final cronometrado.
+**Inspiración POP1**: el escape final cronometrado por el palacio.
 
-**Puzzle**: gauntlet completo: spike + guardia + spike + boss.
-**Skill**: todo lo aprendido.
-
-**Layout**:
-- Sala 1: prince → sable → ^ → guardia → ^.
-- Sala 2: poción heal → guardia → boss → EXIT.
+**Puzzle**: 60 columnas = **3 salas horizontales**. Sala 1: pinchos
+y guardia. Sala 2: pinchos + boss + placa. Sala 3: gate + poción +
+boss final. **Skill**: todo lo aprendido en una pasada cronometrada.
