@@ -36,6 +36,19 @@ class Palette:
     shadow_silhouette: RGB = (0x48, 0x18, 0x6C)
     princess_robe: RGB = (0xE0, 0x50, 0xA0)
     vizier_robe: RGB = (0x20, 0x10, 0x18)
+    # Piel y ropa del kid — canon tributo
+    kid_skin: RGB = (0xD8, 0xA0, 0x70)
+    """Tono piel del kid: bronceado cálido."""
+    kid_hair: RGB = (0x60, 0x30, 0x18)
+    """Pelo castaño oscuro."""
+    kid_tunic: RGB = (0xE8, 0xE4, 0xD0)
+    """Túnica blanca-hueso."""
+    kid_tunic_dark: RGB = (0xA8, 0xA0, 0x88)
+    """Sombra de la túnica."""
+    kid_belt: RGB = (0xC8, 0x28, 0x18)
+    """Cinturón rojo canon."""
+    kid_boot: RGB = (0x38, 0x20, 0x14)
+    """Botas marrón muy oscuro."""
 
 
 PALETTE = Palette()
