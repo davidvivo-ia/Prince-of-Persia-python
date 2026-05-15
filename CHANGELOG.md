@@ -6,6 +6,36 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.6.0] — 2026-05-15
+
+### Plataformas multi-altura intra-sala + L14 jugable + diversidad canon
+
+Refactor profundo de las salas planas: ahora cada nivel mezcla plataformas
+elevadas, arenas con columnas y salas escalonadas para que el juego se
+sienta como POP1 — saltos verticales, posiciones elevadas, combate en
+arena con cobertura, no sólo corredores.
+
+- **Helpers nuevos**: `_platform_rows(platform_cols, pit_cols)` mete
+  plataforma DOORTOP_WITH_FLOOR en row 1 (segundo piso interno);
+  `_split_rows(upper_cols, lower_cols, pit_cols)` da una sala
+  escalonada con plataforma elevada a un lado; `_arena_rows(pillar_pair)`
+  da una sala-arena con dos columnas BIGPILLAR enmarcando el combate.
+- **L14 jugable** (3 salas): pórtico de entrada con plataforma y
+  antorchas → galería de escaleras con lattices y doortop ceremonial →
+  cámara real con pillars y la princesa esperando.
+- **Refactor de salas**: ~25 salas reelaboradas en L1, L2, L3, L4, L5,
+  L6, L7, L8, L9, L11, L12 para usar plataformas, splits o arenas en
+  lugar de corredores planos.
+- **Tests de plataforma** (`test_pathfinding.py` extendido):
+  - `test_no_more_than_two_flat_corridors_per_level`: cada nivel
+    jugable tiene ≤2 salas que son corredores planos puros.
+  - `test_level_has_platform_features`: cada nivel usa al menos una
+    plataforma elevada (DOORTOP_WITH_FLOOR en row 1) o lattice
+    escalable.
+
+**Tests**: 677 verdes (651 previos + 26 nuevos plataforma/contenido).
+mypy strict + ruff format+check limpios.
+
 ## [canon-0.5.0] — 2026-05-15
 
 ### Niveles canon **completos** 18-24 salas + hang-shuffle + path-finding

@@ -74,9 +74,7 @@ def _gate_opened_by_event(level, coord: Cell) -> bool:  # type: ignore[no-untype
     """L8: el mouse abre gates sin doorlink en la sala del MOUSE_APPEAR."""
     from pop2026canon.domain.level import EventKind
 
-    return any(
-        ev.kind is EventKind.MOUSE_APPEAR and ev.room == coord[0] for ev in level.events
-    )
+    return any(ev.kind is EventKind.MOUSE_APPEAR and ev.room == coord[0] for ev in level.events)
 
 
 def _is_landable(level, room_id: int, col: int, row: int) -> bool:  # type: ignore[no-untyped-def]
@@ -362,3 +360,63 @@ def test_potions_have_diverse_modifiers() -> None:
 def test_l12_has_24_rooms() -> None:
     """L12 The Vizier es el nivel más grande del canon — 24 salas."""
     assert len(CANON_LEVELS[11].rooms) == 24
+
+
+def _is_flat_corridor(room) -> bool:  # type: ignore[no-untyped-def]
+    """True si la sala es un corredor plano puro (sin trampas, sin
+    plataformas, sin items, sin pits significativos)."""
+    interesting = (
+        Tile.SPIKE,
+        Tile.LOOSE,
+        Tile.GATE,
+        Tile.OPENER,
+        Tile.CHOMPER,
+        Tile.MIRROR,
+        Tile.SKELETON,
+        Tile.SWORD,
+        Tile.LEVEL_DOOR_LEFT,
+        Tile.LEVEL_DOOR_RIGHT,
+        Tile.POTION,
+        Tile.TORCH,
+        Tile.PILLAR,
+        Tile.BIGPILLAR_TOP,
+        Tile.DOORTOP_WITH_FLOOR,
+        Tile.DOORTOP,
+        Tile.BALCONY_LEFT,
+        Tile.BALCONY_RIGHT,
+        Tile.LATTICE_PILLAR,
+        Tile.LATTICE_DOWN,
+        Tile.LATTICE_SMALL,
+        Tile.DEBRIS,
+    )
+    has_interesting = any(Tile(byte & 0x1F) in interesting for byte in room.fg)
+    if has_interesting:
+        return False
+    # Row 2 con ≥3 huecos = sala interesante (drop puzzle, no corredor)
+    floor_in_row2 = sum(1 for c in range(10) if Tile(room.fg[2 * 10 + c] & 0x1F) is Tile.FLOOR)
+    return floor_in_row2 > 7
+
+
+@pytest.mark.parametrize("level", CANON_LEVELS[:13])
+def test_no_more_than_two_flat_corridors_per_level(level) -> None:  # type: ignore[no-untyped-def]
+    """Cada nivel jugable usa salas con contenido — los corredores planos
+    puros son una excepción ocasional."""
+    flat = sum(1 for r in level.rooms if _is_flat_corridor(r))
+    assert flat <= 2, f"L{level.number}: {flat} corredores planos puros de {len(level.rooms)} salas"
+
+
+@pytest.mark.parametrize("level", CANON_LEVELS[:13])
+def test_level_has_platform_features(level) -> None:  # type: ignore[no-untyped-def]
+    """Cada nivel usa al menos una plataforma elevada (DOORTOP_WITH_FLOOR
+    fuera del techo decorativo) o lattice escalable."""
+    has_feature = False
+    for room in level.rooms:
+        for row in range(3):
+            for col in range(10):
+                piece = Tile(room.fg[row * 10 + col] & 0x1F)
+                if piece in (Tile.LATTICE_PILLAR, Tile.LATTICE_DOWN, Tile.LATTICE_SMALL):
+                    has_feature = True
+                # DOORTOP_WITH_FLOOR en row 1 = plataforma elevada
+                if row == 1 and piece is Tile.DOORTOP_WITH_FLOOR:
+                    has_feature = True
+    assert has_feature, f"L{level.number}: sin plataforma elevada ni lattice"

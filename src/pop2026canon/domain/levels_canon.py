@@ -216,6 +216,77 @@ def _doortop_rows(
     return top, mid, bot
 
 
+def _platform_rows(
+    *,
+    platform_cols: tuple[int, ...] = (4, 5),
+    pit_cols: tuple[int, ...] = (),
+    extras: Mapping[tuple[int, int], Tile] | None = None,
+) -> tuple[list[Tile | int], list[Tile | int], list[Tile | int]]:
+    """Sala con plataforma flotante en row 1 (suelo intermedio en `platform_cols`).
+
+    El kid puede saltar al tile DOORTOP_WITH_FLOOR en row 1 para usarlo
+    como suelo, dando un segundo piso interno a la sala.
+    """
+    top, mid, bot = _floor_rows()
+    for c in platform_cols:
+        if 0 <= c < SCREEN_TILECOUNT_X:
+            mid[c] = DT_F
+    for c in pit_cols:
+        if 0 <= c < SCREEN_TILECOUNT_X:
+            bot[c] = E
+    if extras:
+        for (col, row), tile in extras.items():
+            (top, mid, bot)[row][col] = tile
+    return top, mid, bot
+
+
+def _split_rows(
+    *,
+    upper_cols: tuple[int, ...] = (0, 1, 2, 3),
+    lower_cols: tuple[int, ...] = (6, 7, 8, 9),
+    pit_cols: tuple[int, ...] = (),
+    extras: Mapping[tuple[int, int], Tile] | None = None,
+) -> tuple[list[Tile | int], list[Tile | int], list[Tile | int]]:
+    """Sala "escalonada": plataforma elevada en ``upper_cols`` (row 1) que
+    cubre un lado, y suelo completo en row 2 (excepto ``pit_cols``).
+
+    ``lower_cols`` se mantiene por compatibilidad pero ya no afecta —
+    el suelo es continuo salvo pit explícito.
+    """
+    _ = lower_cols  # parámetro retenido por compatibilidad
+    top: list[Tile | int] = [F] * SCREEN_TILECOUNT_X
+    mid: list[Tile | int] = [E] * SCREEN_TILECOUNT_X
+    bot: list[Tile | int] = [F] * SCREEN_TILECOUNT_X
+    for c in upper_cols:
+        if 0 <= c < SCREEN_TILECOUNT_X:
+            mid[c] = DT_F
+    for c in pit_cols:
+        if 0 <= c < SCREEN_TILECOUNT_X:
+            bot[c] = E
+    if extras:
+        for (col, row), tile in extras.items():
+            (top, mid, bot)[row][col] = tile
+    return top, mid, bot
+
+
+def _arena_rows(
+    *,
+    pillar_pair: tuple[int, int] = (2, 7),
+    extras: Mapping[tuple[int, int], Tile] | None = None,
+) -> tuple[list[Tile | int], list[Tile | int], list[Tile | int]]:
+    """Sala-arena: suelo completo, dos columnas grandes flanqueando el
+    centro para el combate."""
+    top, mid, bot = _floor_rows()
+    for c in pillar_pair:
+        if 0 <= c < SCREEN_TILECOUNT_X:
+            mid[c] = BP_T
+            bot[c] = BP_B
+    if extras:
+        for (col, row), tile in extras.items():
+            (top, mid, bot)[row][col] = tile
+    return top, mid, bot
+
+
 # ---------------------------------------------------------------------------
 # RoomSpec — declaración compacta de una sala
 # ---------------------------------------------------------------------------
@@ -307,12 +378,16 @@ def _l1() -> Level:
         _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), s=7, e=2),  # 1 spawn + loose
         _spec(_floor_rows(extras={(6, 1): T}), w=1, e=3),
         _spec(_floor_rows(pit_cols=(4, 5)), w=2, e=4, s=9),  # 3 pit
-        _spec(_pillar_rows(pillar_cols=(3, 6)), w=3, e=5),
-        _spec(_floor_rows(extras={(3, 1): L, (6, 1): T}), w=4, e=6),
+        _spec(_platform_rows(platform_cols=(4, 5), extras={(7, 1): T}), w=3, e=5),  # 4 plataforma
+        _spec(_split_rows(upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9)), w=4, e=6),  # 5 split
         _spec(_floor_rows(extras={(5, 2): L}), w=5, s=12),  # 6 dead-end con drop
         # Piso intermedio
         _spec(_floor_rows(extras={(6, 1): T}), n=1, e=8),
-        _spec(_floor_rows(extras={(2, 1): SW}), w=7, e=9, fg_mods=()),  # 8 SWORD
+        _spec(
+            _platform_rows(platform_cols=(2, 3), extras={(2, 1): SW, (5, 1): T}),
+            w=7,
+            e=9,
+        ),  # 8 SWORD en plataforma
         _spec(_floor_rows(extras={(5, 1): G}), n=3, w=8, e=10),  # 9 gate
         _spec(
             _floor_rows(extras={(4, 1): C}),
@@ -371,17 +446,29 @@ def _l2() -> Level:
     specs = [
         # Fila norte
         _spec(_floor_rows(extras={(5, 2): L}), s=11, e=2),  # 1 spawn
-        _spec(_floor_rows(), w=1, e=3, guards=(G_S(col=5, row=1, direction=-1, skill=1),)),
+        _spec(
+            _floor_rows(extras={(2, 1): T, (7, 1): T}),
+            w=1,
+            e=3,
+            guards=(G_S(col=5, row=1, direction=-1, skill=1),),
+        ),  # 2 patio con antorchas
         _spec(_floor_rows(extras={(4, 1): C}), w=2, e=4),
-        _spec(_lattice_rows(lattice_cols=(3, 6)), w=3, e=5),
-        _spec(_floor_rows(extras={(3, 2): L, (4, 2): L}), w=4, e=6, s=19),
+        _spec(_platform_rows(platform_cols=(4, 5), pit_cols=(7,)), w=3, e=5),  # 4 plataforma + pit
+        _spec(
+            _split_rows(upper_cols=(0, 1, 2, 3), lower_cols=(5, 6, 7, 8, 9)), w=4, e=6, s=19
+        ),  # 5 split
         _spec(_floor_rows(extras={(5, 1): G}), w=5, e=7, s=15),
         _spec(_floor_rows(extras={(2, 1): P}), w=6, e=8),  # 7 plate
-        _spec(_floor_rows(), w=7, e=9, guards=(G_S(col=5, row=1, direction=-1, skill=2),)),
+        _spec(
+            _arena_rows(pillar_pair=(2, 7)),
+            w=7,
+            e=9,
+            guards=(G_S(col=5, row=1, direction=-1, skill=2),),
+        ),  # 8 arena
         _spec(_pillar_rows(pillar_cols=(4,)), w=8, e=10),
         _spec(_floor_rows(extras={(6, 1): T}), w=9, s=18),
         # Fila sur (intermedio)
-        _spec(_floor_rows(), n=1, e=12),
+        _spec(_floor_rows(extras={(5, 1): T}), n=1, e=12),  # 11 antorcha
         _spec(_floor_rows(extras={(5, 1): C}), w=11, e=13),
         _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), w=12, e=14),
         _spec(_floor_rows(extras={(3, 1): P, (7, 1): G}), w=13, e=15),  # 14 plate+gate
@@ -392,7 +479,7 @@ def _l2() -> Level:
             e=16,
             guards=(G_S(col=3, row=1, direction=0, skill=3),),
         ),
-        _spec(_floor_rows(pit_cols=(5,)), w=15, e=17),
+        _spec(_pillar_rows(pillar_cols=(4, 6), extras={(5, 0): DT}), w=15, e=17),  # 16 con pillars
         _spec(_floor_rows(extras={(4, 1): C}), w=16, e=18),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
@@ -431,10 +518,17 @@ def _l3() -> Level:
     specs = [
         _spec(_floor_rows(extras={(4, 1): SK}), e=2),  # 1 esqueleto durmiente
         _spec(_floor_rows(extras={(5, 2): L}), w=1, e=3),
-        _spec(_floor_rows(pit_cols=(4, 5)), w=2, e=4, s=10),
+        _spec(
+            _platform_rows(platform_cols=(4, 5), pit_cols=(4, 5)), w=2, e=4, s=10
+        ),  # 3 plataforma sobre pit
         _spec(_lattice_rows(lattice_cols=(4,)), w=3, e=5),
         _spec(_floor_rows(extras={(3, 1): C}), w=4, e=6),
-        _spec(_floor_rows(), w=5, e=7, guards=(G_S(col=5, row=1, direction=-1, skill=2),)),
+        _spec(
+            _arena_rows(pillar_pair=(2, 7)),
+            w=5,
+            e=7,
+            guards=(G_S(col=5, row=1, direction=-1, skill=2),),
+        ),  # 6 arena
         _spec(_pillar_rows(pillar_cols=(3, 7)), w=6, e=8),
         _spec(_floor_rows(extras={(5, 1): G}), w=7, e=9, s=16),  # 8 gate
         _spec(_floor_rows(extras={(5, 1): P}), w=8),  # 9 plate
@@ -443,7 +537,12 @@ def _l3() -> Level:
         _spec(_floor_rows(extras={(6, 1): T}), w=10, e=12),
         _spec(_doortop_rows(doortop_cols=(4, 5)), w=11, e=13),
         _spec(_floor_rows(extras={(3, 1): C, (6, 1): C}), w=12, e=14),
-        _spec(_floor_rows(), w=13, e=15, guards=(G_S(col=5, row=1, direction=0, skill=2),)),
+        _spec(
+            _arena_rows(pillar_pair=(2, 7)),
+            w=13,
+            e=15,
+            guards=(G_S(col=5, row=1, direction=0, skill=2),),
+        ),  # 14 arena
         _spec(_floor_rows(extras={(4, 1): P}), w=14, e=16),  # 15 plate
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
@@ -550,13 +649,19 @@ def _l5() -> Level:
             guards=(G_S(col=5, row=1, direction=-1, skill=3),),
         ),  # 1 spawn + drop al sub-loop
         _spec(_floor_rows(extras={(3, 2): L, (4, 2): L, (5, 2): L}), w=1, e=3),  # triple loose
-        _spec(_floor_rows(extras={(5, 1): C, (7, 1): S}), w=2, e=4),
-        _spec(_floor_rows(extras={(4, 1): PO}), w=3, e=5),  # 4 POTION objetivo del shadow
+        _spec(
+            _split_rows(upper_cols=(0, 1, 2, 3), lower_cols=(6, 7, 8, 9), extras={(7, 1): S}),
+            w=2,
+            e=4,
+        ),  # 3 escalonada
+        _spec(
+            _platform_rows(platform_cols=(3, 4, 5), extras={(4, 1): PO}), w=3, e=5
+        ),  # 4 POTION en plataforma
         _spec(_floor_rows(extras={(5, 2): L}), w=4, e=6),
         _spec(_floor_rows(extras={(8, 1): P}), w=5, e=7),
         _spec(_floor_rows(extras={(3, 1): G}), w=6, e=8, s=14),
-        _spec(_pillar_rows(pillar_cols=(4, 6)), w=7, e=9),
-        _spec(_floor_rows(extras={(5, 1): T}), w=8, e=10),
+        _spec(_arena_rows(pillar_pair=(2, 7)), w=7, e=9),  # 8 arena con torchas implícitas
+        _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): T}), w=8, e=10),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
             w=9,
@@ -617,11 +722,15 @@ def _l6() -> Level:
             e=5,
             guards=(G_S(col=5, row=1, direction=-1, skill=4),),
         ),
-        _spec(_pillar_rows(pillar_cols=(4, 6)), w=4, e=6),
-        _spec(_floor_rows(extras={(5, 2): L}), w=5, e=7, s=11),
+        _spec(_arena_rows(pillar_pair=(3, 7)), w=4, e=6),  # 5 arena combat
+        _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 2): L}), w=5, e=7, s=11),
         _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=6, e=8),
         _spec(_floor_rows(extras={(5, 1): G, (8, 1): P}), w=7, e=9),  # 8 gate + plate local
-        _spec(_floor_rows(extras={(3, 1): C}), w=8, e=10),
+        _spec(
+            _split_rows(upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9), extras={(3, 1): C}),
+            w=8,
+            e=10,
+        ),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
             w=9,
@@ -665,15 +774,17 @@ def _l7() -> Level:
         _spec(_floor_rows(extras={(5, 2): L}), e=2, s=8),  # 1 spawn drop
         _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S}), w=1, e=3),
         _spec(_lattice_rows(lattice_cols=(3, 6)), w=2, e=4),
-        _spec(_floor_rows(extras={(5, 1): P}), w=3, e=5),  # 4 plate
+        _spec(
+            _platform_rows(platform_cols=(3, 4, 5), extras={(5, 1): P}), w=3, e=5
+        ),  # 4 plate en plataforma
         _spec(_pillar_rows(pillar_cols=(4, 7)), w=4, e=6),
         _spec(
-            _floor_rows(),
+            _arena_rows(pillar_pair=(2, 7)),
             w=5,
             e=7,
             s=14,
             guards=(G_S(col=5, row=1, direction=-1, skill=5),),
-        ),
+        ),  # 6 arena
         _spec(_floor_rows(extras={(5, 1): G}), w=6, s=15),  # 7 gate dead-end
         # Piso intermedio
         _spec(_drop_rows(floor_cols=(0, 1, 8, 9), extras={(5, 1): T}), n=1, e=9),
@@ -775,16 +886,18 @@ def _l9() -> Level:
         _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S}), w=1, e=3, s=11),
         _spec(_pillar_rows(pillar_cols=(4,)), w=2, e=4),
         _spec(
-            _floor_rows(extras={(8, 1): PO}),
+            _arena_rows(pillar_pair=(2, 7), extras={(8, 1): PO}),
             w=3,
             e=5,
             guards=(G_S(col=5, row=1, direction=-1, skill=5),),
-        ),
+        ),  # 4 arena con potion
         _spec(_floor_rows(extras={(5, 1): G}), w=4, e=6),  # 5 gate
         _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=5, e=7),
-        _spec(_floor_rows(extras={(5, 1): SK, (4, 1): P}), w=6, e=8),  # plate
+        _spec(
+            _platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): SK, (4, 1): P}), w=6, e=8
+        ),  # plate alto
         _spec(_balcony_rows(side="right"), w=7, e=9),
-        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C}), w=8, e=10),
+        _spec(_split_rows(upper_cols=(0, 1, 2), extras={(4, 1): C, (6, 1): C}), w=8, e=10),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
             w=9,
@@ -895,15 +1008,22 @@ def _l10() -> Level:
 def _l11() -> Level:
     G_S = GuardSpawn  # noqa: N806
     specs = [
-        _spec(_floor_rows(pit_cols=(4, 5)), e=2, s=3),  # 1
-        _spec(_floor_rows(), w=1, s=7, guards=(G_S(col=5, row=1, direction=-1, skill=5),)),
+        _spec(
+            _platform_rows(platform_cols=(4, 5, 6), pit_cols=(4, 5), extras={(2, 1): T}), e=2, s=3
+        ),  # 1 spawn + plataforma
+        _spec(
+            _arena_rows(pillar_pair=(2, 7)),
+            w=1,
+            s=7,
+            guards=(G_S(col=5, row=1, direction=-1, skill=5),),
+        ),  # 2 arena
         _spec(_floor_rows(extras={(3, 1): C, (6, 1): C, (5, 2): L}), n=1, e=4),
         _spec(
-            _floor_rows(pit_cols=(7,)),
+            _platform_rows(platform_cols=(3, 4, 5), pit_cols=(7,)),
             w=3,
             s=5,
             guards=(G_S(col=4, row=1, direction=-1, skill=5),),
-        ),
+        ),  # 4 plataforma + pit
         _spec(_floor_rows(extras={(5, 1): G, (2, 1): P}), n=4, e=6),  # 5 plate+gate local
         _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR}), w=5),  # 6 exit
         # Loop alterno — accesible por drop sur desde sala 2
@@ -950,26 +1070,32 @@ def _l12() -> Level:
     G_S = GuardSpawn  # noqa: N806
     specs = [
         _spec(
-            _floor_rows(extras={(7, 1): S}),
+            _platform_rows(platform_cols=(4, 5), extras={(7, 1): S}),
             e=2,
             guards=(G_S(col=5, row=1, direction=-1, skill=6),),
-        ),  # 1
-        _spec(_floor_rows(extras={(3, 1): C, (6, 1): C}), w=1, e=3),
+        ),  # 1 spawn con plataforma + spike
+        _spec(_split_rows(upper_cols=(0, 1, 2), extras={(3, 1): C, (6, 1): C}), w=1, e=3),
         _spec(
-            _floor_rows(extras={(2, 1): PO}),
+            _arena_rows(pillar_pair=(2, 7), extras={(2, 1): PO}),
             w=2,
             e=4,
             guards=(G_S(col=5, row=1, direction=-1, skill=7),),
-        ),
-        _spec(_floor_rows(pit_cols=(6,), extras={(4, 2): L, (5, 2): L}), w=3, e=5),
-        _spec(_floor_rows(extras={(5, 1): M, (8, 1): PO}), w=4, e=6),  # 5 MIRROR fusion
-        _spec(_floor_rows(extras={(5, 2): L}), w=5, e=7),
+        ),  # 3 arena
         _spec(
-            _floor_rows(extras={(2, 1): S, (8, 1): S}),
+            _platform_rows(
+                platform_cols=(3, 4, 5, 6), pit_cols=(6,), extras={(4, 2): L, (5, 2): L}
+            ),
+            w=3,
+            e=5,
+        ),
+        _spec(_floor_rows(extras={(5, 1): M, (8, 1): PO}), w=4, e=6),  # 5 MIRROR fusion
+        _spec(_split_rows(upper_cols=(6, 7, 8, 9), extras={(5, 2): L}), w=5, e=7),
+        _spec(
+            _arena_rows(pillar_pair=(1, 8), extras={(2, 1): S, (8, 1): S}),
             w=6,
             e=8,
             guards=(G_S(col=5, row=1, direction=-1, skill=11),),
-        ),  # 7 vizier arena
+        ),  # 7 ARENA VIZIER
         _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR}), w=7, s=9),  # 8 exit + drop a galería
         # Galería sub — accesible vía drop desde sala 8
         _spec(_lattice_rows(lattice_cols=(3, 6), extras={(5, 1): T}), n=8, e=10),
@@ -1035,18 +1161,34 @@ def _l13() -> Level:
         ),
         _spec(_floor_rows(pit_cols=(4, 5, 6), extras={(3, 1): S, (7, 1): S}), w=2, e=4),
         _spec(_lattice_rows(lattice_cols=(3, 6)), w=3, e=5),
-        _spec(_pillar_rows(pillar_cols=(4, 6)), w=4, e=6),
+        _spec(
+            _platform_rows(platform_cols=(3, 4, 5, 6), pit_cols=(4, 5)), w=4, e=6
+        ),  # 5 plataforma sobre pit
         _spec(_floor_rows(extras={(5, 1): C}), w=5, e=7),
-        _spec(_floor_rows(extras={(2, 1): S, (8, 1): S}), w=6, e=8),
+        _spec(
+            _split_rows(
+                upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9), extras={(2, 1): S, (8, 1): S}
+            ),
+            w=6,
+            e=8,
+        ),
         _spec(_doortop_rows(doortop_cols=(4, 5)), w=7, e=9),
-        _spec(_floor_rows(extras={(5, 2): L}), w=8, e=10),
+        _spec(
+            _platform_rows(platform_cols=(2, 3, 4, 5, 6, 7), extras={(5, 2): L}), w=8, e=10
+        ),  # 9 viga
         _spec(_floor_rows(extras={(3, 1): C, (7, 1): C}), w=9, e=11),
         _spec(_balcony_rows(side="right"), w=10, e=12),
         _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=11, e=13),
-        _spec(_floor_rows(extras={(5, 1): T}), w=12, e=14),
+        _spec(_arena_rows(pillar_pair=(3, 7), extras={(5, 1): T}), w=12, e=14),  # 13 arena
         _spec(_floor_rows(extras={(2, 1): S, (4, 1): S, (6, 1): S}), w=13, e=15),
         _spec(_pillar_rows(pillar_cols=(3, 7)), w=14, e=16),
-        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C}), w=15, e=17),
+        _spec(
+            _split_rows(
+                upper_cols=(0, 1, 2, 3), lower_cols=(6, 7, 8, 9), extras={(4, 1): C, (6, 1): C}
+            ),
+            w=15,
+            e=17,
+        ),
         _spec(_doortop_rows(doortop_cols=(3, 4, 5, 6)), w=16, e=18),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
@@ -1064,27 +1206,47 @@ def _l13() -> Level:
 
 
 # ===========================================================================
-# Nivel 14 — Ending  (1 sala — cinemática princesa)
+# Nivel 14 — Ending  (3 salas — acceso + escaleras + cámara princesa)
 # ===========================================================================
 def _l14() -> Level:
     specs = [
+        # Sala 1: pórtico de entrada con antorchas + plataforma alta
         _spec(
-            _floor_rows(
+            _platform_rows(
+                platform_cols=(3, 4, 5, 6),
+                extras={(0, 1): T, (9, 1): T},
+            ),
+            e=2,
+        ),
+        # Sala 2: galería de escaleras (lattice) hacia el norte ceremonial
+        _spec(
+            _lattice_rows(
+                lattice_cols=(3, 5, 7),
+                extras={(2, 1): T, (5, 0): DT, (7, 1): T},
+            ),
+            w=1,
+            e=3,
+        ),
+        # Sala 3: cámara real con la princesa
+        _spec(
+            _arena_rows(
+                pillar_pair=(1, 8),
                 extras={
                     (3, 1): T,
-                    (5, 1): T,
+                    (5, 0): DT,
                     (7, 1): T,
-                }
+                },
             ),
+            w=2,
         ),
     ]
-    events = (Event(EventKind.PRINCESS_REUNION, room=1),)
+    events = (Event(EventKind.PRINCESS_REUNION, room=3),)
     return _build_level(
         number=14,
         name="Ending",
         specs=specs,
         start_room=1,
-        start_col=2,
+        start_col=1,
         start_row=1,
         events=events,
     )
