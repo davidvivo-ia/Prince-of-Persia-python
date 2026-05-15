@@ -143,9 +143,15 @@ def decide(game: Game, rng: Rng) -> InputFrame:
         return InputFrame(command=cmd)
 
     # Pinchos, pared o hueco delante: salta SIN soltar el avance.
-    # Pasamos `jump_pressed=True` para activar el buffer en paralelo a
-    # la dirección, manteniendo el momento horizontal en el aire.
-    needs_jump = _front_is_spike(game) or _front_solid(game) or _gap_under_front(game)
+    # Sólo dispara el salto si el príncipe está en el suelo (evita
+    # re-disparar mientras está en el aire — _gap_under_front da
+    # falsos positivos al evaluar desde la fila del salto).
+    from pop2026.domain.physics import is_grounded
+
+    grounded = is_grounded(p.body, game.level, game.state)
+    needs_jump = grounded and (
+        _front_is_spike(game) or _front_solid(game) or _gap_under_front(game)
+    )
     if needs_jump:
         return _step_command(game, jump=True)
 

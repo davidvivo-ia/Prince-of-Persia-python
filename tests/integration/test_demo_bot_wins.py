@@ -24,14 +24,18 @@ EASY_LEVELS: tuple[str, ...] = (
     "02_sword",
     "04_traps",
     "05_plate",
-    "06_loose",
-    "08_climb",
     "09_maze",
-    "12_jaffar",
+    "11_spikes",
     "13_shadow",
-    "15_escape",
 )
-"""Niveles que el bot debe ganar con seed=42 en menos de 12_000 ticks."""
+"""Niveles que el bot debe ganar con seed=42 en menos de 12_000 ticks.
+
+Tras el rediseño puzzle-based (`puzzles.md`), los demás niveles
+implican: recoger sable + combatir (`03`, `07`, `10`, `12`, `14`, `15`),
+identificar caída segura entre suelos sueltos (`06`), o un salto
+con ventana estrecha tras pinchos (`08`) — todos jugables por
+humano pero fuera del alcance de la IA naive del bot.
+"""
 
 
 @pytest.mark.parametrize("slug", EASY_LEVELS)
