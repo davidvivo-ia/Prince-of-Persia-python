@@ -25,6 +25,38 @@ from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.seqtbl import BLOCK_WINDOW, STRIKE_WINDOW
 
 
+def _exit_strike_window(attacker: Char) -> Char:
+    """Avanza la secuencia del attacker hasta salir de ``STRIKE_WINDOW``.
+
+    Llamado tras conectar (o fallar) un strike para evitar multi-hit en
+    los frames consecutivos 165-167 de la misma secuencia.
+
+    Si el char no está ejecutando una sequence válida (curr_seq_id no
+    está en la tabla), se devuelve sin cambios — los tests crean Chars
+    con seq_id=0 que no tiene entry.
+    """
+    # Solo procesa si está en seq STRIKE/BLOCK_TO_STRIKE u otras conocidas
+    # — eso evita errores en tests con seq_id=0.
+    from pop2026canon.domain.physics import play_seq
+    from pop2026canon.domain.seqtbl import TABLE
+
+    if attacker.curr_seq_id not in TABLE:
+        return attacker
+
+    char = attacker
+    for _ in range(8):
+        if char.frame not in STRIKE_WINDOW:
+            return char
+        try:
+            new_char = play_seq(char)
+        except KeyError:
+            return char
+        if new_char.curr_seq_idx == char.curr_seq_idx and new_char.frame == char.frame:
+            return char
+        char = new_char
+    return char
+
+
 @dataclass(frozen=True, slots=True)
 class HitResult:
     """Resultado de aplicar daño a un char."""
@@ -84,11 +116,18 @@ def take_hp(char: Char, amount: int = 1) -> HitResult:
             killed=True,
         )
 
+    # Hit no letal: el char sufre stagger pero vuelve a STAND para
+    # que el jugador pueda seguir reaccionando. Reseteamos la secuencia
+    # de strike entrante para que el atacante no encadene hits en la
+    # misma animación.
     return HitResult(
         char=replace(
             char,
             hp_curr=new_hp,
-            action=Action.HURT,
+            action=Action.STAND,
+            curr_seq_id=int(Seq.STAND),
+            curr_seq_idx=0,
+            frame=15,
         ),
         killed=False,
     )
@@ -129,11 +168,16 @@ def can_strike(attacker: Char, target: Char) -> bool:
     """``True`` si ``attacker`` está en posición para alcanzar ``target``
     con su sable.
 
+    - Attacker tiene espada DRAWN
     - Misma sala
     - Misma fila
     - Distancia horizontal exactamente 1 col (canon strike reach)
     - Attacker mira hacia el target
     """
+    from pop2026canon.domain.actions import SwordStatus
+
+    if attacker.sword != SwordStatus.DRAWN:
+        return False
     if attacker.room != target.room:
         return False
     if attacker.curr_row != target.curr_row:
@@ -141,13 +185,6 @@ def can_strike(attacker: Char, target: Char) -> bool:
     dist = target.curr_col - attacker.curr_col
     if abs(dist) != 1:
         return False
-    # El attacker debe mirar hacia el target
-    if dist > 0 and attacker.direction != 0:
-        # direction 0 (RIGHT) y target a la derecha
-        return False
-    if dist < 0 and attacker.direction != -1:
-        return False
-    # Las condiciones canon son simétricas — facing correcto
     return (dist > 0 and attacker.direction == 0) or (dist < 0 and attacker.direction == -1)
 
 
@@ -182,7 +219,8 @@ def resolve_combat(kid: Char, guard: Char) -> CombatResolution:
     kid_hit = False
     guard_hit = False
 
-    # Kid ataca
+    # Kid ataca — tras un golpe, su secuencia avanza fuera de STRIKE_WINDOW
+    # para evitar multi-hit en frames 165-167.
     if (
         is_in_strike_window(new_kid)
         and can_strike(new_kid, new_guard)
@@ -190,9 +228,10 @@ def resolve_combat(kid: Char, guard: Char) -> CombatResolution:
     ):
         result = take_hp(new_guard, 1)
         new_guard = result.char
+        new_kid = _exit_strike_window(new_kid)
         guard_hit = True
 
-    # Guard ataca
+    # Guard ataca — idéntico.
     if (
         is_in_strike_window(new_guard)
         and can_strike(new_guard, new_kid)
@@ -200,6 +239,7 @@ def resolve_combat(kid: Char, guard: Char) -> CombatResolution:
     ):
         result = take_hp(new_kid, 1)
         new_kid = result.char
+        new_guard = _exit_strike_window(new_guard)
         kid_hit = True
 
     return CombatResolution(

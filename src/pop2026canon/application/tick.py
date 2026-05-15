@@ -67,6 +67,11 @@ def advance(game: Game, cmd: Command) -> Game:
     # 7b. Eventos canon scripted: shadow, skeleton, vizier, princess, mouse
     interim = replace(game, kid=new_kid, others=new_others, state=new_state)
     interim = _trigger_special_chars(interim)
+
+    # 7c. IA de guards (acercarse al kid, ataque, bloqueo)
+    from pop2026canon.domain.guard import step_guards_ai
+
+    interim = step_guards_ai(interim)
     new_kid = interim.kid
     new_others = interim.others
     new_state = interim.state

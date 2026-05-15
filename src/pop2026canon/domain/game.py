@@ -134,6 +134,8 @@ def new_game(level: Level, *, starting_hp: int = START_HITP) -> Game:
             hp = guard_hp_for_level(level.number)
             if hp == 0:
                 continue
+            from pop2026canon.domain.actions import SwordStatus
+
             guard_list.append(
                 Char(
                     charid=CharId.GUARD,
@@ -144,6 +146,8 @@ def new_game(level: Level, *, starting_hp: int = START_HITP) -> Game:
                     hp_curr=hp,
                     hp_max=hp,
                     curr_seq_id=int(Seq.STAND),
+                    sword=SwordStatus.DRAWN,
+                    skill=spawn.skill,
                 )
             )
 

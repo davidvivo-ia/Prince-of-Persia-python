@@ -80,6 +80,9 @@ class Char:
     repeat: int = 0
     """Veces que se ha repetido el seq actual (para ciclos)."""
 
+    skill: int = 0
+    """Skill (0..11) de un guard. 0 para chars sin combate."""
+
 
 @dataclass(frozen=True, slots=True)
 class GuardSkill:

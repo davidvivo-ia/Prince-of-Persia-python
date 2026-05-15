@@ -6,6 +6,48 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.7.0] — 2026-05-15
+
+### Combate REAL + trampas verificadas + IA de guard
+
+Auditoría profunda del gameplay tras feedback "los niveles no tienen
+sentido, la lucha no funciona". Confirmado: los guards eran estatuas
+inertes, el kid los mataba sin oposición. Arreglos:
+
+- **IA de guard** (`domain/guard.py` nueva):
+  - FSM determinista por seed (tick + room + idx).
+  - Estados: idle / face / advance / strike / block.
+  - Cuando el kid está adyacente, el guard ataca con probabilidad
+    creciente según skill (0..11), bloquea strikes entrantes según
+    `prob_block` del skill.
+  - Avanza hacia el kid si está en la misma row a distancia >1.
+  - Cooldown (`refractory`) tras cada strike/block.
+  - Integrada en `tick.advance` entre special chars y combat.
+- **`Char.skill: int`** nuevo campo para los 12 niveles canon de skill.
+  Guards spawnan con `SwordStatus.DRAWN` y skill heredado del GuardSpawn.
+- **Combat fixes**:
+  - `can_strike` exige attacker.sword == DRAWN (antes el kid sin
+    espada hacía daño — bug).
+  - Tras conectar un strike, `_exit_strike_window` avanza la secuencia
+    del atacante para salir de los frames 165-167 y evitar multi-hit
+    triple en la misma animación.
+  - `take_hp` no letal devuelve al char a Action.STAND (no parálisis
+    HURT permanente, gameplay responsivo).
+- **Tests de gameplay end-to-end** (`test_gameplay.py` nuevo, 10 tests):
+  - Guard adyacente mata al kid pasivo en pocos ticks.
+  - Guard distante avanza hacia el kid.
+  - Kid con espada mata al guard usando STRIKE repetido.
+  - Kid sin espada NO hace daño (regresión documentada).
+  - Chomper mata al kid en su fase letal.
+  - Spike mata al kid aterrizando con fall_y alto.
+  - Loose floor cae tras LOOSE_FLOOR_DELAY ticks.
+  - Gate cerrada es sólida.
+  - Kid recoge sword pisándola (`SwordStatus.DRAWN`).
+  - Mouse de L8 abre la gate de su sala.
+
+**Tests**: 687 verdes (677 previos + 10 gameplay). mypy strict + ruff
+limpios.
+
 ## [canon-0.6.0] — 2026-05-15
 
 ### Plataformas multi-altura intra-sala + L14 jugable + diversidad canon

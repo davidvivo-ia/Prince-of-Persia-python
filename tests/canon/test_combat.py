@@ -53,7 +53,9 @@ class TestTakeHP:
         result = take_hp(kid, 1)
         assert result.char.hp_curr == 2
         assert result.killed is False
-        assert result.char.action is Action.HURT
+        # Tras un hit no letal el char queda en STAND para poder reaccionar
+        # (canon: stagger corto, no parálisis).
+        assert result.char.action is Action.STAND
 
     def test_lethal_damage(self) -> None:
         kid = _kid(hp_curr=1)
@@ -170,13 +172,17 @@ class TestResolveCombat:
         assert result.guard_hit is False
         assert result.guard.hp_curr == 4
 
-    def test_simultaneous_strike(self) -> None:
-        """Ambos en strike window — ambos se golpean."""
+    def test_simultaneous_strike_first_wins(self) -> None:
+        """Ambos en strike window — el primero (kid) pega; el guard
+        interrumpido por el daño pierde su strike (canon: hit cancela
+        animación del receptor)."""
         kid = _kid(frame=166, direction=int(Direction.RIGHT))
         guard = _guard(frame=166, direction=int(Direction.LEFT))
         result = resolve_combat(kid, guard)
-        assert result.kid_hit is True
+        # El kid pegó al guard primero.
         assert result.guard_hit is True
+        # El guard fue interrumpido y NO contraataca en este tick.
+        assert result.kid_hit is False
 
     def test_no_strike_no_damage(self) -> None:
         kid = _kid(frame=150)  # engarde, no strike
