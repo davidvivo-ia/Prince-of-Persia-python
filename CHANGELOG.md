@@ -6,6 +6,45 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.3.0] — 2026-05-15
+
+### Niveles 4-13 refinados con layouts canon ricos
+
+Los stubs corredor-plano de L4-L13 se reemplazan por layouts con
+mecánicas variadas y progresión coherente:
+
+- **L4 The Mirror**: loose en sala 1, slalom de pinchos, pit central que
+  fuerza runjump, mirror + potion, plate+chomper, gate doorlinked al
+  exit con guard skill 3.
+- **L5 The Thief**: triple loose en sala 2 (slalom rápido), chomper+spike,
+  potion objetivo del shadow, segundo loose, plate→gate doorlink al
+  exit.
+- **L6 The Steps**: pit grande en sala 1 (cols 4-6) que dispara
+  shadow_step en frame 43, plate+chomper en sala 3, doorlink a gate
+  sala 2, guard skill 4 con spike adyacente.
+- **L7 The Mountains**: layout en "L" con drop sur por col 8, jardín
+  de pinchos, loose escalonadas en el piso bajo, doble chomper.
+- **L8 The Caverns**: drop al sur cols 4-5, 4 loose floors en sala 4,
+  doble chomper, gate locked que sólo el mouse abre.
+- **L9 The Tomb**: dos skeletons + jardín de spikes + doble chomper +
+  plate→gate doorlink + potion heal.
+- **L10 The Tower**: torre puramente vertical con drop_rooms de
+  plataformas estrechas en cada nivel + spike garden + guards skill 5.
+- **L11 The Tower II**: combina horizontal + vertical, doble chomper,
+  loose intermedia, drop final con plate+gate locales.
+- **L12 The Vizier**: 8 salas con spike, doble chomper, potion max_hp,
+  pit con loose, mirror+potion heal para fusión, arena del vizier
+  skill 11 con spikes laterales.
+- **L13 Final Run**: 4 salas en carrera — triple chomper en cadencia,
+  spike garden con loose intermedia, pit con spikes a los lados.
+
+**Helpers nuevos**: `_corridor(..., pit_cols=..., no_ceiling=...)` y
+`_drop_room(..., floor_cols=...)` para layouts verticales.
+
+**Tests**: 564 verdes (541 previos + 23 nuevos en
+`test_levels_content.py` que validan tiles+eventos+room counts+links).
+mypy strict + ruff limpios.
+
 ## [canon-0.2.0] — 2026-05-15
 
 ### Motor canon — cierre final
