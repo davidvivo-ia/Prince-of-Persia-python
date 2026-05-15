@@ -49,6 +49,25 @@ class Palette:
     """Cinturón rojo canon."""
     kid_boot: RGB = (0x38, 0x20, 0x14)
     """Botas marrón muy oscuro."""
+    # Paleta del poster canon (cortinas + cielo nocturno + palacio)
+    poster_curtain: RGB = (0xB8, 0x18, 0x18)
+    """Rojo carmesí de las cortinas que enmarcan la escena."""
+    poster_curtain_dark: RGB = (0x60, 0x08, 0x10)
+    """Sombra y pliegues de las cortinas."""
+    poster_sky: RGB = (0x14, 0x18, 0x4C)
+    """Azul nocturno tras el palacio."""
+    poster_sky_light: RGB = (0x40, 0x48, 0x90)
+    """Halo claro alrededor de la luna."""
+    poster_moon: RGB = (0xF4, 0xEC, 0xC8)
+    """Luna llena crema."""
+    poster_palace: RGB = (0xA8, 0xB4, 0xD4)
+    """Palacio en silueta pálida."""
+    poster_palace_dark: RGB = (0x4C, 0x58, 0x78)
+    """Sombra del palacio."""
+    poster_gold: RGB = (0xE8, 0xC0, 0x40)
+    """Dorado del título PRINCE OF PERSIA."""
+    poster_gold_dark: RGB = (0x80, 0x50, 0x10)
+    """Sombra del título."""
 
 
 PALETTE = Palette()

@@ -6,6 +6,45 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.4.0] — 2026-05-15
+
+### Poster canon + intro animada + level cards en todos los niveles
+
+Cinemática y presentación visual al nivel del original (tributo
+procedural, sin reproducir el arte):
+
+- **`presentation/poster.py`** nuevo: poster procedural en 5 capas
+  (cielo nocturno con estrellas titilantes → luna llena con halo →
+  palacio de minaretes con cúpula central y ventanas iluminadas →
+  cortinas rojas con pliegues + cordones dorados → siluetas de
+  princesa/Jaffar/prince/guard usando el atlas con paletas). API
+  `draw_poster(...)` con `PosterCast` y `curtain_openness` 0..1
+  para animar apertura.
+- **`LEVEL_CASTS`** mapea cada nivel 1..14 a un cast narrativo:
+  L3 sólo prince, L4-6 prince+vizier (sombra), L12 trío completo,
+  L13 sin vizier (ya derrotado), L14 reunion con princesa.
+- **Intro animada** (`screens/title.py`): cortinas cerradas + fade
+  desde negro → easing cubic out → cortinas abriéndose mientras el
+  título aparece a partir del 45% → estado estable con controles.
+  Duración 3.5 s.
+- **Level cards** (`screens/cutscene.py`): cada nivel se presenta
+  con el poster + cast del nivel como fondo y un panel central con
+  nombre, número, tagline y "Pulsa ENTER" parpadeante.
+- **CLI**:
+  - `pop2026canon poster --level N --out file.png --time T`: genera
+    PNG del poster (level=0) o level card de un nivel concreto.
+  - `pop2026canon --skip-intro`: salta la cinemática y empieza en
+    el level card.
+  - Game loop ahora tiene fases TITLE → LEVEL_CARD → PLAYING →
+    ENDING con transiciones por ENTER.
+- **Paleta**: nuevos `poster_curtain`, `poster_curtain_dark`,
+  `poster_sky`, `poster_sky_light`, `poster_moon`, `poster_palace`,
+  `poster_palace_dark`, `poster_gold`, `poster_gold_dark`.
+
+**Tests**: 575 verdes (564 previos + 11 en `test_poster.py` que
+cubren cast por nivel, render sin crash, comparativa de cortinas
+y level card de cada nivel). mypy strict + ruff limpios.
+
 ## [canon-0.3.0] — 2026-05-15
 
 ### Niveles 4-13 refinados con layouts canon ricos

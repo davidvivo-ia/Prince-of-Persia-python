@@ -41,6 +41,9 @@ def _main(
     level: int = typer.Option(1, "--level", min=1, max=14, help="Nivel inicial (1-14)."),
     headless: bool = typer.Option(False, "--headless", help="Sin ventana ni audio (CI)."),
     max_frames: int = typer.Option(0, "--frames", help="Límite de frames (0 = sin límite)."),
+    skip_intro: bool = typer.Option(
+        False, "--skip-intro", help="Salta la intro animada y empieza en el level card."
+    ),
     version: bool = typer.Option(
         False, "--version", callback=_version_callback, is_eager=True, help="Imprime versión."
     ),
@@ -53,16 +56,17 @@ def _main(
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-    code = _run(level, headless=headless, max_frames=max_frames)
+    code = _run(level, headless=headless, max_frames=max_frames, skip_intro=skip_intro)
     sys.exit(code)
 
 
-def _run(level_number: int, *, headless: bool, max_frames: int) -> int:
-    """Loop principal del juego."""
+def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool = False) -> int:
+    """Loop principal del juego con fases TITLE → LEVEL_CARD → PLAYING."""
     import pygame
 
     from pop2026canon.presentation import input_device, renderer
     from pop2026canon.presentation.layout import LAYOUT
+    from pop2026canon.presentation.screens import cutscene, ending, title
 
     pygame.init()
 
@@ -70,7 +74,7 @@ def _run(level_number: int, *, headless: bool, max_frames: int) -> int:
     game = new_game(level)
 
     if headless:
-        # Modo headless: avanza ticks sin renderizar
+        # Modo headless: avanza ticks sin renderizar y sin pantallas.
         frames = 0
         while game.running:
             game = advance(game, Command())
@@ -86,18 +90,52 @@ def _run(level_number: int, *, headless: bool, max_frames: int) -> int:
     screen = pygame.display.set_mode((LAYOUT.window_w, LAYOUT.window_h))
     pygame.display.set_caption(f"pop2026canon — {level.name} (L{level_number}/14)")
     font = pygame.font.Font(None, 22)
+    font_big = pygame.font.Font(None, 56)
+    font_small = pygame.font.Font(None, 22)
     clock = pygame.time.Clock()
 
-    # Loop 12 FPS lógico, 60 FPS visual
+    phase: str = "card" if skip_intro else "title"
+    phase_t0 = pygame.time.get_ticks() / 1000.0
     visual_frames = 0
-    while game.running:
+
+    def _phase_t() -> float:
+        return pygame.time.get_ticks() / 1000.0 - phase_t0
+
+    while True:
         if input_device.should_quit():
             break
-        # Cada 5 frames visuales = 1 tick lógico
-        if visual_frames % 5 == 0:
-            cmd = input_device.poll()
-            game = advance(game, cmd)
-        renderer.render(screen, game, font)
+        events = pygame.event.get()
+        for ev in events:
+            if ev.type == pygame.KEYDOWN and ev.key == pygame.K_RETURN:
+                if phase == "title":
+                    phase = "card"
+                    phase_t0 = pygame.time.get_ticks() / 1000.0
+                elif phase == "card":
+                    phase = "playing"
+                    phase_t0 = pygame.time.get_ticks() / 1000.0
+
+        if phase == "title":
+            title.draw(screen, font_big, font_small, _phase_t())
+        elif phase == "card":
+            cutscene.draw_level_card(screen, level, font_big, font_small, _phase_t())
+        elif phase == "playing":
+            if not game.running:
+                phase = "ending"
+                phase_t0 = pygame.time.get_ticks() / 1000.0
+                continue
+            if visual_frames % 5 == 0:
+                cmd = input_device.poll()
+                game = advance(game, cmd)
+            renderer.render(screen, game, font)
+        elif phase == "ending":
+            from pop2026canon.domain.game import GameStatus
+
+            if game.status is GameStatus.WON_GAME or game.status is GameStatus.WON_LEVEL:
+                ending.draw_victory(screen, font_big, font_small)
+            else:
+                timeout = game.status is GameStatus.LOST_TIMEOUT
+                ending.draw_defeat(screen, font_big, font_small, timeout=timeout)
+
         pygame.display.flip()
         clock.tick(60)
         visual_frames += 1
@@ -137,6 +175,50 @@ def preview(
         out.parent.mkdir(parents=True, exist_ok=True)
         pygame.image.save(surf, str(out))
         typer.echo(f"Preview guardado en {out}")
+    finally:
+        pygame.quit()
+
+
+_POSTER_DEFAULT = Path("poster_canon.png")
+
+
+@app.command()
+def poster(
+    level: int = typer.Option(
+        0,
+        "--level",
+        min=0,
+        max=14,
+        help="0 = poster genérico con título; 1..14 = level card del nivel.",
+    ),
+    out: Path = typer.Option(  # noqa: B008
+        _POSTER_DEFAULT, "--out", "-o", help="PNG de salida."
+    ),
+    t: float = typer.Option(4.0, "--time", help="Segundos transcurridos (afecta animación)."),
+) -> None:
+    """Renderiza un poster canon o level card como PNG."""
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+    import pygame
+
+    from pop2026canon.presentation.layout import LAYOUT
+    from pop2026canon.presentation.screens.cutscene import draw_level_card
+    from pop2026canon.presentation.screens.title import draw as draw_title
+
+    pygame.init()
+    try:
+        surf = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
+        font_big = pygame.font.Font(None, 56)
+        font_small = pygame.font.Font(None, 22)
+        if level == 0:
+            draw_title(surf, font_big, font_small, t)
+        else:
+            lv = CANON_LEVELS[level - 1]
+            draw_level_card(surf, lv, font_big, font_small, t=t)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        pygame.image.save(surf, str(out))
+        typer.echo(f"Poster guardado en {out}")
     finally:
         pygame.quit()
 
