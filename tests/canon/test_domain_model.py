@@ -192,26 +192,28 @@ class TestCanonLevels:
         lvl = load_canon(1)
         assert lvl.name == "The Dungeon"
         assert lvl.number == 1
-        # Tiene 5 salas (spawn, central, este-guard, oeste-sword, sur-plate)
-        assert len(lvl.rooms) == 5
-        # Sala 1 spawn
+        # Canon expandido: 18 salas (mazmorra 3-pisos)
+        assert len(lvl.rooms) >= 18
         assert lvl.start_room == 1
-        # Hay un guard en sala 3
-        assert len(lvl.room(3).guards) == 1
-        # Hay una SWORD en sala 4
-        sword_found = False
-        for col in range(SCREEN_TILECOUNT_X):
-            for row in range(SCREEN_TILECOUNT_Y):
-                if lvl.room(4).tile_at(col, row)[0] == Tile.SWORD:
-                    sword_found = True
-        assert sword_found
-        # Hay una PLATE en sala 5
-        plate_found = False
-        for col in range(SCREEN_TILECOUNT_X):
-            for row in range(SCREEN_TILECOUNT_Y):
-                if lvl.room(5).tile_at(col, row)[0] == Tile.OPENER:
-                    plate_found = True
-        assert plate_found
+        # SWORD presente en alguna sala
+        sword_found = any(
+            lvl.room(r.id).tile_at(c, ro)[0] == Tile.SWORD
+            for r in lvl.rooms
+            for c in range(SCREEN_TILECOUNT_X)
+            for ro in range(SCREEN_TILECOUNT_Y)
+        )
+        assert sword_found, "L1 sin SWORD"
+        # OPENER (plate) presente al menos una vez
+        plate_found = any(
+            lvl.room(r.id).tile_at(c, ro)[0] == Tile.OPENER
+            for r in lvl.rooms
+            for c in range(SCREEN_TILECOUNT_X)
+            for ro in range(SCREEN_TILECOUNT_Y)
+        )
+        assert plate_found, "L1 sin plate"
+        # Al menos un guard en el nivel
+        guard_count = sum(len(r.guards) for r in lvl.rooms)
+        assert guard_count >= 1
 
     def test_level_3_has_skeleton_event(self) -> None:
         lvl = LEVEL_3

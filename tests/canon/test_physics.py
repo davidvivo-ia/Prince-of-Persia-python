@@ -21,9 +21,11 @@ from pop2026canon.domain.physics import (
     cross_border,
     fall_accel,
     fall_speed,
+    hang_shuffle,
     is_solid_at,
     normalize_to_cell,
     play_seq,
+    release_hang,
     snap_to_hang,
     start_seq,
     step_physics,
@@ -162,11 +164,14 @@ class TestNormalizeToCell:
 
 
 class TestCrossBorder:
+    """Usa links del canon expandido: L1 sala 1 → S=7, E=2; sala 2 → W=1, E=3.
+    Sala 1 no tiene link_w (es esquina noroeste de la mazmorra)."""
+
     def test_cross_west_with_link(self) -> None:
-        # Kid en sala 2 (sala central), va hacia sala 4 (oeste)
-        kid = _kid(room=2, col=-1, row=1)  # se salió por west
+        # Kid en sala 2 va al oeste → sala 1
+        kid = _kid(room=2, col=-1, row=1)
         result = cross_border(kid, LEVEL_1)
-        assert result.room == 4  # link_w de sala 2 = 4
+        assert result.room == 1
         assert result.curr_col == SCREEN_TILECOUNT_X - 1
 
     def test_cross_east_with_link(self) -> None:
@@ -176,14 +181,14 @@ class TestCrossBorder:
         assert result.curr_col == 0
 
     def test_cross_south_with_link(self) -> None:
-        kid = _kid(room=1, col=4, row=SCREEN_TILECOUNT_Y)  # se cayó por sur
+        kid = _kid(room=1, col=4, row=SCREEN_TILECOUNT_Y)  # cae al sur
         result = cross_border(kid, LEVEL_1)
-        assert result.room == 2  # link_s de sala 1 = 2
+        assert result.room == 7  # link_s de sala 1 = 7 (canon expandido)
         assert result.curr_row == 0
 
     def test_no_link_bumps(self) -> None:
-        # Sala 4 no tiene link_w en L1
-        kid = _kid(room=4, col=-1, row=1)
+        # Sala 1 no tiene link_w (esquina NW)
+        kid = _kid(room=1, col=-1, row=1)
         result = cross_border(kid, LEVEL_1)
         assert result.action is Action.BUMPED
 
@@ -260,6 +265,56 @@ class TestCanGrab:
         assert new_kid.fall_x == 0
         assert new_kid.fall_y == 0
         assert new_kid.curr_seq_id == int(Seq.GRAB_LEDGE_MIDAIR)
+
+
+class TestHangShuffle:
+    """Movimiento lateral colgado de cornisa (canon shimmy)."""
+
+    def _hanging_kid(self) -> tuple[Char, Room]:
+        # Char colgado de cornisa: sala con suelo arriba a la derecha del kid.
+        floor = int(Tile.FLOOR)
+        empty = int(Tile.EMPTY)
+        fg = [floor] * 10 + [empty] * 10 + [empty] * 10
+        room = Room(id=1, fg=tuple(fg), bg=(0,) * 30)
+        kid = Char(
+            charid=CharId.KID,
+            room=1,
+            curr_col=3,
+            curr_row=1,
+            action=Action.HANG_STRAIGHT,
+            curr_seq_id=int(Seq.JUMP_UP_GRAB_STRAIGHT),
+            direction=int(Direction.RIGHT),
+        )
+        return kid, room
+
+    def test_shuffle_right_moves_one_col(self) -> None:
+        kid, room = self._hanging_kid()
+        new_kid = hang_shuffle(kid, room, direction=1)
+        assert new_kid.curr_col == kid.curr_col + 1
+
+    def test_shuffle_left_moves_one_col(self) -> None:
+        kid, room = self._hanging_kid()
+        new_kid = hang_shuffle(kid, room, direction=-1)
+        # Necesita que haya cornisa también a la izquierda (sí, fila 0 toda FLOOR)
+        assert new_kid.curr_col == kid.curr_col - 1
+
+    def test_shuffle_only_when_hanging(self) -> None:
+        kid, room = self._hanging_kid()
+        kid = replace(kid, action=Action.STAND)
+        new_kid = hang_shuffle(kid, room, direction=1)
+        assert new_kid is kid  # sin cambio
+
+    def test_shuffle_stops_at_room_edge(self) -> None:
+        kid, room = self._hanging_kid()
+        kid = replace(kid, curr_col=9)
+        new_kid = hang_shuffle(kid, room, direction=1)
+        assert new_kid.curr_col == 9  # no se mueve fuera
+
+    def test_release_hang_drops_to_freefall(self) -> None:
+        kid, _ = self._hanging_kid()
+        new_kid = release_hang(kid)
+        assert new_kid.action is Action.IN_FREEFALL
+        assert new_kid.fall_y == 0
 
 
 class TestStepPhysicsIntegration:

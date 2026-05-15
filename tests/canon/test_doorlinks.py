@@ -22,59 +22,57 @@ class TestDoorLinkModel:
         assert link.gate_coord == (2, 3, 1)
 
     def test_level_gates_for_plate(self) -> None:
+        # L6 plate (3, 7, 1) abre gate (2, 3, 1)
         gates = LEVEL_6.gates_for_plate((3, 7, 1))
-        assert gates == ((2, 3, 1),)
+        assert (2, 3, 1) in gates
 
     def test_level_plates_for_gate(self) -> None:
         plates = LEVEL_6.plates_for_gate((2, 3, 1))
-        assert plates == ((3, 7, 1),)
+        assert (3, 7, 1) in plates
 
     def test_unmapped_plate_returns_empty(self) -> None:
-        # Sin doorlink hacia (9, 9, 9), tupla vacía.
         assert LEVEL_6.gates_for_plate((9, 9, 9)) == ()
         assert LEVEL_6.plates_for_gate((9, 9, 9)) == ()
 
 
 class TestL6PlateGateLink:
-    def test_l6_doorlink_declared(self) -> None:
-        assert len(LEVEL_6.doorlinks) == 1
-        link = LEVEL_6.doorlinks[0]
-        assert link.plate_coord == (3, 7, 1)
-        assert link.gate_coord == (2, 3, 1)
+    def test_l6_has_doorlinks(self) -> None:
+        # Canon expandido: L6 puede tener varios doorlinks
+        assert len(LEVEL_6.doorlinks) >= 1
+        first = LEVEL_6.doorlinks[0]
+        assert first.plate_coord == (3, 7, 1)
+        assert first.gate_coord == (2, 3, 1)
 
     def test_plate_pressed_opens_gate(self) -> None:
         """Al pisar la plate (sala 3 col 7 row 1) la gate (sala 2 col 3
         row 1) acaba abriéndose."""
         game = new_game(LEVEL_6)
-        # Coloca el kid pisando la plate.
         game = replace(
             game,
             kid=replace(game.kid, room=3, curr_col=7, curr_row=1),
         )
-        # Tick suficiente para que la gate llegue a state OPEN (7).
         for _ in range(20):
             game = advance(game, Command())
         assert (2, 3, 1) in game.state.open_gates
 
 
 class TestL11SelfRoomDoor:
-    def test_l11_doorlink_same_room(self) -> None:
-        """L11 tiene plate y gate en la misma sala (sala 5)."""
-        assert len(LEVEL_11.doorlinks) == 1
-        link = LEVEL_11.doorlinks[0]
-        assert link.plate_room == link.gate_room == 5
+    def test_l11_has_same_room_doorlink(self) -> None:
+        """L11 tiene al menos una plate y gate en la misma sala (puzzle local)."""
+        same_room_links = [d for d in LEVEL_11.doorlinks if d.plate_room == d.gate_room]
+        assert len(same_room_links) >= 1
 
 
 class TestL8MouseOpensGate:
     def test_l8_mouse_event_opens_unlinked_gate(self) -> None:
-        """L8 no tiene plate para la gate; el mouse la fuerza abierta."""
-        # La gate está en (6, 2, 1) sin doorlink.
-        assert LEVEL_8.plates_for_gate((6, 2, 1)) == ()
+        """L8 sala 10 tiene gate sin doorlink — sólo el mouse la abre."""
+        # Buscar la gate de exit en L8 (sala 10 col 2 row 1)
+        gate_coord = (10, 2, 1)
+        assert LEVEL_8.plates_for_gate(gate_coord) == ()
         game = new_game(LEVEL_8)
-        game = replace(game, kid=replace(game.kid, room=6))
-        # Un tick basta — trigger_mouse_appear corre en _trigger_special_chars.
+        game = replace(game, kid=replace(game.kid, room=10))
         game = advance(game, Command())
-        assert (6, 2, 1) in game.state.open_gates
+        assert gate_coord in game.state.open_gates
 
 
 class TestNoPlateNoGate:

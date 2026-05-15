@@ -46,6 +46,15 @@ def advance(game: Game, cmd: Command) -> Game:
     # 1. Input del jugador → posible cambio de seq del kid
     new_kid = apply_input(game.kid, cmd)
 
+    # 1b. Hang-shuffle: lateral colgado de cornisa
+    if new_kid.action is Action.HANG_STRAIGHT and (cmd.left or cmd.right):
+        from pop2026canon.domain.physics import hang_shuffle
+
+        if 1 <= new_kid.room <= len(game.level.rooms):
+            room_obj = game.level.room(new_kid.room)
+            direction = 1 if cmd.right else -1
+            new_kid = hang_shuffle(new_kid, room_obj, direction=direction)
+
     # 2-6. Física del kid (play_seq + gravity + collision + grab)
     new_kid = step_physics(new_kid, game.level, shift_held=cmd.shift)
 

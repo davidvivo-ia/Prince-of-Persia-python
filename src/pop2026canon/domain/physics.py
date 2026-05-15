@@ -364,6 +364,44 @@ def snap_to_hang(char: Char, ledge_col: int, ledge_row: int) -> Char:
     )
 
 
+def hang_shuffle(char: Char, room: Room, *, direction: int) -> Char:
+    """Mueve al char colgado lateralmente una celda en `direction` (±1).
+
+    Sólo aplica si está en HANG_STRAIGHT y la cornisa adyacente sigue siendo
+    una pared sólida arriba con vacío al lado para que el cuerpo cuelgue.
+    Si no se puede shuffle, devuelve el char tal cual.
+    """
+    if char.action is not Action.HANG_STRAIGHT:
+        return char
+    sign = 1 if direction > 0 else -1
+    new_col = char.curr_col + sign
+    if not (0 <= new_col < SCREEN_TILECOUNT_X):
+        return char
+    # La celda superior contigua sigue siendo sólida (techo de la pared).
+    grab_col = new_col + _forward_sign(char.direction)
+    if not (0 <= grab_col < SCREEN_TILECOUNT_X):
+        return char
+    above_row = char.curr_row - 1
+    if above_row >= 0 and not is_solid_at(room, grab_col, above_row):
+        # Ya no hay cornisa por encima en la dirección de cuelgue
+        return char
+    return replace(char, curr_col=new_col, x=TILE_SIZE_X // 2)
+
+
+def release_hang(char: Char) -> Char:
+    """Suelta la cornisa: pasa a IN_FREEFALL con fall_y inicial 0."""
+    if char.action is not Action.HANG_STRAIGHT:
+        return char
+    return replace(
+        char,
+        action=Action.IN_FREEFALL,
+        curr_seq_id=int(Seq.FALL),
+        curr_seq_idx=0,
+        fall_x=0,
+        fall_y=0,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Step físico completo (orden canónico por tick)
 # ---------------------------------------------------------------------------

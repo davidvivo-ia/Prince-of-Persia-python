@@ -56,21 +56,21 @@ class TestAllLevelsRoomCount:
     """Cada nivel tiene un número canon de salas (no degenerado)."""
 
     def test_room_counts(self) -> None:
-        # (level_number, min_rooms_expected)
+        # (level_number, min_rooms_expected) — canon expandido 18-24 salas
         expected = {
-            1: 5,
-            2: 4,
-            3: 3,
-            4: 6,
-            5: 7,
-            6: 5,
-            7: 6,
-            8: 6,
-            9: 6,
-            10: 5,
-            11: 6,
-            12: 8,
-            13: 4,
+            1: 18,
+            2: 20,
+            3: 18,
+            4: 20,
+            5: 20,
+            6: 18,
+            7: 22,
+            8: 20,
+            9: 20,
+            10: 20,
+            11: 20,
+            12: 24,
+            13: 18,
             14: 1,
         }
         for lvl in CANON_LEVELS:

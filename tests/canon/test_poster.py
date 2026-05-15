@@ -15,7 +15,8 @@ from pop2026canon.presentation.poster import (
     draw_poster,
 )
 from pop2026canon.presentation.screens.cutscene import draw_level_card
-from pop2026canon.presentation.screens.title import INTRO_DURATION, draw as draw_title
+from pop2026canon.presentation.screens.title import INTRO_DURATION
+from pop2026canon.presentation.screens.title import draw as draw_title
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -30,7 +31,9 @@ def _pygame_init() -> None:
 class TestPosterCast:
     def test_default_includes_main_trio(self) -> None:
         c = PosterCast()
-        assert c.princess and c.vizier and c.prince
+        assert c.princess
+        assert c.vizier
+        assert c.prince
         assert not c.guard
 
     def test_every_level_has_cast(self) -> None:
@@ -39,11 +42,15 @@ class TestPosterCast:
 
     def test_l3_no_vizier_just_prince(self) -> None:
         c = cast_for_level(3)
-        assert c.prince and not c.vizier and not c.princess
+        assert c.prince
+        assert not c.vizier
+        assert not c.princess
 
     def test_l12_finale_includes_vizier_and_princess(self) -> None:
         c = cast_for_level(12)
-        assert c.prince and c.vizier and c.princess
+        assert c.prince
+        assert c.vizier
+        assert c.princess
 
     def test_l13_no_vizier_after_defeat(self) -> None:
         c = cast_for_level(13)

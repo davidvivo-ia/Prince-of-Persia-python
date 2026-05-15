@@ -19,11 +19,11 @@ class TestGameNew:
         assert g.kid.hp_curr == 3
         assert g.running is True
 
-    def test_l1_has_one_guard(self) -> None:
+    def test_l1_has_guards(self) -> None:
         g = new_game(LEVEL_1)
-        # Sala 3 tiene 1 guard según L1 canon
-        guards = [c for c in g.others if c.room == 3]
-        assert len(guards) == 1
+        # Canon expandido: L1 tiene al menos un guard repartido por las salas
+        guards = [c for c in g.others if c.charid.name == "GUARD"]
+        assert len(guards) >= 1
 
 
 class TestTickAdvance:

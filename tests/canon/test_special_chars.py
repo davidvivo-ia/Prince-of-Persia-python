@@ -57,8 +57,8 @@ class TestSkeleton:
 class TestShadow:
     def test_shadow_spawns_on_mirror(self) -> None:
         game = new_game(LEVEL_4)
-        # Lleva al kid a la sala 4 col 5 (donde está el espejo)
-        kid = replace(game.kid, room=4, curr_col=5)
+        # Canon expandido: mirror en sala 5 col 5
+        kid = replace(game.kid, room=5, curr_col=5)
         game = replace(game, kid=kid)
         game = trigger_shadow_encounters(game)
         assert game.flags.shadow_initialized is True
@@ -122,8 +122,8 @@ class TestPrincessAndMouse:
 
     def test_mouse_appears_in_l8(self) -> None:
         game = new_game(LEVEL_8)
-        # L8 MOUSE_APPEAR está en sala 6
-        kid = replace(game.kid, room=6)
+        # Canon expandido: MOUSE_APPEAR en sala 10 (sala del exit)
+        kid = replace(game.kid, room=10)
         game = replace(game, kid=kid)
         game = trigger_mouse_appear(game)
         assert game.flags.mouse_appeared is True

@@ -6,6 +6,44 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.5.0] — 2026-05-15
+
+### Niveles canon **completos** 18-24 salas + hang-shuffle + path-finding
+
+Tirón largo para llevar los niveles al tamaño/complejidad del canon real:
+
+- **Reescritura completa de `levels_canon.py`**: nuevo sistema declarativo
+  basado en `_RoomSpec` + `_build_level`. Helpers ricos: `_floor_rows`,
+  `_drop_rows`, `_pillar_rows`, `_lattice_rows`, `_balcony_rows`,
+  `_doortop_rows`. Cada nivel se construye como lista de specs.
+- **Niveles a tamaño canon**: L1=18, L2=20, L3=18, L4=20, L5=20, L6=18,
+  L7=22, L8=20, L9=20, L10=20, L11=20, L12=24, L13=18, L14=1. Total
+  ~257 salas (vs. 80 antes).
+- **Layouts multi-piso** con loops, galerías paralelas, sub-rooms
+  secretos, salas-cripta accesibles por drop sur.
+- **Diversidad de tiles**: usadas BIGPILLAR_TOP/BOTTOM (columnas
+  estructurales), LATTICE_PILLAR (rejas escalables), BALCONY_LEFT/RIGHT,
+  DOORTOP_WITH_FLOOR (multi-piso intra-sala), TORCH, POTION con
+  variantes HEAL/MAX_HP/POISON/FLOAT/TIME/EMPTY.
+- **Doorlinks complejos**: múltiples plates por gate, plates lejanas que
+  abren gates en otra sala, puzzles locales (plate+gate same-room).
+- **Hang-shuffle + release-hang en `physics.py`**: `hang_shuffle(char,
+  room, direction)` mueve lateralmente colgado de cornisa; `release_hang`
+  pasa a IN_FREEFALL. Integrado en `tick.advance` cuando el char está en
+  HANG_STRAIGHT y hay input left/right.
+- **Test de path-finding BFS** (`test_pathfinding.py`):
+  - `test_level_exit_room_reachable_from_spawn`: cada nivel jugable
+    tiene exit alcanzable por grafo de salas.
+  - `test_no_orphan_rooms`: máx 2 salas secretas por nivel.
+  - `test_level_cell_pathing_partial`: BFS celda-a-celda confirma que
+    el spawn alcanza al menos 2 salas distintas.
+  - `test_tile_diversity_across_levels`: ≥15 tipos de tile usados.
+  - `test_uses_lattice_tiles`, `test_uses_pillar_and_balcony`,
+    `test_potions_have_diverse_modifiers`.
+
+**Tests**: 651 verdes (575 previos + 11 hang-shuffle + 65 pathfinding/
+content/diversity). mypy strict + ruff format+check limpios.
+
 ## [canon-0.4.0] — 2026-05-15
 
 ### Poster canon + intro animada + level cards en todos los niveles
