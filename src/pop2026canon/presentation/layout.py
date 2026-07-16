@@ -1,4 +1,9 @@
-"""Geometría visual — escala canónica al ratio 14:63 tile size."""
+"""Geometría visual — escala canónica al tile de 32x63 px del POP1.
+
+Nota: las 14 unidades horizontales de la lógica (``TILE_SIZE_X``) son
+unidades de *simulación*, no píxeles. El tile en pantalla del original
+mide 32x63 px (DOS 320x200, sala de 10x3 tiles).
+"""
 
 from __future__ import annotations
 
@@ -9,8 +14,8 @@ from dataclasses import dataclass
 class VisualLayout:
     """Tamaños finales en pantalla. Escala 2x del canon."""
 
-    tile_w: int = 28
-    """14 x 2 — ancho px."""
+    tile_w: int = 64
+    """32 x 2 — ancho px (canon POP1)."""
 
     tile_h: int = 126
     """63 x 2 — alto px."""

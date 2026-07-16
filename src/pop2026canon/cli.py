@@ -70,7 +70,9 @@ def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool
     """
     import pygame
 
+    from pop2026canon.application.audio_bridge import play_transitions
     from pop2026canon.application.session import Session, resolve_transition
+    from pop2026canon.infrastructure.audio import Beeper
     from pop2026canon.presentation import input_device, renderer
     from pop2026canon.presentation.layout import LAYOUT
     from pop2026canon.presentation.screens import cutscene, ending, title
@@ -99,6 +101,7 @@ def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool
     font_big = pygame.font.Font(None, 56)
     font_small = pygame.font.Font(None, 22)
     clock = pygame.time.Clock()
+    beeper = Beeper()
 
     def _set_caption() -> None:
         lvl = game.level
@@ -167,7 +170,9 @@ def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool
                 continue
             if not paused and visual_frames % 5 == 0:
                 cmd = input_device.poll()
+                prev_game = game
                 game = advance(game, cmd)
+                play_transitions(beeper, prev_game, game)
                 session = session.after_tick(game)
             keys = pygame.key.get_pressed()
             renderer.render(screen, game, font, show_time=bool(keys[pygame.K_TAB]))

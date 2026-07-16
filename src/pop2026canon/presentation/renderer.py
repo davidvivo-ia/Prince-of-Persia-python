@@ -21,8 +21,13 @@ from pop2026canon.presentation.palette import PALETTE
 from pop2026canon.presentation.tile_atlas import draw_tile
 
 
-def _draw_back_wall(surf: pygame.Surface) -> None:
-    """Pared trasera con degradado + arcos rebajados."""
+def _room_hash(room_id: int, c: int = 0, r: int = 0) -> int:
+    """Hash determinista por (sala, celda) para variación visual estable."""
+    return (room_id * 2654435761 + c * 40503 + r * 69621) & 0xFFFFFFFF
+
+
+def _draw_back_wall(surf: pygame.Surface, room_id: int = 0) -> None:
+    """Pared trasera con degradado + arcos rebajados + decoración por sala."""
     w = surf.get_width()
     top = LAYOUT.hud_top
     h = LAYOUT.room_h
@@ -56,10 +61,36 @@ def _draw_back_wall(surf: pygame.Surface) -> None:
             border_top_left_radius=arch_w // 2,
             border_top_right_radius=arch_w // 2,
         )
+    # Decoración determinista por sala: sillares hundidos y alguna
+    # ventana estrecha — rompe la monotonía (cada sala se reconoce).
+    hsh = _room_hash(room_id)
+    for i in range(4):
+        bx = ((hsh >> (i * 5)) % max(1, w - 40)) + 8
+        by = top + 24 + ((hsh >> (i * 7 + 3)) % max(1, h - 80))
+        bw = 14 + ((hsh >> (i * 3)) % 18)
+        shade = pygame.Surface((bw, 8), pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 26))
+        surf.blit(shade, (bx, by))
+    if hsh % 5 == 2:
+        wx = (hsh >> 9) % max(1, w - 60) + 20
+        wy = top + 26
+        pygame.draw.rect(
+            surf, (8, 6, 12), (wx, wy, 12, 26), border_top_left_radius=6, border_top_right_radius=6
+        )
+        pygame.draw.rect(
+            surf,
+            PALETTE.bg_far,
+            (wx, wy, 12, 26),
+            1,
+            border_top_left_radius=6,
+            border_top_right_radius=6,
+        )
 
 
 def _draw_room_tiles(surf: pygame.Surface, game: Game) -> None:
     """Pinta los 30 tiles de la sala actual."""
+    from pop2026canon.domain.tiles import Tile
+
     room = game.level.room(game.kid.room)
     for r in range(LAYOUT.room_rows):
         for c in range(LAYOUT.room_cols):
@@ -67,16 +98,22 @@ def _draw_room_tiles(surf: pygame.Surface, game: Game) -> None:
             tile_val = byte & 0x1F
             modifier = (byte >> 5) & 0x07
             # Override modifier para gates / chompers / loose con su state actual
-            from pop2026canon.domain.tiles import Tile
-
             if Tile(tile_val) in (Tile.GATE, Tile.CHOMPER, Tile.LOOSE):
                 modifier = game.state.state_at((game.kid.room, c, r))
-            # Si fallen, dibuja debris
+            # Loose caído: la losa ya no está — agujero real (la física
+            # tampoco soporta peso ahí).
             if (game.kid.room, c, r) in game.state.fallen_floors:
-                tile_val = int(Tile.DEBRIS)
+                tile_val = int(Tile.EMPTY)
             x = c * LAYOUT.tile_w
             y = LAYOUT.hud_top + r * LAYOUT.tile_h
             draw_tile(surf, tile_val, x, y, modifier)
+            # Variación de sillería en suelos: 1 de cada 3 celdas lleva
+            # un tinte tenue determinista (texturas "BLOCK1-5" del canon).
+            if Tile(tile_val) is Tile.FLOOR and _room_hash(game.kid.room, c, r) % 3 == 0:
+                slab_h = max(18, LAYOUT.tile_h // 3)
+                tint = pygame.Surface((LAYOUT.tile_w, slab_h - 8), pygame.SRCALPHA)
+                tint.fill((0, 0, 0, 22))
+                surf.blit(tint, (x, y + 7))
 
 
 def _char_px(char: Char) -> tuple[int, int]:
@@ -88,7 +125,7 @@ def _char_px(char: Char) -> tuple[int, int]:
         LAYOUT.hud_top
         + (char.curr_row + 1) * LAYOUT.tile_h
         - (LAYOUT.tile_h * char.y) // TILE_SIZE_Y
-        - 8
+        - 2
     )
     return px_x, px_y
 
@@ -170,7 +207,7 @@ def render(
 ) -> None:
     """Renderiza un frame completo."""
     surf.fill(PALETTE.bg)
-    _draw_back_wall(surf)
+    _draw_back_wall(surf, game.kid.room)
     _draw_room_tiles(surf, game)
     _draw_chars(surf, game)
     _draw_hud(surf, game, font, show_time=show_time)

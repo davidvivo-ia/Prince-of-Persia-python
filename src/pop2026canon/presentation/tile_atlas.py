@@ -35,43 +35,45 @@ def draw_empty(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
 
 
 def draw_floor(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
-    """Suelo de ladrillo: cuerpo + cursos de mortero + shelf superior."""
+    """Losa de suelo estilo POP1: superficie iluminada + cara de ladrillo
+    en el tercio superior del tile; el resto queda abierto (se ve la
+    pared trasera), como las plataformas del original."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    pygame.draw.rect(surf, PALETTE.brick, (x, y, tw, th))
-    # Shelf superior iluminado
+    slab_h = max(18, th // 3)
+    pygame.draw.rect(surf, PALETTE.brick, (x, y, tw, slab_h))
+    # Superficie superior iluminada (donde pisa el kid)
     pygame.draw.rect(surf, PALETTE.brick_top, (x, y, tw, 6))
     pygame.draw.line(
         surf, _mix(PALETTE.brick_top, PALETTE.primary, 0.5), (x, y), (x + tw - 1, y), 1
     )
     pygame.draw.line(surf, PALETTE.brick_dark, (x, y + 6), (x + tw - 1, y + 6), 1)
-    # Sombra inferior
-    pygame.draw.rect(surf, PALETTE.brick_dark, (x, y + th - 4, tw, 4))
-    # Cursos de mortero horizontales (4 cursos)
-    for i in range(1, 4):
-        ly = y + (th * i) // 4
-        pygame.draw.line(surf, PALETTE.mortar, (x, ly), (x + tw, ly), 1)
-    # Junta vertical alternada
+    # Cara de ladrillo: 2 cursos con junta alternada
+    course_h = (slab_h - 6) // 2
     col_idx = x // tw
-    half = tw // 2
-    for i in range(4):
-        cy0 = y + (th * i) // 4
-        cy1 = y + (th * (i + 1)) // 4
-        jx = x + half if (i + col_idx) % 2 == 0 else x
-        pygame.draw.line(surf, PALETTE.mortar, (jx, cy0), (jx, cy1), 1)
+    for i in range(2):
+        cy0 = y + 6 + i * course_h
+        pygame.draw.line(surf, PALETTE.mortar, (x, cy0 + course_h), (x + tw, cy0 + course_h), 1)
+        jx = x + tw // 2 if (i + col_idx) % 2 == 0 else x + tw // 4
+        pygame.draw.line(surf, PALETTE.mortar, (jx, cy0), (jx, cy0 + course_h), 1)
+    # Borde inferior de la losa + sombra colgante
+    pygame.draw.line(surf, PALETTE.brick_dark, (x, y + slab_h - 1), (x + tw - 1, y + slab_h - 1), 2)
+    shadow = pygame.Surface((tw, 8), pygame.SRCALPHA)
+    shadow.fill((0, 0, 0, 60))
+    surf.blit(shadow, (x, y + slab_h))
 
 
 def draw_spike(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
-    """Pinchos como hojas alargadas de hierro emergiendo del suelo."""
+    """Pinchos como hojas alargadas de hierro emergiendo del suelo.
+
+    Nacen del borde inferior de la celda (la superficie de la losa de
+    la fila de abajo, donde pisa el char)."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    # Suelo debajo (igual que floor pero compacto)
-    pygame.draw.rect(surf, PALETTE.brick, (x, y + th * 2 // 3, tw, th // 3))
-    # Hojas
-    base_y = y + th * 2 // 3 + 2
+    base_y = y + th - 2
     n = 4
     sw = (tw - 4) // n
     for i in range(n):
         sx = x + 2 + i * sw
-        tip = (sx + sw // 2, base_y - 24)
+        tip = (sx + sw // 2, base_y - 30)
         pygame.draw.polygon(
             surf,
             PALETTE.blade,
@@ -180,9 +182,10 @@ def draw_loose(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
     """Suelo suelto. Modifier indica shake state."""
     draw_floor(surf, x, y, 0)
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    # Grieta diagonal visible
-    pygame.draw.line(surf, PALETTE.bg, (x + tw // 4, y + 8), (x + tw * 3 // 4, y + th - 12), 2)
-    pygame.draw.line(surf, PALETTE.brick_dark, (x + tw // 5, y + 6), (x + tw // 3, y + 14), 1)
+    slab_h = max(18, th // 3)
+    # Grietas visibles dentro de la losa
+    pygame.draw.line(surf, PALETTE.bg, (x + tw // 4, y + 4), (x + tw * 3 // 4, y + slab_h - 3), 2)
+    pygame.draw.line(surf, PALETTE.brick_dark, (x + tw // 5, y + 3), (x + tw // 3, y + 10), 1)
 
 
 def draw_doortop(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:

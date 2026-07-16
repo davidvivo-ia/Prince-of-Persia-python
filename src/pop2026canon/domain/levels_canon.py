@@ -996,8 +996,10 @@ def _l10() -> Level:
     specs = [
         _spec(_floor_rows(pit_cols=(4, 5, 6))),  # 1 top: drop
         _spec(
-            _drop_rows(floor_cols=(0, 1, 7, 8, 9)),
-            guards=(G_S(col=8, row=1, direction=-1, skill=5),),
+            # Plataforma central bajo el pit de la 1: rompe la caída en
+            # dos tramos de 1 piso (un drop directo de 2 pisos haría daño).
+            _drop_rows(floor_cols=(0, 1, 4, 5, 6, 9)),
+            guards=(G_S(col=9, row=1, direction=-1, skill=5),),
         ),
         _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S})),
         _spec(_drop_rows(floor_cols=(0, 1, 2, 3, 8, 9))),  # 4 — acceso a la galería

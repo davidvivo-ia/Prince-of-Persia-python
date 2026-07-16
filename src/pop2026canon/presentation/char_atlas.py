@@ -268,6 +268,14 @@ def _draw_sword(
 # ---------------------------------------------------------------------------
 
 
+CHAR_SCALE: float = 1.5
+"""Factor de escala del char en pantalla. El cuerpo base mide ~60 px;
+con 1.5x el kid ocupa ~90 px de los 126 de un piso (proporción POP1)."""
+
+_CANVAS = 160
+_CANVAS_FEET = (80, 130)
+
+
 def draw_kid_frame(
     surf: pygame.Surface,
     frame_id: int,
@@ -278,8 +286,27 @@ def draw_kid_frame(
 ) -> None:
     """Dibuja el frame del char en la posición (px_x, px_y) — pie del char.
 
-    Selección de building block según el rango del frame_id.
+    Renderiza el cuerpo en un lienzo temporal y lo escala ``CHAR_SCALE``
+    para que la proporción char/sala sea la del original.
     """
+    canvas = pygame.Surface((_CANVAS, _CANVAS), pygame.SRCALPHA)
+    _draw_kid_frame_raw(canvas, frame_id, _CANVAS_FEET[0], _CANVAS_FEET[1], facing, palette)
+    scaled_size = int(_CANVAS * CHAR_SCALE)
+    scaled = pygame.transform.scale(canvas, (scaled_size, scaled_size))
+    fx = int(_CANVAS_FEET[0] * CHAR_SCALE)
+    fy = int(_CANVAS_FEET[1] * CHAR_SCALE)
+    surf.blit(scaled, (px_x - fx, px_y - fy))
+
+
+def _draw_kid_frame_raw(
+    surf: pygame.Surface,
+    frame_id: int,
+    px_x: int,
+    px_y: int,
+    facing: int,
+    palette: CharPalette = CharPalette.KID,
+) -> None:
+    """Dibuja el frame a escala 1:1 del atlas (uso interno)."""
     colors = _colors(palette)
     fsign = 1 if facing == 0 else -1  # canon: 0 = right, -1 = left
 

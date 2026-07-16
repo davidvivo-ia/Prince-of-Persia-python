@@ -6,6 +6,32 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.8.1] — 2026-07-16
+
+### Presentación canon: geometría 32x63, losas POP, audio conectado
+
+- **Fix de geometría raíz**: `layout.py` usaba 14 px de ancho de tile —
+  pero 14 son unidades de *lógica* (TILE_SIZE_X de SDLPoP); el tile en
+  pantalla del POP1 mide 32x63. Ahora tile 64x126 (2x): la sala pasa de
+  280 px de ancho (todo parecía muro) a 640 px con proporción original.
+- **Suelo tipo losa**: FLOOR ya no llena el tile completo de ladrillo —
+  losa en el tercio superior con superficie iluminada, cara de ladrillo
+  y sombra colgante, como las plataformas del original. Spikes nacen
+  del borde inferior de la celda; grietas del loose dentro de la losa.
+- **Chars a proporción POP1**: reescalado 1.5x del atlas (el kid ocupa
+  ~90 px de los 126 de un piso). Pies apoyados en la losa (offset -2).
+- **Loose caído se dibuja como agujero** (coherente con la física).
+- **Variación visual determinista** por sala/celda: sillares hundidos,
+  ventanas ocasionales en el back wall y tintes de sillería en 1 de
+  cada 3 losas (lección del port C++ de referencia: 5 texturas de
+  bloque + decoración rompen la monotonía).
+- **Audio conectado**: el CLI ahora crea el `Beeper` y llama a
+  `play_transitions` cada tick — el juego dejó de ser mudo (saltos,
+  aterrizajes, espadas, gates, muerte...).
+- **L10**: plataforma intermedia en la sala 2 — el drop de entrada ya
+  no cuesta 1 HP obligatorio (verificado con simulador de caídas sobre
+  los 14 niveles: ninguna caída obligatoria es letal).
+
 ## [canon-0.8.0] — 2026-07-16
 
 ### Física completa + campaña de 14 niveles jugable de principio a fin
