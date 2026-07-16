@@ -134,6 +134,23 @@ def _char_px(char: Char) -> tuple[int, int]:
     return px_x, px_y
 
 
+def _lerp_char_px(prev: Char | None, char: Char, alpha: float) -> tuple[int, int]:
+    """Posición interpolada entre el tick anterior y el actual.
+
+    La lógica corre a 12 FPS pero la pantalla a 60: interpolar la
+    posición del char entre ticks elimina el movimiento a saltos de
+    celda. Si el char cambió de sala (o se teleportó lejos), se pinta
+    directamente en la posición nueva.
+    """
+    cx, cy = _char_px(char)
+    if prev is None or alpha >= 1.0 or prev.room != char.room:
+        return cx, cy
+    px, py = _char_px(prev)
+    if abs(cx - px) > LAYOUT.tile_w * 3 or abs(cy - py) > LAYOUT.tile_h * 2:
+        return cx, cy  # teleport (respawn, snap de hang...)
+    return (int(px + (cx - px) * alpha), int(py + (cy - py) * alpha))
+
+
 def _palette_for(charid: CharId) -> CharPalette:
     return {
         CharId.KID: CharPalette.KID,
@@ -146,19 +163,26 @@ def _palette_for(charid: CharId) -> CharPalette:
     }.get(charid, CharPalette.KID)
 
 
-def _draw_chars(surf: pygame.Surface, game: Game) -> None:
-    """Pinta el kid + otros chars en la sala visible."""
+def _draw_chars(
+    surf: pygame.Surface, game: Game, prev: Game | None = None, alpha: float = 1.0
+) -> None:
+    """Pinta el kid + otros chars en la sala visible (interpolados)."""
     visible_room = game.kid.room
+    prev_others = prev.others if prev is not None else ()
     # Otros chars primero (detrás)
-    for char in game.others:
+    for i, char in enumerate(game.others):
         if char.room != visible_room:
             continue
-        px_x, px_y = _char_px(char)
+        prev_char = None
+        if i < len(prev_others) and prev_others[i].charid is char.charid:
+            prev_char = prev_others[i]
+        px_x, px_y = _lerp_char_px(prev_char, char, alpha)
         draw_kid_frame(
             surf, char.frame or 15, px_x, px_y, char.direction, _palette_for(char.charid)
         )
     # Kid en primer plano
-    px_x, px_y = _char_px(game.kid)
+    prev_kid = prev.kid if prev is not None else None
+    px_x, px_y = _lerp_char_px(prev_kid, game.kid, alpha)
     draw_kid_frame(surf, game.kid.frame or 15, px_x, px_y, game.kid.direction, CharPalette.KID)
 
 
@@ -206,12 +230,43 @@ def _draw_hud(
         surf.blit(font.render(time_txt, True, color), (x, 14))
 
 
+def _draw_torch_flicker(surf: pygame.Surface, game: Game) -> None:
+    """Halo pulsante sobre las antorchas de la sala (animado a 60 fps)."""
+    from pop2026canon.domain.tiles import Tile
+
+    t = pygame.time.get_ticks()
+    room = game.level.room(game.kid.room)
+    for r in range(LAYOUT.room_rows):
+        for c in range(LAYOUT.room_cols):
+            piece = Tile(room.fg[r * LAYOUT.room_cols + c] & 0x1F)
+            if piece not in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
+                continue
+            phase = (t // 70 + _room_hash(game.kid.room, c, r)) % 5
+            radius = 12 + phase * 2
+            cx = c * LAYOUT.tile_w + LAYOUT.tile_w // 2
+            cy = LAYOUT.hud_top + r * LAYOUT.tile_h + 12
+            halo = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(halo, (*PALETTE.warning, 22 + phase * 4), (radius, radius), radius)
+            surf.blit(halo, (cx - radius, cy - radius), special_flags=pygame.BLEND_ADD)
+
+
 def render(
-    surf: pygame.Surface, game: Game, font: pygame.font.Font, *, show_time: bool = False
+    surf: pygame.Surface,
+    game: Game,
+    font: pygame.font.Font,
+    *,
+    show_time: bool = False,
+    prev: Game | None = None,
+    alpha: float = 1.0,
 ) -> None:
-    """Renderiza un frame completo."""
+    """Renderiza un frame completo.
+
+    ``prev``/``alpha`` interpolan las posiciones de los chars entre el
+    tick lógico anterior y el actual (12 FPS lógicos → 60 visuales).
+    """
     surf.fill(PALETTE.bg)
     _draw_back_wall(surf, game.kid.room)
     _draw_room_tiles(surf, game)
-    _draw_chars(surf, game)
+    _draw_torch_flicker(surf, game)
+    _draw_chars(surf, game, prev, alpha)
     _draw_hud(surf, game, font, show_time=show_time)

@@ -124,12 +124,26 @@ def _run(
         )
         return 0
 
+    from pop2026canon.infrastructure import savegame
+
     screen = pygame.display.set_mode((LAYOUT.window_w, LAYOUT.window_h))
+    canvas = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
     font = pygame.font.Font(None, 22)
     font_big = pygame.font.Font(None, 56)
     font_small = pygame.font.Font(None, 22)
     clock = pygame.time.Clock()
     beeper = Beeper()
+
+    save_path = savegame.default_save_path()
+    # El autosave sólo aplica a la campaña estándar (los niveles de un
+    # LEVELS.DAT externo no serían restaurables sin el fichero).
+    autosave_enabled = levels_dat is None
+    has_save = autosave_enabled and save_path.exists()
+
+    def _autosave() -> None:
+        if autosave_enabled:
+            slot = savegame.save_game(game, deaths=session.deaths)
+            savegame.write_to_disk(slot, save_path)
 
     def _set_caption() -> None:
         lvl = game.level
@@ -140,8 +154,11 @@ def _run(
     phase: str = "card" if skip_intro else "title"
     phase_t0 = pygame.time.get_ticks() / 1000.0
     visual_frames = 0
+    frames_since_tick = 0
+    prev_game = game
     paused = False
     quit_requested = False
+    shake_frames = 0
 
     def _phase_t() -> float:
         return pygame.time.get_ticks() / 1000.0 - phase_t0
@@ -164,46 +181,103 @@ def _run(
                     if phase in ("title", "card", "dead"):
                         if phase == "dead":
                             _set_caption()
+                        if phase == "card":
+                            _autosave()
                         _goto("playing" if phase != "title" else "card")
+                elif ev.key == pygame.K_c and phase == "title" and has_save:
+                    # Continuar la partida guardada
+                    try:
+                        slot = savegame.read_from_disk(save_path)
+                        game = savegame.load_save(slot)
+                        prev_game = game
+                        session = Session(
+                            level_number=slot.level,
+                            hp_max=slot.kid_hp_max,
+                            time=game.time,
+                            deaths=slot.deaths,
+                            levels=campaign_levels,
+                        )
+                        _set_caption()
+                        _goto("card")
+                    except (ValueError, OSError):
+                        pass  # save corrupto: sigue en title
                 elif ev.key == pygame.K_p and phase == "playing":
                     paused = not paused
                 elif ev.key == pygame.K_r and phase in ("defeat", "victory"):
                     # Reinicia la campaña completa (mismo set de niveles)
                     session = Session(level_number=1, levels=campaign_levels)
                     game = session.start_game()
+                    prev_game = game
                     _set_caption()
                     _goto("card")
 
         if quit_requested:
             break
 
+        target = screen
         if phase == "title":
             title.draw(screen, font_big, font_small, _phase_t())
+            if has_save:
+                hint = font_small.render("C — continuar la partida guardada", True, (200, 190, 160))
+                screen.blit(
+                    hint, hint.get_rect(center=(screen.get_width() // 2, screen.get_height() - 28))
+                )
         elif phase == "card":
             cutscene.draw_level_card(screen, game.level, font_big, font_small, _phase_t())
         elif phase == "playing":
             if not game.running:
                 session, next_game, outcome = resolve_transition(session, game)
                 if outcome == "victory":
+                    if autosave_enabled and save_path.exists():
+                        save_path.unlink()  # campaña completada
                     _goto("victory")
                 elif outcome == "timeout":
                     _goto("defeat")
                 elif outcome == "card":
                     game = next_game if next_game is not None else game
+                    prev_game = game
                     _set_caption()
+                    _autosave()
                     _goto("card")
                 else:  # respawn tras muerte
                     game = next_game if next_game is not None else game
+                    prev_game = game
+                    _autosave()
                     _goto("dead")
                 continue
-            if not paused and visual_frames % 5 == 0:
+            if not paused and frames_since_tick >= 4:
                 cmd = input_device.poll()
                 prev_game = game
                 game = advance(game, cmd)
                 play_transitions(beeper, prev_game, game)
                 session = session.after_tick(game)
+                frames_since_tick = 0
+                # Screen shake: impacto fuerte o muerte este tick
+                kid, pk = game.kid, prev_game.kid
+                if kid.landed_fall_y > 0 and kid.hp_curr < pk.hp_curr:
+                    shake_frames = 8
+                elif kid.alive >= 0 and pk.alive < 0:
+                    shake_frames = 12
+            elif not paused:
+                frames_since_tick += 1
             keys = pygame.key.get_pressed()
-            renderer.render(screen, game, font, show_time=bool(keys[pygame.K_TAB]))
+            alpha = min(1.0, (frames_since_tick + 1) / 5.0)
+            target = canvas if shake_frames > 0 else screen
+            renderer.render(
+                target,
+                game,
+                font,
+                show_time=bool(keys[pygame.K_TAB]),
+                prev=prev_game,
+                alpha=alpha,
+            )
+            if shake_frames > 0:
+                mag = max(1, shake_frames // 3)
+                dx = mag if (visual_frames % 4) < 2 else -mag
+                dy = -mag if (visual_frames % 2) == 0 else mag
+                screen.fill((0, 0, 0))
+                screen.blit(canvas, (dx, dy))
+                shake_frames -= 1
             if paused:
                 _draw_pause_overlay(screen, font_big)
         elif phase == "dead":

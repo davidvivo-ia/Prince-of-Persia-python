@@ -6,6 +6,24 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.11.0] — 2026-07-16
+
+### Pulido "juego 2026": 60 fps suaves, continuar partida, juice
+
+- **Interpolación 12→60 fps**: la lógica sigue a 12 FPS canon, pero el
+  renderer interpola la posición de cada char entre el tick anterior y
+  el actual — se acabó el movimiento a saltos de celda. Con snap
+  automático en cambios de sala y teleports (respawn, grab).
+- **Autosave + continuar**: la campaña se guarda sola al empezar cada
+  nivel y en cada respawn (JSON en `~/.local/share/pop2026canon/`).
+  En la pantalla de título, `C` continúa la partida guardada (nivel,
+  HP máximo, reloj y muertes). El save se borra al completar el juego
+  y migra automáticamente desde la versión 1 del formato.
+- **Screen shake**: aterrizajes con daño (8 frames) y muerte (12).
+- **Antorchas vivas**: halo pulsante animado a 60 fps por celda.
+- Tests nuevos: interpolación (5) y roundtrip del save con muertes (2).
+  Suite en 790 verdes.
+
 ## [canon-0.10.0] — 2026-07-16
 
 ### Alineación con el canon SDLPoP + importador de LEVELS.DAT

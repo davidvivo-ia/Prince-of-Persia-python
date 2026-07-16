@@ -46,3 +46,29 @@ class TestSaveLoad:
         path.write_text('{"version": 999}', encoding="utf-8")
         with pytest.raises(ValueError, match="save version"):
             read_from_disk(path)
+
+
+class TestSaveDeaths:
+    def test_deaths_roundtrip(self, tmp_path: Path) -> None:
+        game = new_game(LEVEL_1)
+        slot = save_game(game, deaths=7)
+        path = tmp_path / "save.json"
+        write_to_disk(slot, path)
+        loaded = read_from_disk(path)
+        assert loaded.deaths == 7
+
+    def test_v1_save_migrates(self, tmp_path: Path) -> None:
+        """Un save de la versión 1 (sin deaths) carga con deaths=0."""
+        game = new_game(LEVEL_1)
+        slot = save_game(game)
+        path = tmp_path / "save.json"
+        write_to_disk(slot, path)
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["version"] = 1
+        del data["deaths"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        loaded = read_from_disk(path)
+        assert loaded.deaths == 0
+        assert loaded.level == 1

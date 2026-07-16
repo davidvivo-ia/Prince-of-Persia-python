@@ -10,7 +10,7 @@ from pop2026canon.domain.actions import SwordStatus
 from pop2026canon.domain.game import Game, GameFlags, GameStatus, TimeRemaining
 from pop2026canon.domain.levels_canon import load_canon
 
-SAVE_VERSION = 1
+SAVE_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,12 +34,15 @@ class SaveSlot:
     shadow_fused: bool
     skeleton_woke: bool
     mouse_appeared: bool
+    deaths: int = 0
+    """Muertes acumuladas de la campaña (estadística de sesión)."""
 
 
-def save_game(game: Game) -> SaveSlot:
+def save_game(game: Game, *, deaths: int = 0) -> SaveSlot:
     """Construye un SaveSlot a partir del Game actual."""
     return SaveSlot(
         version=SAVE_VERSION,
+        deaths=deaths,
         level=game.level.number,
         kid_room=game.kid.room,
         kid_col=game.kid.curr_col,
@@ -103,8 +106,13 @@ def write_to_disk(slot: SaveSlot, path: Path) -> None:
 def read_from_disk(path: Path) -> SaveSlot:
     """Carga un slot desde JSON. Lanza si la versión no es compatible."""
     data = json.loads(path.read_text(encoding="utf-8"))
-    if data.get("version") != SAVE_VERSION:
-        raise ValueError(f"save version {data.get('version')} != {SAVE_VERSION}")
+    version = data.get("version")
+    if version == 1:
+        # v1 no tenía contador de muertes — migra sobre la marcha.
+        data["version"] = SAVE_VERSION
+        data.setdefault("deaths", 0)
+    elif version != SAVE_VERSION:
+        raise ValueError(f"save version {version} != {SAVE_VERSION}")
     return SaveSlot(**data)
 
 
