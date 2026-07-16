@@ -49,8 +49,20 @@ FALLING_SPEED_ACCEL_FEATHER: int = 1
 FEATHER_FALL_LENGTH: float = 18.75
 """Duración en segundos de la poción de pluma."""
 
+FEATHER_FALL_TICKS: int = 225
+"""Duración en ticks lógicos de la poción de pluma (18.75s x 12 FPS)."""
+
 GRAB_FALL_Y_THRESHOLD: int = 32
 """``check_grab`` exige fall_y < 32 para enganchar."""
+
+LAND_MED_FALL_DIST: int = 300
+"""Distancia de caída (sub-tile px acumulados) a partir de la cual el
+aterrizaje hace daño (1 HP). Calibrado a la geometría del motor: una
+caída de 1 piso acumula ≈264 px (segura); 2 pisos ≈462 (daño)."""
+
+LAND_DEAD_FALL_DIST: int = 500
+"""Distancia de caída a partir de la cual el aterrizaje es mortal
+(3 pisos ≈ 660; el umbral corta entre 2 y 3 pisos)."""
 
 GRAB_TIMER_INITIAL: int = 12
 """Duración del grab inicial en frames."""

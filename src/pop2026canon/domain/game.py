@@ -37,6 +37,13 @@ class TimeRemaining:
     def is_zero(self) -> bool:
         return self.minutes == 0 and self.ticks == 0
 
+    def plus_ticks(self, extra: int) -> TimeRemaining:
+        """Devuelve un nuevo TimeRemaining con ``extra`` ticks añadidos
+        (poción TIME). Nunca supera los 60 minutos iniciales."""
+        total = self.minutes * 720 + self.ticks + extra
+        total = min(total, START_MINUTES_LEFT * 720 + START_TICKS_LEFT)
+        return TimeRemaining(minutes=total // 720, ticks=total % 720)
+
 
 @dataclass(frozen=True, slots=True)
 class GameFlags:

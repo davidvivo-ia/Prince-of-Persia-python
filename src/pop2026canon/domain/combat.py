@@ -140,8 +140,14 @@ def heal(char: Char, amount: int = 1) -> Char:
 
 
 def heal_max(char: Char) -> Char:
-    """Sube max HP +1 y rellena la vida (canon: poción azul grande)."""
-    return replace(char, hp_max=char.hp_max + 1, hp_curr=char.hp_max + 1)
+    """Sube max HP +1 y rellena la vida (canon: poción azul grande).
+
+    Canon SDLPoP: el máximo absoluto es ``MAX_HITP_ALLOWED`` (10).
+    """
+    from pop2026canon.domain.constants import MAX_HITP_ALLOWED
+
+    new_max = min(MAX_HITP_ALLOWED, char.hp_max + 1)
+    return replace(char, hp_max=new_max, hp_curr=new_max)
 
 
 # ---------------------------------------------------------------------------

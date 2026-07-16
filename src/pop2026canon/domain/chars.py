@@ -83,6 +83,17 @@ class Char:
     skill: int = 0
     """Skill (0..11) de un guard. 0 para chars sin combate."""
 
+    float_ticks: int = 0
+    """Ticks restantes de caída-pluma (poción FLOAT). 0 = gravedad normal."""
+
+    landed_fall_y: int = 0
+    """``fall_y`` que traía el char al aterrizar ESTE tick (0 el resto).
+    Lo consumen las trampas (spike mata según velocidad de impacto)."""
+
+    fall_dist: int = 0
+    """Distancia acumulada de la caída libre en curso (sub-tile px).
+    Decide el daño al aterrizar (soft / med / mortal)."""
+
 
 @dataclass(frozen=True, slots=True)
 class GuardSkill:

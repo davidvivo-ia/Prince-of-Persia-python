@@ -6,6 +6,48 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.8.0] — 2026-07-16
+
+### Física completa + campaña de 14 niveles jugable de principio a fin
+
+El motor tenía tres agujeros estructurales que hacían el juego
+imposible de jugar como POP y de ganar: no había aterrizaje (la caída
+libre atravesaba suelos para siempre), no había colisión horizontal
+(el kid atravesaba muros y gates "cerradas"), y `WON_GAME` no lo
+disparaba nadie. Arreglos:
+
+- **Física de caídas** (`domain/physics.py`):
+  - Aterrizaje real: la caída libre termina al entrar en tile sólido.
+    Daño por distancia acumulada (`Char.fall_dist`): 1 piso seguro,
+    2 pisos −1 HP, 3 pisos muerte (canon POP1).
+  - Walk-off: pisar el vacío (pit o loose caído) inicia caída.
+  - Colisión horizontal (`blocks_body_at`): muros y gates cerradas
+    bloquean el cuerpo; los pilares son decorado (canon). Las gates
+    abiertas por plate (LevelState.open_gates) dejan de bloquear.
+  - Loose floors caídos (`fallen_floors`) dejan agujero físico real.
+  - Muerte en abismo (caer sin sala al sur).
+  - `Char.landed_fall_y` registra la velocidad de impacto para el
+    check letal de spikes.
+- **Guards conscientes del terreno**: no atraviesan sólidos ni se
+  tiran a los pits — se quedan al borde mirando al kid.
+- **Campaña completa** (`application/session.py` nueva):
+  - Reloj de 60 min global: sigue corriendo entre niveles y muertes.
+  - hp_max ganado con pociones persiste entre niveles y respawns.
+  - Morir reinicia el nivel (Enter); timeout = derrota definitiva.
+  - Exit door encadena L1→…→L13→L14; alcanzar a la princesa en L14
+    dispara `WON_GAME` (antes era imposible ganar).
+- **Pociones completas**: FLOAT activa caída-pluma real (225 ticks,
+  ninguna caída mata); TIME +30 s al reloj (con tope de 60 min);
+  MAX_HP con tope canon de 10 corazones.
+- **CLI** (`cli.py`): fases title→card→playing→dead/victory/defeat,
+  pausa (P), tiempo bajo demanda (TAB), R reinicia la campaña, fix del
+  bug que consumía la cola de eventos dos veces por frame (el Enter se
+  perdía según el orden de llegada).
+- **HUD**: HP del guard visible en la sala (derecha, como el original).
+- **Tests**: +27 (física de caídas/colisiones, sesión de campaña,
+  pociones, reunión con la princesa). Suite en 759 verdes, mypy
+  strict limpio.
+
 ## [canon-0.7.0] — 2026-05-15
 
 ### Combate REAL + trampas verificadas + IA de guard

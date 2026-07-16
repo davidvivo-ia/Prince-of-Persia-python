@@ -56,10 +56,26 @@ def advance(game: Game, cmd: Command) -> Game:
             new_kid = hang_shuffle(new_kid, room_obj, direction=direction)
 
     # 2-6. Física del kid (play_seq + gravity + collision + grab)
-    new_kid = step_physics(new_kid, game.level, shift_held=cmd.shift)
+    open_gates = game.state.open_gates
+    broken_floors = game.state.fallen_floors
+    new_kid = step_physics(
+        new_kid,
+        game.level,
+        shift_held=cmd.shift,
+        has_feather=new_kid.float_ticks > 0,
+        open_gates=open_gates,
+        broken_floors=broken_floors,
+    )
+    if new_kid.float_ticks > 0:
+        new_kid = replace(new_kid, float_ticks=new_kid.float_ticks - 1)
 
     # 2'. Física de otros chars (guards, shadow, ...)
-    new_others = tuple(step_physics(c, game.level, shift_held=False) for c in game.others)
+    new_others = tuple(
+        step_physics(
+            c, game.level, shift_held=False, open_gates=open_gates, broken_floors=broken_floors
+        )
+        for c in game.others
+    )
 
     # 7. Avanzar trampas de la sala actual
     new_state = _tick_traps(game, new_kid)
@@ -80,13 +96,21 @@ def advance(game: Game, cmd: Command) -> Game:
     new_kid, new_others = _resolve_room_combat(new_kid, new_others)
 
     # 9. Recogida de items (sword, potion, exit)
-    new_kid, new_state, new_flags, status_override = _resolve_pickup(game, new_kid, new_state)
+    new_kid, new_state, new_flags, status_override, bonus_ticks = _resolve_pickup(
+        game, new_kid, new_state
+    )
+
+    # 9b. Reunión con la princesa (L14) → victoria del juego completo
+    if status_override is None:
+        status_override = _check_princess_reunion(new_kid, new_others)
 
     # 10. Trampas letales (chomper closed, spike landing)
     new_kid, killed_by_trap = _resolve_lethal_traps(game, new_kid, new_state)
 
     # 11. Decremento tiempo + comprobación timeout
     new_time = _tick_time(game.time)
+    if bonus_ticks:
+        new_time = new_time.plus_ticks(bonus_ticks)
 
     # 12. Estado global
     new_status = _resolve_status(new_kid, new_time, status_override, killed_by_trap, game.status)
@@ -207,17 +231,21 @@ def _resolve_room_combat(kid: Char, others: tuple[Char, ...]) -> tuple[Char, tup
 
 
 def _resolve_pickup(game: Game, kid: Char, state):  # type: ignore[no-untyped-def]
-    """Detecta recogida de sword, potions, y exit door."""
+    """Detecta recogida de sword, potions, y exit door.
+
+    Devuelve además ``bonus_ticks`` (poción TIME: +30s al reloj).
+    """
     new_flags = game.flags
     new_state = state
     status_override = None
+    bonus_ticks = 0
 
     if not (1 <= kid.room <= len(game.level.rooms)):
-        return kid, new_state, new_flags, status_override
+        return kid, new_state, new_flags, status_override, bonus_ticks
 
     room = game.level.room(kid.room)
     if not (0 <= kid.curr_col < 10 and 0 <= kid.curr_row < 3):
-        return kid, new_state, new_flags, status_override
+        return kid, new_state, new_flags, status_override, bonus_ticks
 
     tile, modifier = room.tile_at(kid.curr_col, kid.curr_row)
     coord = (kid.room, kid.curr_col, kid.curr_row)
@@ -231,6 +259,7 @@ def _resolve_pickup(game: Game, kid: Char, state):  # type: ignore[no-untyped-de
 
     elif tile is Tile.POTION and coord not in new_state.consumed_potions:
         from pop2026canon.domain.combat import heal, heal_max
+        from pop2026canon.domain.constants import FEATHER_FALL_TICKS
         from pop2026canon.domain.tiles import PotionType
 
         new_state = new_state.with_potion_consumed(coord)
@@ -243,11 +272,29 @@ def _resolve_pickup(game: Game, kid: Char, state):  # type: ignore[no-untyped-de
             from pop2026canon.domain.combat import take_hp as _take
 
             kid = _take(kid, 1).char
+        elif ptype is PotionType.FLOAT:
+            kid = replace(kid, float_ticks=FEATHER_FALL_TICKS)
+        elif ptype is PotionType.TIME:
+            bonus_ticks = 360  # +30 segundos
 
     elif tile in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT):
         status_override = GameStatus.WON_LEVEL
 
-    return kid, new_state, new_flags, status_override
+    return kid, new_state, new_flags, status_override, bonus_ticks
+
+
+def _check_princess_reunion(kid: Char, others: tuple[Char, ...]) -> GameStatus | None:
+    """L14: alcanzar a la princesa (misma sala, adyacente) gana el juego."""
+    for c in others:
+        if c.charid is not CharId.PRINCESS:
+            continue
+        if (
+            kid.room == c.room
+            and kid.curr_row == c.curr_row
+            and abs(kid.curr_col - c.curr_col) <= 1
+        ):
+            return GameStatus.WON_GAME
+    return None
 
 
 def _resolve_lethal_traps(game: Game, kid: Char, state) -> tuple[Char, bool]:  # type: ignore[no-untyped-def]
@@ -275,7 +322,7 @@ def _resolve_lethal_traps(game: Game, kid: Char, state) -> tuple[Char, bool]:  #
         )
         return kid, True
 
-    if tile is Tile.SPIKE and spike_kills_on_land(kid.fall_y):
+    if tile is Tile.SPIKE and spike_kills_on_land(max(kid.fall_y, kid.landed_fall_y)):
         kid = replace(
             kid,
             hp_curr=0,

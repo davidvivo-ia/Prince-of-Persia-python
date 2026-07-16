@@ -85,7 +85,7 @@ def _step_one_guard(guard: Char, game: Game, seed: int) -> Char:
         return guard
     # Más lejos: avanza un paso si la probabilidad lo permite.
     if rng.random() < skill.advance_chance:
-        return _step_toward(guard, dx)
+        return _step_toward(guard, dx, game)
     return _face_kid(guard, dx)
 
 
@@ -98,14 +98,24 @@ def _face_kid(guard: Char, dx: int) -> Char:
     return replace(guard, direction=new_dir)
 
 
-def _step_toward(guard: Char, dx: int) -> Char:
+def _step_toward(guard: Char, dx: int, game: Game) -> Char:
+    """Avanza una celda hacia el kid, respetando el terreno.
+
+    Canon: los guards no atraviesan sólidos ni se tiran a los pits —
+    se quedan al borde mirando al kid.
+    """
+    from pop2026canon.domain.physics import floor_below_solid, is_solid_at
+
     step = 1 if dx > 0 else -1
     new_col = max(0, min(9, guard.curr_col + step))
-    return replace(
-        guard,
-        curr_col=new_col,
-        direction=int(Direction.RIGHT) if dx > 0 else int(Direction.LEFT),
-    )
+    new_dir = int(Direction.RIGHT) if dx > 0 else int(Direction.LEFT)
+    if 1 <= guard.room <= len(game.level.rooms):
+        room = game.level.room(guard.room)
+        if is_solid_at(room, new_col, guard.curr_row):
+            return replace(guard, direction=new_dir)
+        if not floor_below_solid(game.level, guard.room, new_col, guard.curr_row):
+            return replace(guard, direction=new_dir)
+    return replace(guard, curr_col=new_col, direction=new_dir)
 
 
 def _start_strike(guard: Char, kid: Char) -> Char:

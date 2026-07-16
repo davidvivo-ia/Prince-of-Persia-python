@@ -27,6 +27,8 @@ from pop2026canon.domain.constants import (
     FALLING_SPEED_MAX,
     FALLING_SPEED_MAX_FEATHER,
     GRAB_FALL_Y_THRESHOLD,
+    LAND_DEAD_FALL_DIST,
+    LAND_MED_FALL_DIST,
     SCREEN_TILECOUNT_X,
     SCREEN_TILECOUNT_Y,
     TILE_SIZE_X,
@@ -154,13 +156,14 @@ def fall_accel(char: Char, *, has_feather: bool = False) -> Char:
 def fall_speed(char: Char) -> Char:
     """Aplica ``fall_y`` a ``char.y`` y ``fall_x`` a ``char.x``.
 
-    Sólo si está en freefall.
+    Sólo si está en freefall. Acumula ``fall_dist`` para el cálculo de
+    daño al aterrizar.
     """
     if char.action is not Action.IN_FREEFALL:
         return char
     new_y = char.y + char.fall_y
     new_x = char.x + char.fall_x * _forward_sign(char.direction)
-    return replace(char, x=new_x, y=new_y)
+    return replace(char, x=new_x, y=new_y, fall_dist=char.fall_dist + char.fall_y)
 
 
 # ---------------------------------------------------------------------------
@@ -273,12 +276,19 @@ def _bumped(char: Char, *, side: int) -> Char:
 # ---------------------------------------------------------------------------
 
 
-def is_solid_at(room: Room, col: int, row: int) -> bool:
-    """``True`` si la celda contiene un tile que bloquea el cuerpo.
+def is_solid_at(
+    room: Room,
+    col: int,
+    row: int,
+    broken_floors: frozenset[tuple[int, int, int]] = frozenset(),
+) -> bool:
+    """``True`` si la celda contiene un tile que SOPORTA peso (se puede
+    estar de pie encima / aterrizar en él).
 
     Las gates con modifier > 0 (parcialmente abiertas) se consideran
     aún bloqueantes salvo que el modifier llegue a 7 (totalmente
-    abierta) — pendiente de gate state machine en FASE 3.4.
+    abierta). Un LOOSE cuya losa ya cayó (``broken_floors`` de
+    :class:`LevelState`) deja un agujero real.
     """
     if not (0 <= col < SCREEN_TILECOUNT_X and 0 <= row < SCREEN_TILECOUNT_Y):
         return True  # fuera de sala = sólido
@@ -286,7 +296,37 @@ def is_solid_at(room: Room, col: int, row: int) -> bool:
     if tile is Tile.GATE:
         # Gate sólida salvo cuando está completamente abierta (modifier=7)
         return modifier < 7
+    if tile is Tile.LOOSE and (room.id, col, row) in broken_floors:
+        return False
     return tile in SOLID
+
+
+def blocks_body_at(
+    room: Room,
+    col: int,
+    row: int,
+    open_gates: frozenset[tuple[int, int, int]] = frozenset(),
+) -> bool:
+    """``True`` si la celda bloquea el CUERPO horizontalmente.
+
+    Canon POP1: sólo los muros y las gates cerradas cortan el paso.
+    Los pilares (PILLAR, BIGPILLAR_*) son decorado en primer plano —
+    el kid corre por detrás de ellos.
+
+    ``open_gates`` es el set dinámico de :class:`LevelState` — una gate
+    abierta por plate deja de bloquear aunque su modifier estático siga
+    siendo 0.
+    """
+    if not (0 <= col < SCREEN_TILECOUNT_X and 0 <= row < SCREEN_TILECOUNT_Y):
+        return True
+    tile, modifier = room.tile_at(col, row)
+    if tile is Tile.WALL:
+        return True
+    if tile is Tile.GATE:
+        if modifier >= 7:
+            return False
+        return (room.id, col, row) not in open_gates
+    return False
 
 
 def check_floor_below(room: Room, col: int, row: int) -> bool:
@@ -359,6 +399,7 @@ def snap_to_hang(char: Char, ledge_col: int, ledge_row: int) -> Char:
         action=Action.HANG_STRAIGHT,
         fall_x=0,
         fall_y=0,
+        fall_dist=0,
         curr_seq_id=int(Seq.GRAB_LEDGE_MIDAIR),
         curr_seq_idx=0,
     )
@@ -407,12 +448,145 @@ def release_hang(char: Char) -> Char:
 # ---------------------------------------------------------------------------
 
 
+# Secuencias de locomoción "con los pies en el suelo" — si el tile bajo
+# el char desaparece durante una de ellas, el char cae. Las secuencias
+# aéreas (STANDING_JUMP, RUN_JUMP, FALL...) gestionan su propia caída.
+_GROUNDED_SEQS: frozenset[int] = frozenset(
+    {
+        int(Seq.STAND),
+        int(Seq.START_RUN),
+        int(Seq.RUN),
+        int(Seq.STOP_RUN),
+        int(Seq.RUNTURN),
+        int(Seq.TURN),
+        int(Seq.BUMP),
+        int(Seq.ENGARDE),
+        int(Seq.ADVANCE),
+        int(Seq.RETREAT),
+        int(Seq.STRIKE),
+        int(Seq.BLOCK_STRIKE),
+        int(Seq.BLOCK_TO_STRIKE),
+        int(Seq.CROUCH),
+        int(Seq.STAND_UP_FROM_CROUCH),
+        int(Seq.DRAW_SWORD),
+        int(Seq.PUT_SWORD_AWAY),
+        int(Seq.SOFT_LAND),
+        int(Seq.MED_LAND),
+        int(Seq.HARD_LAND),
+    }
+)
+
+# Acciones exentas de colisión horizontal: el cuerpo pasa por celdas
+# "sólidas" legítimamente (trepando la cornisa, colgado del borde).
+_CLIMB_ACTIONS: frozenset[Action] = frozenset({Action.HANG_STRAIGHT, Action.HANG_CLIMB})
+
+
+def floor_below_solid(
+    level: Level,
+    room_id: int,
+    col: int,
+    row: int,
+    broken_floors: frozenset[tuple[int, int, int]] = frozenset(),
+) -> bool:
+    """¿Hay suelo sólido bajo (col, row)? Mira la sala sur si hace falta."""
+    if not (1 <= room_id <= len(level.rooms)):
+        return False
+    room = level.room(room_id)
+    if row + 1 < SCREEN_TILECOUNT_Y:
+        return is_solid_at(room, col, row + 1, broken_floors)
+    south = room.link_s
+    if not south:
+        return False  # abismo
+    return is_solid_at(level.room(south), col, 0, broken_floors)
+
+
+def start_fall(char: Char) -> Char:
+    """El suelo desapareció bajo los pies: inicia caída libre."""
+    return replace(
+        char,
+        action=Action.IN_FREEFALL,
+        curr_seq_id=int(Seq.FALL),
+        curr_seq_idx=0,
+        fall_x=0,
+        fall_y=0,
+        fall_dist=0,
+    )
+
+
+def _land(char: Char, *, on_row: int) -> Char:
+    """Aterrizaje: decide soft / med (-1 HP) / mortal según la distancia
+    de caída acumulada.
+
+    Canon POP1: 1 piso es seguro, 2 pisos cuestan 1 HP, 3 pisos matan.
+    Con la poción FLOAT activa el aterrizaje siempre es suave.
+    """
+    dist = char.fall_dist
+    landed = replace(
+        char,
+        curr_row=max(0, on_row),
+        y=0,
+        fall_x=0,
+        fall_y=0,
+        fall_dist=0,
+        landed_fall_y=char.fall_y,
+    )
+    if char.float_ticks > 0 or dist < LAND_MED_FALL_DIST:
+        return replace(
+            landed,
+            action=Action.STAND,
+            curr_seq_id=int(Seq.SOFT_LAND),
+            curr_seq_idx=0,
+        )
+    if dist >= LAND_DEAD_FALL_DIST:
+        return replace(
+            landed,
+            hp_curr=0,
+            alive=0,
+            action=Action.HURT,
+            curr_seq_id=int(Seq.HARD_LAND),
+            curr_seq_idx=0,
+        )
+    new_hp = max(0, char.hp_curr - 1)
+    if new_hp == 0:
+        return replace(
+            landed,
+            hp_curr=0,
+            alive=0,
+            action=Action.HURT,
+            curr_seq_id=int(Seq.HARD_LAND),
+            curr_seq_idx=0,
+        )
+    return replace(
+        landed,
+        hp_curr=new_hp,
+        action=Action.STAND,
+        curr_seq_id=int(Seq.MED_LAND),
+        curr_seq_idx=0,
+    )
+
+
+def _die_in_abyss(char: Char) -> Char:
+    """Cayó fuera del mapa (sin sala al sur): muerte por caída."""
+    return replace(
+        char,
+        hp_curr=0,
+        alive=0,
+        action=Action.HURT,
+        fall_x=0,
+        fall_y=0,
+        curr_seq_id=int(Seq.HARD_LAND),
+        curr_seq_idx=0,
+    )
+
+
 def step_physics(
     char: Char,
     level: Level,
     *,
     shift_held: bool = False,
     has_feather: bool = False,
+    open_gates: frozenset[tuple[int, int, int]] = frozenset(),
+    broken_floors: frozenset[tuple[int, int, int]] = frozenset(),
 ) -> Char:
     """Un tick completo de física para un char.
 
@@ -423,18 +597,72 @@ def step_physics(
     3. ``fall_speed`` — aplica fall_y/fall_x a x/y.
     4. ``normalize_to_cell`` — redistribuye desbordes sub-tile.
     5. ``cross_border`` — cambio de sala si cruzó.
-    6. ``can_grab`` — engancha cornisa si SHIFT + condiciones.
+    6. Colisión horizontal — revierte el movimiento si acabó dentro de
+       un tile que bloquea el cuerpo (muro, gate cerrada).
+    7. Aterrizaje — freefall que entra en tile sólido aterriza encima
+       (soft / med -1HP / mortal según ``fall_y``); sin sala al sur, el
+       char muere en el abismo.
+    8. ``can_grab`` — engancha cornisa si SHIFT + condiciones.
+    9. Walk-off — locomoción de suelo sin suelo debajo inicia caída.
+
+    ``open_gates`` viene de :class:`LevelState` — las gates abiertas
+    por plate dejan de bloquear.
     """
+    snapshot = char
+    char = replace(char, landed_fall_y=0) if char.landed_fall_y else char
     char = play_seq(char)
     char = fall_accel(char, has_feather=has_feather)
     char = fall_speed(char)
     char = normalize_to_cell(char)
     char = cross_border(char, level)
 
-    if 1 <= char.room <= len(level.rooms):
-        room = level.room(char.room)
-        ledge = can_grab(char, room, shift_held=shift_held)
-        if ledge is not None:
-            char = snap_to_hang(char, *ledge)
+    if not (1 <= char.room <= len(level.rooms)):
+        return char
+    room = level.room(char.room)
+
+    in_air = char.action in (Action.IN_FREEFALL, Action.IN_MIDAIR)
+    in_cell = 0 <= char.curr_row < SCREEN_TILECOUNT_Y and 0 <= char.curr_col < SCREEN_TILECOUNT_X
+
+    # 6. Colisión horizontal: acabó dentro de un tile que bloquea el
+    #    cuerpo sin estar cayendo ni trepando → revierte + BUMP.
+    if (
+        in_cell
+        and blocks_body_at(room, char.curr_col, char.curr_row, open_gates)
+        and not in_air
+        and char.action not in _CLIMB_ACTIONS
+        and char.alive < 0
+    ):
+        return replace(
+            snapshot,
+            landed_fall_y=0,
+            action=Action.BUMPED,
+            curr_seq_id=int(Seq.BUMP),
+            curr_seq_idx=0,
+            frame=char.frame,
+        )
+
+    # 7. Aterrizaje: cayendo y entró en un tile sólido → aterriza encima.
+    if char.action is Action.IN_FREEFALL and char.alive < 0:
+        if in_cell and is_solid_at(room, char.curr_col, char.curr_row, broken_floors):
+            return _land(char, on_row=char.curr_row - 1)
+        if char.curr_row >= SCREEN_TILECOUNT_Y:
+            # Bajo la última fila sin link sur: abismo.
+            return _die_in_abyss(char)
+
+    # 8. Hang grab
+    ledge = can_grab(char, room, shift_held=shift_held)
+    if ledge is not None:
+        return snap_to_hang(char, *ledge)
+
+    # 9. Walk-off: locomoción de suelo sobre el vacío → cae.
+    if (
+        char.alive < 0
+        and not in_air
+        and char.action not in _CLIMB_ACTIONS
+        and char.curr_seq_id in _GROUNDED_SEQS
+        and in_cell
+        and not floor_below_solid(level, char.room, char.curr_col, char.curr_row, broken_floors)
+    ):
+        return start_fall(char)
 
     return char

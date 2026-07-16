@@ -121,13 +121,15 @@ def _draw_chars(surf: pygame.Surface, game: Game) -> None:
     draw_kid_frame(surf, game.kid.frame or 15, px_x, px_y, game.kid.direction, CharPalette.KID)
 
 
-def _draw_hud(surf: pygame.Surface, game: Game, font: pygame.font.Font) -> None:
-    """Banda HUD superior con HP, tiempo, sala."""
+def _draw_hud(
+    surf: pygame.Surface, game: Game, font: pygame.font.Font, *, show_time: bool = False
+) -> None:
+    """Banda HUD superior con HP, tiempo, sala y HP del guard visible."""
     w = surf.get_width()
     pygame.draw.rect(surf, PALETTE.bg, (0, 0, w, LAYOUT.hud_top))
     pygame.draw.line(surf, PALETTE.warning, (0, LAYOUT.hud_top - 1), (w, LAYOUT.hud_top - 1), 1)
 
-    # HP — corazones
+    # HP del kid — corazones (izquierda, como el original)
     for i in range(game.kid.hp_max):
         cx = 16 + i * 16 + 6
         cy = 18
@@ -136,20 +138,39 @@ def _draw_hud(surf: pygame.Surface, game: Game, font: pygame.font.Font) -> None:
         pygame.draw.circle(surf, col, (cx + 3, cy - 1), 3)
         pygame.draw.polygon(surf, col, [(cx - 5, cy), (cx + 5, cy), (cx, cy + 6)])
 
+    # HP del guard en la sala visible — derecha (canon: barra azul)
+    guard = next(
+        (
+            c
+            for c in game.others
+            if c.charid is CharId.GUARD and c.room == game.kid.room and c.alive < 0
+        ),
+        None,
+    )
+    if guard is not None:
+        for i in range(guard.hp_curr):
+            cx = w - 16 - i * 14
+            cy = 18
+            pygame.draw.rect(surf, PALETTE.accent, (cx - 4, cy - 5, 9, 11), border_radius=2)
+
     # Texto: nivel y sala
     label = f"{game.level.name} L{game.level.number}/14 S{game.kid.room}/{len(game.level.rooms)}"
     surf.blit(font.render(label, True, PALETTE.primary), (w // 3, 14))
 
-    # Tiempo (sólo el último minuto visible — canon ocultaba el resto)
-    if game.time.minutes <= 5:
+    # Tiempo: bajo demanda (TAB) o siempre en los últimos 5 minutos
+    if show_time or game.time.minutes <= 5:
         time_txt = f"{game.time.minutes:02d}:{game.time.ticks // 12:02d}"
-        surf.blit(font.render(time_txt, True, PALETTE.warning), (w - 80, 14))
+        color = PALETTE.warning if game.time.minutes <= 5 else PALETTE.primary
+        x = w - 80 if guard is None else w - 170
+        surf.blit(font.render(time_txt, True, color), (x, 14))
 
 
-def render(surf: pygame.Surface, game: Game, font: pygame.font.Font) -> None:
+def render(
+    surf: pygame.Surface, game: Game, font: pygame.font.Font, *, show_time: bool = False
+) -> None:
     """Renderiza un frame completo."""
     surf.fill(PALETTE.bg)
     _draw_back_wall(surf)
     _draw_room_tiles(surf, game)
     _draw_chars(surf, game)
-    _draw_hud(surf, game, font)
+    _draw_hud(surf, game, font, show_time=show_time)

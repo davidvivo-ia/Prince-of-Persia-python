@@ -61,17 +61,24 @@ def _main(
 
 
 def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool = False) -> int:
-    """Loop principal del juego con fases TITLE → LEVEL_CARD → PLAYING."""
+    """Loop principal — campaña completa de 14 niveles.
+
+    Fases: TITLE → LEVEL_CARD → PLAYING. Al morir se reintenta el nivel
+    (el reloj de 60 min sigue corriendo); al cruzar la exit door se pasa
+    al siguiente nivel con card intermedia; alcanzar a la princesa en
+    L14 gana el juego. Timeout = derrota definitiva.
+    """
     import pygame
 
+    from pop2026canon.application.session import Session, resolve_transition
     from pop2026canon.presentation import input_device, renderer
     from pop2026canon.presentation.layout import LAYOUT
     from pop2026canon.presentation.screens import cutscene, ending, title
 
     pygame.init()
 
-    level = CANON_LEVELS[level_number - 1]
-    game = new_game(level)
+    session = Session(level_number=level_number)
+    game = session.start_game()
 
     if headless:
         # Modo headless: avanza ticks sin renderizar y sin pantallas.
@@ -88,53 +95,91 @@ def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool
         return 0
 
     screen = pygame.display.set_mode((LAYOUT.window_w, LAYOUT.window_h))
-    pygame.display.set_caption(f"pop2026canon — {level.name} (L{level_number}/14)")
     font = pygame.font.Font(None, 22)
     font_big = pygame.font.Font(None, 56)
     font_small = pygame.font.Font(None, 22)
     clock = pygame.time.Clock()
 
+    def _set_caption() -> None:
+        lvl = game.level
+        pygame.display.set_caption(f"pop2026canon — {lvl.name} (L{lvl.number}/14)")
+
+    _set_caption()
+
     phase: str = "card" if skip_intro else "title"
     phase_t0 = pygame.time.get_ticks() / 1000.0
     visual_frames = 0
+    paused = False
+    quit_requested = False
 
     def _phase_t() -> float:
         return pygame.time.get_ticks() / 1000.0 - phase_t0
 
-    while True:
-        if input_device.should_quit():
+    def _goto(new_phase: str) -> None:
+        nonlocal phase, phase_t0
+        phase = new_phase
+        phase_t0 = pygame.time.get_ticks() / 1000.0
+
+    while not quit_requested:
+        # Única pasada de eventos por frame (poll() usa get_pressed, no
+        # consume la cola).
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                quit_requested = True
+            elif ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_ESCAPE:
+                    quit_requested = True
+                elif ev.key == pygame.K_RETURN:
+                    if phase in ("title", "card", "dead"):
+                        if phase == "dead":
+                            _set_caption()
+                        _goto("playing" if phase != "title" else "card")
+                elif ev.key == pygame.K_p and phase == "playing":
+                    paused = not paused
+                elif ev.key == pygame.K_r and phase in ("defeat", "victory"):
+                    # Reinicia la campaña completa
+                    session = Session(level_number=1)
+                    game = session.start_game()
+                    _set_caption()
+                    _goto("card")
+
+        if quit_requested:
             break
-        events = pygame.event.get()
-        for ev in events:
-            if ev.type == pygame.KEYDOWN and ev.key == pygame.K_RETURN:
-                if phase == "title":
-                    phase = "card"
-                    phase_t0 = pygame.time.get_ticks() / 1000.0
-                elif phase == "card":
-                    phase = "playing"
-                    phase_t0 = pygame.time.get_ticks() / 1000.0
 
         if phase == "title":
             title.draw(screen, font_big, font_small, _phase_t())
         elif phase == "card":
-            cutscene.draw_level_card(screen, level, font_big, font_small, _phase_t())
+            cutscene.draw_level_card(screen, game.level, font_big, font_small, _phase_t())
         elif phase == "playing":
             if not game.running:
-                phase = "ending"
-                phase_t0 = pygame.time.get_ticks() / 1000.0
+                session, next_game, outcome = resolve_transition(session, game)
+                if outcome == "victory":
+                    _goto("victory")
+                elif outcome == "timeout":
+                    _goto("defeat")
+                elif outcome == "card":
+                    game = next_game if next_game is not None else game
+                    _set_caption()
+                    _goto("card")
+                else:  # respawn tras muerte
+                    game = next_game if next_game is not None else game
+                    _goto("dead")
                 continue
-            if visual_frames % 5 == 0:
+            if not paused and visual_frames % 5 == 0:
                 cmd = input_device.poll()
                 game = advance(game, cmd)
+                session = session.after_tick(game)
+            keys = pygame.key.get_pressed()
+            renderer.render(screen, game, font, show_time=bool(keys[pygame.K_TAB]))
+            if paused:
+                _draw_pause_overlay(screen, font_big)
+        elif phase == "dead":
             renderer.render(screen, game, font)
-        elif phase == "ending":
-            from pop2026canon.domain.game import GameStatus
-
-            if game.status is GameStatus.WON_GAME or game.status is GameStatus.WON_LEVEL:
-                ending.draw_victory(screen, font_big, font_small)
-            else:
-                timeout = game.status is GameStatus.LOST_TIMEOUT
-                ending.draw_defeat(screen, font_big, font_small, timeout=timeout)
+            ending.draw_death_overlay(screen, font_big, font_small, deaths=session.deaths)
+        elif phase == "victory":
+            ending.draw_victory(screen, font_big, font_small)
+        elif phase == "defeat":
+            ending.draw_defeat(screen, font_big, font_small, timeout=True)
 
         pygame.display.flip()
         clock.tick(60)
@@ -144,6 +189,20 @@ def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool
 
     pygame.quit()
     return 0
+
+
+def _draw_pause_overlay(screen: object, font_big: object) -> None:
+    """Velo de pausa sobre el frame actual."""
+    import pygame
+
+    surf = screen
+    assert isinstance(surf, pygame.Surface)
+    assert isinstance(font_big, pygame.font.Font)
+    veil = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+    veil.fill((0, 0, 0, 140))
+    surf.blit(veil, (0, 0))
+    txt = font_big.render("PAUSA", True, (235, 220, 180))
+    surf.blit(txt, txt.get_rect(center=(surf.get_width() // 2, surf.get_height() // 2)))
 
 
 _PREVIEW_DEFAULT = Path("preview_canon.png")
