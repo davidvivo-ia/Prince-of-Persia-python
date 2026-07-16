@@ -136,11 +136,15 @@ def new_game(level: Level, *, starting_hp: int = START_HITP) -> Game:
     guard_list: list[Char] = []
     for room in level.rooms:
         for spawn in room.guards:
+            from pop2026canon.domain.chars import GUARD_SKILLS
             from pop2026canon.domain.levels_canon import guard_hp_for_level
 
             hp = guard_hp_for_level(level.number)
             if hp == 0:
                 continue
+            # Canon: extrastrength por skill se suma al HP del nivel.
+            skill_idx = max(0, min(len(GUARD_SKILLS) - 1, spawn.skill))
+            hp += GUARD_SKILLS[skill_idx].extra_hp
             from pop2026canon.domain.actions import SwordStatus
 
             guard_list.append(

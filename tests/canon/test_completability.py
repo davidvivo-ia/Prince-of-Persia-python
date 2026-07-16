@@ -86,6 +86,9 @@ _R = Command(right=True)
 _L = Command(left=True)
 _RU = Command(right=True, up=True)
 _LU = Command(left=True, up=True)
+_U = Command(up=True)
+_US = Command(up=True, shift=True)
+_S = Command(shift=True)
 
 _MACROS: list[list[tuple[Command, int]]] = [
     [(_R, 4)],  # paso corto derecha
@@ -96,6 +99,7 @@ _MACROS: list[list[tuple[Command, int]]] = [
     [(_L, 7), (_LU, 3), (_L, 14)],  # run-jump izquierda
     [(_R, 2), (_RU, 3), (_R, 12)],  # salto corto derecha
     [(_L, 2), (_LU, 3), (_L, 12)],  # salto corto izquierda
+    [(_US, 8), (_S, 8), (_U, 20)],  # salto vertical + grab + climb
     [(_NOOP, 16)],  # esperar (loose floors, gates)
 ]
 

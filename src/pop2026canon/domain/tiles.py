@@ -116,16 +116,35 @@ class Tile(IntEnum):
 SOLID: frozenset[Tile] = frozenset(
     {
         Tile.FLOOR,
-        Tile.LOOSE,
+        Tile.SPIKE,
         Tile.PILLAR,
+        Tile.GATE,  # solo cuando state CLOSED (chequeo dinámico)
+        Tile.STUCK,
+        Tile.CLOSER,
+        Tile.DOORTOP_WITH_FLOOR,
         Tile.BIGPILLAR_BOTTOM,
         Tile.BIGPILLAR_TOP,
-        Tile.DOORTOP_WITH_FLOOR,
-        Tile.WALL,
+        Tile.POTION,
+        Tile.LOOSE,
+        Tile.MIRROR,
         Tile.DEBRIS,
-        Tile.GATE,  # solo cuando state CLOSED (chequeo dinámico)
+        Tile.OPENER,
+        Tile.LEVEL_DOOR_LEFT,
+        Tile.LEVEL_DOOR_RIGHT,
+        Tile.CHOMPER,
+        Tile.TORCH,
+        Tile.WALL,
+        Tile.SKELETON,
+        Tile.SWORD,
+        Tile.BALCONY_LEFT,
+        Tile.BALCONY_RIGHT,
+        Tile.LATTICE_PILLAR,
+        Tile.TORCH_WITH_DEBRIS,
     }
 )
+"""Tiles que SOPORTAN peso — el set canon de `tile_is_floor` (todo
+excepto EMPTY, DOORTOP y las celosías) más los que nuestro motor trata
+como soporte (WALL, BIGPILLAR_TOP para aterrizar sobre pilares)."""
 """Tiles sobre los que el kid puede pararse o que bloquean movimiento."""
 
 LETHAL_WITH_FALL: frozenset[Tile] = frozenset({Tile.SPIKE})

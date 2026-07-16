@@ -97,38 +97,56 @@ class Char:
 
 @dataclass(frozen=True, slots=True)
 class GuardSkill:
-    """Parámetros canónicos por skill 0..11. Valores ilustrativos —
-    refinar tras dump exacto. Ver `docs/design/07-guard-ai.md`.
+    """Parámetros canónicos por skill 0..11.
+
+    Valores extraídos de las tablas de la versión DOS (verificadas en
+    el desensamblado de SDLPoP, `seg002.c`): probabilidades sobre 255
+    convertidas a [0, 1]. El skill 8 es el guard "pasivo" (no ataca ni
+    bloquea — aparece en escenas scriptadas).
     """
 
-    prob_block: float
-    """0..1 — probabilidad de bloquear strike entrante."""
+    prob_strike: float
+    """Probabilidad de iniciar un strike estando en rango."""
 
     prob_strike_after_block: float
-    """Probabilidad de contraatacar tras un block."""
+    """Probabilidad de contraatacar tras bloquear (restrike)."""
 
-    refractory: int
-    """Ticks de pausa tras moverse."""
+    prob_block: float
+    """Probabilidad de bloquear un strike entrante."""
+
+    prob_imp_block: float
+    """Probabilidad de bloquear cuando el guard está "impaired"."""
 
     advance_chance: float
-    """Probabilidad de avanzar vs idle estando en COMBAT."""
+    """Probabilidad de avanzar hacia el kid vs quedarse."""
+
+    refractory: int
+    """Ticks de pausa tras atacar/bloquear."""
+
+    extra_hp: int
+    """HP extra sobre el `TBL_GUARD_HP` del nivel."""
+
+
+def _skill(s: int, r: int, b: int, i: int, a: int, refract: int, hp: int) -> GuardSkill:
+    return GuardSkill(s / 255, r / 255, b / 255, i / 255, a / 255, refract, hp)
 
 
 GUARD_SKILLS: tuple[GuardSkill, ...] = (
-    GuardSkill(0.10, 0.20, 12, 0.10),
-    GuardSkill(0.20, 0.30, 10, 0.20),
-    GuardSkill(0.30, 0.40, 8, 0.30),
-    GuardSkill(0.40, 0.50, 7, 0.40),
-    GuardSkill(0.50, 0.55, 6, 0.50),
-    GuardSkill(0.60, 0.60, 5, 0.55),
-    GuardSkill(0.65, 0.70, 5, 0.60),
-    GuardSkill(0.75, 0.75, 4, 0.65),
-    GuardSkill(0.80, 0.80, 4, 0.70),
-    GuardSkill(0.85, 0.85, 3, 0.75),
-    GuardSkill(0.90, 0.90, 3, 0.80),
-    GuardSkill(0.95, 0.95, 2, 0.90),
+    #      strike restrike block impblock adv  refract hp
+    _skill(61, 0, 0, 0, 255, 16, 0),
+    _skill(100, 0, 150, 61, 200, 16, 0),
+    _skill(61, 0, 150, 61, 200, 16, 0),
+    _skill(61, 5, 200, 100, 200, 16, 0),
+    _skill(61, 5, 200, 100, 255, 8, 1),
+    _skill(40, 175, 255, 145, 255, 8, 0),
+    _skill(100, 16, 200, 100, 200, 8, 0),
+    _skill(220, 8, 250, 250, 0, 8, 0),
+    _skill(0, 0, 0, 0, 0, 0, 0),  # 8: guard pasivo (scripted)
+    _skill(48, 255, 255, 145, 255, 8, 0),
+    _skill(32, 255, 255, 255, 100, 0, 0),
+    _skill(48, 150, 255, 175, 100, 0, 0),
 )
-"""Tabla con `NUM_GUARD_SKILLS = 12` entradas."""
+"""Tabla canon con `NUM_GUARD_SKILLS = 12` entradas (DOS v1.0)."""
 
 
 @dataclass(frozen=True, slots=True)

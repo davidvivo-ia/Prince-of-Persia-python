@@ -44,6 +44,14 @@ def _main(
     skip_intro: bool = typer.Option(
         False, "--skip-intro", help="Salta la intro animada y empieza en el level card."
     ),
+    levels_dat: Path | None = typer.Option(  # noqa: B008 — patrón estándar de typer
+        None,
+        "--levels-dat",
+        help=(
+            "Carga los niveles ORIGINALES desde tu copia del juego: "
+            "LEVELS.DAT de MS-DOS o directorio con res20NN.bin."
+        ),
+    ),
     version: bool = typer.Option(
         False, "--version", callback=_version_callback, is_eager=True, help="Imprime versión."
     ),
@@ -56,11 +64,24 @@ def _main(
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-    code = _run(level, headless=headless, max_frames=max_frames, skip_intro=skip_intro)
+    code = _run(
+        level,
+        headless=headless,
+        max_frames=max_frames,
+        skip_intro=skip_intro,
+        levels_dat=levels_dat,
+    )
     sys.exit(code)
 
 
-def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool = False) -> int:
+def _run(
+    level_number: int,
+    *,
+    headless: bool,
+    max_frames: int,
+    skip_intro: bool = False,
+    levels_dat: Path | None = None,
+) -> int:
     """Loop principal — campaña completa de 14 niveles.
 
     Fases: TITLE → LEVEL_CARD → PLAYING. Al morir se reintenta el nivel
@@ -79,7 +100,14 @@ def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool
 
     pygame.init()
 
-    session = Session(level_number=level_number)
+    campaign_levels = CANON_LEVELS
+    if levels_dat is not None:
+        from pop2026canon.infrastructure.levels_dat import load_campaign
+
+        campaign_levels = load_campaign(levels_dat)
+        typer.echo(f"Niveles originales cargados desde {levels_dat}")
+
+    session = Session(level_number=level_number, levels=campaign_levels)
     game = session.start_game()
 
     if headless:
@@ -140,8 +168,8 @@ def _run(level_number: int, *, headless: bool, max_frames: int, skip_intro: bool
                 elif ev.key == pygame.K_p and phase == "playing":
                     paused = not paused
                 elif ev.key == pygame.K_r and phase in ("defeat", "victory"):
-                    # Reinicia la campaña completa
-                    session = Session(level_number=1)
+                    # Reinicia la campaña completa (mismo set de niveles)
+                    session = Session(level_number=1, levels=campaign_levels)
                     game = session.start_game()
                     _set_caption()
                     _goto("card")

@@ -76,11 +76,12 @@ def _step_one_guard(guard: Char, game: Game, seed: int) -> Char:
     if abs(dx) == 1:
         # Adyacente: gira hacia el kid; si mira hacia él, ataca según skill.
         guard = _face_kid(guard, dx)
-        # Bloquea si el kid está atacando.
+        # Bloquea si el kid está atacando (blockprob canon).
         if kid.curr_seq_id == int(Seq.STRIKE) and rng.random() < skill.prob_block:
             return _start_block(guard)
-        # Ataca con probabilidad alta cuando adyacente.
-        if rng.random() < (0.4 + 0.05 * skill_idx):
+        # Ataca según strikeprob canon; garantizamos un mínimo para que
+        # los guards de skill bajo sigan siendo una amenaza jugable.
+        if rng.random() < max(0.15, skill.prob_strike):
             return _start_strike(guard, kid)
         return guard
     # Más lejos: avanza un paso si la probabilidad lo permite.

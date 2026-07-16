@@ -172,6 +172,20 @@ def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
 
     # Gates: ticken en TODAS las salas con doorlinks activos + sala visible.
     pressed_plates = _find_pressed_plates_global(game)
+
+    # Exit doors: una plate vinculada a una LEVEL_DOOR la abre de forma
+    # PERMANENTE (canon: la puerta de salida sube y se queda arriba).
+    for link in game.level.doorlinks:
+        if link.gate_coord in new_state.open_gates:
+            continue
+        if not any(p in pressed_plates for p in (link.plate_coord,)):
+            continue
+        gate_room_id, gate_col, gate_row = link.gate_coord
+        if not (1 <= gate_room_id <= len(game.level.rooms)):
+            continue
+        target_tile, _ = game.level.room(gate_room_id).tile_at(gate_col, gate_row)
+        if target_tile in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT):
+            new_state = new_state.with_gate_open(link.gate_coord)
     rooms_to_tick = {kid.room}
     for link in game.level.doorlinks:
         if link.plate_coord in pressed_plates or link.gate_coord in new_state.open_gates:
@@ -214,6 +228,12 @@ def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
         tile, _ = room.tile_at(actor.curr_col, actor.curr_row)
         if tile is Tile.OPENER:
             pressed.add((actor.room, actor.curr_col, actor.curr_row))
+        elif actor.curr_row + 1 < 3:
+            # Semántica canon: la plate es un tile-suelo — el actor
+            # está una fila por encima de ella.
+            below, _ = room.tile_at(actor.curr_col, actor.curr_row + 1)
+            if below is Tile.OPENER:
+                pressed.add((actor.room, actor.curr_col, actor.curr_row + 1))
     return pressed
 
 
@@ -249,6 +269,28 @@ def _resolve_pickup(game: Game, kid: Char, state):  # type: ignore[no-untyped-de
 
     tile, modifier = room.tile_at(kid.curr_col, kid.curr_row)
     coord = (kid.room, kid.curr_col, kid.curr_row)
+    # Semántica dual: en los niveles canon los items son tiles-suelo —
+    # el kid queda una fila POR ENCIMA de ellos. Si la celda propia no
+    # tiene item, mira la de debajo.
+    if (
+        tile
+        not in (
+            Tile.SWORD,
+            Tile.POTION,
+            Tile.LEVEL_DOOR_LEFT,
+            Tile.LEVEL_DOOR_RIGHT,
+        )
+        and kid.curr_row + 1 < 3
+    ):
+        below_tile, below_mod = room.tile_at(kid.curr_col, kid.curr_row + 1)
+        if below_tile in (
+            Tile.SWORD,
+            Tile.POTION,
+            Tile.LEVEL_DOOR_LEFT,
+            Tile.LEVEL_DOOR_RIGHT,
+        ):
+            tile, modifier = below_tile, below_mod
+            coord = (kid.room, kid.curr_col, kid.curr_row + 1)
 
     if tile is Tile.SWORD and not new_flags.sword_picked:
         from pop2026canon.domain.actions import SwordStatus
@@ -277,10 +319,41 @@ def _resolve_pickup(game: Game, kid: Char, state):  # type: ignore[no-untyped-de
         elif ptype is PotionType.TIME:
             bonus_ticks = 360  # +30 segundos
 
-    elif tile in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT):
+    elif tile in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT) and _exit_door_open(
+        game, kid, new_state
+    ):
         status_override = GameStatus.WON_LEVEL
 
     return kid, new_state, new_flags, status_override, bonus_ticks
+
+
+def _exit_door_open(game: Game, kid: Char, state) -> bool:  # type: ignore[no-untyped-def]
+    """¿La level door que toca el kid es una salida transitable?
+
+    Canon POP1: los niveles tienen DOS level doors — la de entrada (en
+    la sala de spawn, cerrada a tu espalda) y la de salida, que hay que
+    ABRIR pisando su plate. Reglas:
+
+    - Puerta con doorlink (plate asociada): sólo gana si está abierta.
+    - Puerta sin doorlink fuera de la sala de spawn: salida siempre
+      abierta (niveles fan-recreation).
+    - Puerta sin doorlink en la sala de spawn: es la entrada — no gana.
+    """
+    # Las dos mitades de la puerta comparten estado: revisa la celda
+    # tocada, sus vecinas horizontales y la fila de debajo (semántica
+    # canon: la puerta es un tile-suelo).
+    candidates = [
+        (kid.room, kid.curr_col + dc, kid.curr_row + dr) for dc in (0, -1, 1) for dr in (0, 1)
+    ]
+    has_link = False
+    for coord in candidates:
+        if game.level.plates_for_gate(coord):
+            has_link = True
+            if coord in state.open_gates:
+                return True
+    if has_link:
+        return False
+    return kid.room != game.level.start_room
 
 
 def _check_princess_reunion(kid: Char, others: tuple[Char, ...]) -> GameStatus | None:
@@ -310,6 +383,12 @@ def _resolve_lethal_traps(game: Game, kid: Char, state) -> tuple[Char, bool]:  #
 
     tile, _ = room.tile_at(kid.curr_col, kid.curr_row)
     coord = (kid.room, kid.curr_col, kid.curr_row)
+    # Semántica canon: trampas como tiles-suelo (kid una fila encima).
+    if tile not in (Tile.CHOMPER, Tile.SPIKE) and kid.curr_row + 1 < 3:
+        below_tile, _ = room.tile_at(kid.curr_col, kid.curr_row + 1)
+        if below_tile in (Tile.CHOMPER, Tile.SPIKE):
+            tile = below_tile
+            coord = (kid.room, kid.curr_col, kid.curr_row + 1)
 
     if tile is Tile.CHOMPER and chomper_is_lethal(state, coord):
         kid = replace(

@@ -6,6 +6,41 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.10.0] — 2026-07-16
+
+### Alineación con el canon SDLPoP + importador de LEVELS.DAT
+
+Estudio de los repos de referencia (Mechner Apple II, SDLPoP, PrinceJS,
+mininim) — análisis completo en `docs/canon_sources.md`. Adoptado del
+desensamblado DOS (hechos mecánicos reimplementados, cero código
+copiado, cero datos de Ubisoft en el repo):
+
+- **Tablas de guard reales** (skill 0..11): strikeprob, restrikeprob,
+  blockprob, impblockprob, advprob, refractimer y extrastrength de la
+  versión DOS. El skill 8 es el guard pasivo scriptado; el 4 lleva
+  +1 HP; los 10/11 bloquean siempre sin refractory. La IA usa ahora
+  `prob_strike` de tabla en vez de una fórmula inventada.
+- **`tile_is_floor` canon**: TODO tile soporta peso salvo EMPTY,
+  DOORTOP, BIGPILLAR_TOP y celosías — torches, potions, plates,
+  swords, spikes y chompers son tiles-suelo, como en el original.
+- **Semántica dual de interacción**: plates/potions/sword/spikes/
+  chompers/exit se detectan en la celda del kid Y en la de debajo
+  (nuestro kid está una fila por encima del tile que pisa).
+- **Exit door canon**: la puerta de salida con plate asociada requiere
+  abrirse (permanente); la puerta de ENTRADA (sala de spawn) ya no
+  cuenta como victoria — antes los niveles importados se "ganaban" al
+  tocar la puerta por la que entras.
+- **Importador de LEVELS.DAT** (`infrastructure/levels_dat.py` +
+  `--levels-dat`): carga los niveles ORIGINALES desde una copia propia
+  del juego (contenedor DAT v1, directorio res20NN.bin o blob suelto).
+  Decodifica salas, links, tiles+modifiers (potions remapeadas),
+  guards, cadenas de doorlinks y spawn (con la inversión canon de
+  start_dir). Verificado localmente contra los 14 niveles DOS;
+  jugabilidad de los originales aún parcial (ver doc).
+- Bot de completabilidad: macro nuevo de salto vertical + grab + climb.
+- Suite en 783 verdes; los 14 niveles fan-recreation siguen
+  demostrablemente completables.
+
 ## [canon-0.9.0] — 2026-07-16
 
 ### Juego completo: los 14 niveles demostrablemente completables

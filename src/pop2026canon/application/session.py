@@ -25,16 +25,22 @@ FINAL_LEVEL = 14
 
 @dataclass(frozen=True, slots=True)
 class Session:
-    """Estado de la campaña por encima del ``Game`` del nivel actual."""
+    """Estado de la campaña por encima del ``Game`` del nivel actual.
+
+    ``levels`` permite jugar con otro set de 14 niveles — p.ej. los
+    originales cargados de un LEVELS.DAT propio (ver
+    :mod:`pop2026canon.infrastructure.levels_dat`).
+    """
 
     level_number: int = 1
     hp_max: int = 3
     time: TimeRemaining = TimeRemaining()  # noqa: RUF009 — inmutable
     deaths: int = 0
+    levels: tuple = CANON_LEVELS  # type: ignore[type-arg]
 
     def start_game(self) -> Game:
         """Construye el ``Game`` del nivel actual con el estado heredado."""
-        level = CANON_LEVELS[self.level_number - 1]
+        level = self.levels[self.level_number - 1]
         game = new_game(level, starting_hp=self.hp_max)
         return replace(game, time=self.time)
 
@@ -44,17 +50,17 @@ class Session:
 
     def on_level_won(self, game: Game) -> Session:
         """El kid cruzó la exit door: avanza al siguiente nivel."""
-        return Session(
+        return replace(
+            self,
             level_number=min(FINAL_LEVEL, self.level_number + 1),
             hp_max=max(self.hp_max, game.kid.hp_max),
             time=game.time,
-            deaths=self.deaths,
         )
 
     def on_death(self, game: Game) -> Session:
         """El kid murió: mismo nivel, reloj donde estaba (canon)."""
-        return Session(
-            level_number=self.level_number,
+        return replace(
+            self,
             hp_max=max(self.hp_max, game.kid.hp_max),
             time=game.time,
             deaths=self.deaths + 1,

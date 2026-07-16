@@ -91,10 +91,16 @@ class TestTileEncoding:
     def test_tile_categories(self) -> None:
         assert Tile.FLOOR in SOLID
         assert Tile.WALL in SOLID
-        assert Tile.SPIKE not in SOLID  # spikes son letales pero atravesables
+        # Canon `tile_is_floor`: los spikes/items SON tiles-suelo
+        # (soportan peso); su letalidad/pickup se resuelve aparte.
+        assert Tile.SPIKE in SOLID
+        assert Tile.TORCH in SOLID
+        assert Tile.POTION in SOLID
+        # Lo que el canon considera NO-suelo
+        assert Tile.EMPTY not in SOLID
+        assert Tile.DOORTOP not in SOLID
+        assert Tile.LATTICE_DOWN not in SOLID
         assert Tile.EMPTY in WALKABLE
-        assert Tile.POTION in WALKABLE
-        assert Tile.SWORD in WALKABLE
 
 
 class TestPotionTypes:
@@ -148,11 +154,19 @@ class TestGuardSkills:
     def test_12_skills(self) -> None:
         assert len(GUARD_SKILLS) == NUM_GUARD_SKILLS == 12
 
-    def test_skill_monotonic(self) -> None:
-        # Las probabilidades deben crecer (skill 0 < skill 11)
-        for i in range(1, len(GUARD_SKILLS)):
-            assert GUARD_SKILLS[i].prob_block >= GUARD_SKILLS[i - 1].prob_block
-            assert GUARD_SKILLS[i].refractory <= GUARD_SKILLS[i - 1].refractory
+    def test_canon_table_facts(self) -> None:
+        # Hechos de la tabla canon DOS (no es monótona):
+        # - skill 0: no bloquea nunca, siempre avanza
+        assert GUARD_SKILLS[0].prob_block == 0.0
+        assert GUARD_SKILLS[0].advance_chance == 1.0
+        # - skill 8 es el guard "pasivo" de las escenas scriptadas
+        assert GUARD_SKILLS[8].prob_strike == 0.0
+        assert GUARD_SKILLS[8].prob_block == 0.0
+        # - skills altos (10, 11) bloquean siempre y sin refractory
+        assert GUARD_SKILLS[10].prob_block == 1.0
+        assert GUARD_SKILLS[11].refractory == 0
+        # - skill 4 lleva 1 HP extra (extrastrength)
+        assert GUARD_SKILLS[4].extra_hp == 1
 
 
 class TestRoom:
