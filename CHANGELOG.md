@@ -6,6 +6,44 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.9.0] — 2026-07-16
+
+### Juego completo: los 14 niveles demostrablemente completables
+
+Un bot A* de macro-acciones (andar / correr / saltar / esperar) juega
+ahora cada nivel tick a tick con `advance()` real y DEMUESTRA que llega
+de spawn a exit door (y a la princesa en L14). Es un test permanente
+(`test_completability.py`, 14 casos, ~10 s). Lo que hubo que arreglar
+para conseguirlo:
+
+- **Timing de gates canon**: cerraban en 7 ticks (~0.6 s) — imposible
+  cruzar desde la plate. Ahora estado interno 0..140: abren en ~0.6 s,
+  cierran en ~12 s, atravesables mientras estén ≥ 57 % abiertas.
+- **Distancias de salto canon**: el run-jump volaba ~20 unidades (ni
+  1 celda de pit). Recalibrado a ~56 unidades: libra exactamente 3
+  celdas y muere en la 4ª, como el POP1. Carrera a 1 tile/4 ticks.
+- **STOP_RUN congelado**: el controller reiniciaba la secuencia de
+  frenado cada tick sin teclas — el kid nunca volvía a STAND.
+- **Carver de huecos verticales** en `_build_level`: un agujero en el
+  suelo (pit o loose) perfora el techo de la sala de abajo. Sin esto,
+  TODOS los descensos del juego aterrizaban encima del techo del piso
+  inferior.
+- **Aterrizaje por entrada de celda**: sólo se aterriza sobre un sólido
+  en el que se ENTRA durante el tick — antes, caminar dentro de una
+  plataforma (DT_F) o iniciar caída dentro del hueco del techo
+  tele-transportaba al kid encima.
+- **Head-bump**: subir en un salto contra el suelo del piso de arriba
+  aplana el arco (no se atraviesan techos).
+- **Bloqueo aéreo**: las gates cerradas también cortan los saltos (el
+  vuelo termina en caída recta) — se acabó saltarse los puzzles.
+- **Rediseños**: L10 The Tower baja ahora en zigzag (cada caída es de
+  1 piso con aterrizaje en suelo firme); L1 accede al piso inferior por
+  loose en la sala 12 y sus gates tienen plate en el lado de
+  aproximación; L6/L9 igual (patrón heredado "plate al otro lado de la
+  gate" eliminado).
+- Verificado además: 0 caídas obligatorias letales en los 14 niveles y
+  geometría planar intacta.
+
 ## [canon-0.8.1] — 2026-07-16
 
 ### Presentación canon: geometría 32x63, losas POP, audio conectado

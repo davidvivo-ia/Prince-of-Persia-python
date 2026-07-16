@@ -362,6 +362,57 @@ def _spec(
     return _RoomSpec(rows=rows, guards=guards, fg_modifiers=fg_mods)
 
 
+def _carve_vertical_openings(rooms: tuple[Room, ...]) -> tuple[Room, ...]:
+    """Alinea los huecos verticales entre pisos.
+
+    Principio del mapa continuo: un agujero en el suelo (row 2 EMPTY o
+    LOOSE) de una sala ES un agujero en el techo (row 0) de la sala de
+    abajo. Sin esto, los drops aterrizan encima del techo del piso
+    inferior y ningún descenso funciona.
+
+    Sólo se perfora FLOOR liso — plataformas (DOORTOP_WITH_FLOOR) y
+    tiles especiales del techo se respetan.
+    """
+    by_id = {r.id: r for r in rooms}
+    carve: dict[int, set[int]] = {}
+    for room in rooms:
+        south_id = room.link_s
+        if not south_id or south_id not in by_id:
+            continue
+        south = by_id[south_id]
+        for c in range(SCREEN_TILECOUNT_X):
+            bottom_piece = Tile(room.fg[2 * SCREEN_TILECOUNT_X + c] & 0x1F)
+            if bottom_piece not in (Tile.EMPTY, Tile.LOOSE):
+                continue
+            top_piece = Tile(south.fg[c] & 0x1F)
+            if top_piece is Tile.FLOOR:
+                carve.setdefault(south_id, set()).add(c)
+    if not carve:
+        return rooms
+    new_rooms = []
+    for room in rooms:
+        cols = carve.get(room.id)
+        if not cols:
+            new_rooms.append(room)
+            continue
+        fg = list(room.fg)
+        for c in cols:
+            fg[c] = encode_tile(Tile.EMPTY, 0)
+        new_rooms.append(
+            Room(
+                id=room.id,
+                fg=tuple(fg),
+                bg=room.bg,
+                link_n=room.link_n,
+                link_s=room.link_s,
+                link_e=room.link_e,
+                link_w=room.link_w,
+                guards=room.guards,
+            )
+        )
+    return tuple(new_rooms)
+
+
 def _build_level(
     *,
     number: int,
@@ -389,6 +440,7 @@ def _build_level(
         )
         for i, spec in enumerate(specs)
     )
+    rooms = _carve_vertical_openings(rooms)
     return Level(
         number=number,
         name=name,
@@ -426,14 +478,18 @@ def _l1() -> Level:
         _spec(_floor_rows(extras={(5, 2): L})),  # 6 dead-end con drop a 12
         # Piso intermedio
         _spec(_floor_rows(extras={(6, 1): T})),
-        _spec(_platform_rows(platform_cols=(2, 3), extras={(2, 1): SW, (5, 1): T})),  # 8 SWORD
+        _spec(
+            _platform_rows(platform_cols=(2, 3), extras={(2, 1): SW, (5, 1): T, (7, 1): P}),
+        ),  # 8 SWORD + plate que abre la gate de 9
         _spec(_floor_rows(extras={(5, 1): G})),  # 9 gate
         _spec(
             _floor_rows(extras={(4, 1): C}),
             guards=(G_S(col=6, row=1, direction=-1, skill=0),),
         ),  # 10 guard + chomper
-        _spec(_pillar_rows(pillar_cols=(4,), extras={(7, 1): G})),  # 11 gate
-        _spec(_floor_rows(extras={(5, 1): P})),  # 12 plate + drop al exit
+        _spec(
+            _pillar_rows(pillar_cols=(4,), extras={(2, 1): P, (7, 1): G}),
+        ),  # 11 plate propia + gate
+        _spec(_floor_rows(extras={(5, 1): P, (5, 2): L})),  # 12 plate + loose drop al exit
         # Piso inferior
         _spec(_floor_rows(extras={(3, 1): P})),  # 13 plate
         _spec(_floor_rows(extras={(5, 1): L})),
@@ -446,7 +502,11 @@ def _l1() -> Level:
         _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR})),  # 18 exit
     ]
     doorlinks = (
-        # plate sala 12 col 5 → gate sala 9 col 5
+        # plate sala 8 col 7 (junto a la sword) → gate sala 9 col 5
+        DoorLink(plate_room=8, plate_col=7, plate_row=1, gate_room=9, gate_col=5, gate_row=1),
+        # plate sala 11 col 2 → gate sala 11 col 7 (misma sala)
+        DoorLink(plate_room=11, plate_col=2, plate_row=1, gate_room=11, gate_col=7, gate_row=1),
+        # plate sala 12 col 5 → gate sala 9 col 5 (reapertura desde el este)
         DoorLink(plate_room=12, plate_col=5, plate_row=1, gate_room=9, gate_col=5, gate_row=1),
         # plate sala 13 col 3 → gate sala 11 col 7
         DoorLink(plate_room=13, plate_col=3, plate_row=1, gate_room=11, gate_col=7, gate_row=1),
@@ -747,7 +807,7 @@ def _l6() -> Level:
     """
     specs = [
         _spec(_floor_rows(pit_cols=(4, 5, 6))),  # 1 pit grande — frame_43 trigger
-        _spec(_floor_rows(extras={(3, 1): G})),  # 2 gate
+        _spec(_floor_rows(extras={(1, 1): P, (3, 1): G})),  # 2 plate + gate
         _spec(_floor_rows(extras={(4, 1): C, (7, 1): P})),  # 3 plate
         _spec(
             _floor_rows(extras={(7, 1): S}),
@@ -775,6 +835,7 @@ def _l6() -> Level:
         _spec(_pillar_rows(pillar_cols=(3, 6), extras={(4, 1): PO})),  # 18 potion max_hp
     ]
     doorlinks = (
+        DoorLink(plate_room=2, plate_col=1, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
         DoorLink(plate_room=3, plate_col=7, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
         DoorLink(plate_room=8, plate_col=8, plate_row=1, gate_room=8, gate_col=5, gate_row=1),
         DoorLink(plate_room=15, plate_col=5, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
@@ -932,7 +993,7 @@ def _l9() -> Level:
             _arena_rows(pillar_pair=(2, 7), extras={(8, 1): PO}),
             guards=(G_S(col=5, row=1, direction=-1, skill=5),),
         ),  # 4 arena con potion
-        _spec(_floor_rows(extras={(5, 1): G})),  # 5 gate
+        _spec(_floor_rows(extras={(2, 1): P, (5, 1): G})),  # 5 plate + gate
         _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
         _spec(
             _platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): SK, (4, 1): P}),
@@ -956,6 +1017,7 @@ def _l9() -> Level:
         _spec(_floor_rows(extras={(5, 1): T})),  # 20 rincón final
     ]
     doorlinks = (
+        DoorLink(plate_room=5, plate_col=2, plate_row=1, gate_room=5, gate_col=5, gate_row=1),
         DoorLink(plate_room=7, plate_col=4, plate_row=1, gate_room=5, gate_col=5, gate_row=1),
         DoorLink(plate_room=16, plate_col=4, plate_row=1, gate_room=5, gate_col=5, gate_row=1),
     )
@@ -993,24 +1055,27 @@ def _l10() -> Level:
      9  .  .  .  .  .  .  .  .  .  .
     10  .  .  .  .  .  .  .  .  .  .
     """
+    # El pozo baja en zigzag: cada sala tiene su hueco desplazado respecto
+    # al de arriba, de modo que cada caída es de UN piso (aterrizas en
+    # suelo firme y caminas hasta el siguiente hueco).
     specs = [
         _spec(_floor_rows(pit_cols=(4, 5, 6))),  # 1 top: drop
         _spec(
-            # Plataforma central bajo el pit de la 1: rompe la caída en
-            # dos tramos de 1 piso (un drop directo de 2 pisos haría daño).
-            _drop_rows(floor_cols=(0, 1, 4, 5, 6, 9)),
+            _drop_rows(floor_cols=(0, 1, 4, 5, 6, 9)),  # huecos en 2,3,7,8
             guards=(G_S(col=9, row=1, direction=-1, skill=5),),
         ),
-        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S})),
-        _spec(_drop_rows(floor_cols=(0, 1, 2, 3, 8, 9))),  # 4 — acceso a la galería
-        _spec(_floor_rows(extras={(5, 1): G})),  # 5 gate
-        _spec(_lattice_rows(lattice_cols=(3, 6))),
-        _spec(_pillar_rows(pillar_cols=(4,))),
+        _spec(_floor_rows(pit_cols=(8, 9), extras={(3, 1): S, (5, 1): S})),  # 3 spikes + hueco este
         _spec(
-            _drop_rows(floor_cols=(0, 1, 8, 9)),
+            _drop_rows(floor_cols=(0, 1, 2, 3, 4, 5, 8, 9))
+        ),  # 4 huecos 6,7 (al este de la gate de abajo) + galería al este
+        _spec(_floor_rows(pit_cols=(8, 9), extras={(5, 1): G})),  # 5 gate + hueco este
+        _spec(_lattice_rows(lattice_cols=(3, 6), extras={(4, 2): E, (5, 2): E})),  # 6
+        _spec(_pillar_rows(pillar_cols=(4,), extras={(8, 2): E, (9, 2): E})),  # 7
+        _spec(
+            _drop_rows(floor_cols=(0, 1, 2, 3, 8, 9)),  # huecos 4-7
             guards=(G_S(col=2, row=1, direction=0, skill=5),),
         ),
-        _spec(_floor_rows(extras={(5, 2): L})),
+        _spec(_floor_rows(extras={(0, 2): E, (1, 2): E, (5, 2): L})),  # 9 hueco oeste + loose
         _spec(
             _floor_rows(extras={(5, 1): P, (7, 1): DL, (8, 1): DR}),
         ),  # 10 exit + plate (open finale gate)

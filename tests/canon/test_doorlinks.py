@@ -37,11 +37,15 @@ class TestDoorLinkModel:
 
 class TestL6PlateGateLink:
     def test_l6_has_doorlinks(self) -> None:
-        # Canon expandido: L6 puede tener varios doorlinks
-        assert len(LEVEL_6.doorlinks) >= 1
-        first = LEVEL_6.doorlinks[0]
-        assert first.plate_coord == (3, 7, 1)
-        assert first.gate_coord == (2, 3, 1)
+        # Canon expandido: L6 puede tener varios doorlinks. La gate de
+        # la sala 2 tiene una plate en su lado de aproximación (sala 2)
+        # y otra al otro lado (sala 3).
+        assert len(LEVEL_6.doorlinks) >= 2
+        plate_coords = {link.plate_coord for link in LEVEL_6.doorlinks}
+        gate_coords = {link.gate_coord for link in LEVEL_6.doorlinks}
+        assert (2, 1, 1) in plate_coords
+        assert (3, 7, 1) in plate_coords
+        assert (2, 3, 1) in gate_coords
 
     def test_plate_pressed_opens_gate(self) -> None:
         """Al pisar la plate (sala 3 col 7 row 1) la gate (sala 2 col 3

@@ -98,7 +98,11 @@ def _draw_room_tiles(surf: pygame.Surface, game: Game) -> None:
             tile_val = byte & 0x1F
             modifier = (byte >> 5) & 0x07
             # Override modifier para gates / chompers / loose con su state actual
-            if Tile(tile_val) in (Tile.GATE, Tile.CHOMPER, Tile.LOOSE):
+            if Tile(tile_val) is Tile.GATE:
+                from pop2026canon.domain.traps import gate_phase
+
+                modifier = gate_phase(game.state, (game.kid.room, c, r))
+            elif Tile(tile_val) in (Tile.CHOMPER, Tile.LOOSE):
                 modifier = game.state.state_at((game.kid.room, c, r))
             # Loose caído: la losa ya no está — agujero real (la física
             # tampoco soporta peso ahí).

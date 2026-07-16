@@ -183,15 +183,20 @@ def spike_kills_on_land(fall_y: int) -> bool:
 
 class GatePhase(IntEnum):
     CLOSED = 0
-    # 1..6 = parcialmente abierta (proporcional)
-    OPEN = 7
+    # 1..139 = parcialmente abierta (proporcional)
+    OPEN = 140
 
 
-GATE_OPEN_SPEED: int = 1
-"""Una "unidad" de apertura por tick → 7 ticks para abrir completamente."""
+GATE_OPEN_SPEED: int = 20
+"""Unidades de apertura por tick → 7 ticks (~0.6 s) para abrir del todo."""
 
 GATE_CLOSE_SPEED: int = 1
-"""Misma velocidad cerrando."""
+"""Unidades de cierre por tick → 140 ticks (~12 s) para cerrar del todo.
+Canon: la gate abre rápido con la plate pisada y baja LENTA al soltarla —
+da tiempo a cruzar desde la plate aunque esté a varias salas."""
+
+GATE_PASSABLE_MIN: int = 80
+"""Por debajo de este state la gate ya no deja pasar el cuerpo."""
 
 
 def tick_gate(
@@ -201,35 +206,33 @@ def tick_gate(
 ) -> LevelState:
     """Avanza el state de una gate según si su plate está pisada.
 
-    - `plate_pressed=True` → abre (incrementa hasta 7).
-    - `plate_pressed=False` → cierra (decrementa hasta 0).
+    - `plate_pressed=True` → abre rápido (hasta ``GatePhase.OPEN``).
+    - `plate_pressed=False` → cierra lento (hasta 0).
 
-    El state final 7 marca la gate como OPEN (atravesable).
+    La gate es atravesable mientras ``state >= GATE_PASSABLE_MIN`` —
+    el set ``open_gates`` de :class:`LevelState` refleja eso.
     """
     current = state.state_at(coord)
 
     if plate_pressed:
         new_value = min(int(GatePhase.OPEN), current + GATE_OPEN_SPEED)
-        new_state = state.with_state(coord, new_value)
-        if new_value == int(GatePhase.OPEN):
-            new_state = new_state.with_gate_open(coord)
-        return new_state
+    else:
+        new_value = max(int(GatePhase.CLOSED), current - GATE_CLOSE_SPEED)
 
-    new_value = max(int(GatePhase.CLOSED), current - GATE_CLOSE_SPEED)
     new_state = state.with_state(coord, new_value)
-    if new_value < int(GatePhase.OPEN):
-        new_state = new_state.with_gate_closed(coord)
-    return new_state
+    if new_value >= GATE_PASSABLE_MIN:
+        return new_state.with_gate_open(coord)
+    return new_state.with_gate_closed(coord)
 
 
 def gate_is_passable(state: LevelState, coord: TileCoord) -> bool:
-    """``True`` si la gate está totalmente abierta."""
+    """``True`` si la gate está lo bastante abierta para pasar."""
     return coord in state.open_gates
 
 
 def gate_phase(state: LevelState, coord: TileCoord) -> int:
-    """Devuelve el state actual (0..7) de la gate en `coord`."""
-    return state.state_at(coord)
+    """Altura visual 0..7 de la gate en `coord` (para el renderer)."""
+    return (state.state_at(coord) * 7) // int(GatePhase.OPEN)
 
 
 # ---------------------------------------------------------------------------

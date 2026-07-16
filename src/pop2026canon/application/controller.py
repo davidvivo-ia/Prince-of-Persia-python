@@ -175,8 +175,18 @@ def _handle_engarde(char: Char, cmd: Command) -> Char:
 
 
 def _handle_running(char: Char, cmd: Command) -> Char:
-    # Salto con carrerilla
-    if cmd.up:
+    # Secuencias de aterrizaje/frenado en curso: dejarlas terminar —
+    # re-arrancarlas cada tick las congelaría en su primer frame.
+    if char.curr_seq_id in (
+        int(Seq.STOP_RUN),
+        int(Seq.SOFT_LAND),
+        int(Seq.MED_LAND),
+        int(Seq.HARD_LAND),
+    ):
+        return char
+
+    # Salto con carrerilla — sólo desde el ciclo de carrera real.
+    if cmd.up and char.curr_seq_id in (int(Seq.RUN), int(Seq.START_RUN)):
         return _start(char, Seq.RUN_JUMP)
 
     # Sin input direccional → parar

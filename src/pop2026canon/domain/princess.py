@@ -72,6 +72,10 @@ def trigger_mouse_appear(game: Game) -> Game:
                 gate_coord = (event.room, c, r)
                 if game.level.plates_for_gate(gate_coord):
                     continue
-                new_state = new_state.with_state(gate_coord, 7).with_gate_open(gate_coord)
+                from pop2026canon.domain.traps import GatePhase
+
+                new_state = new_state.with_state(gate_coord, int(GatePhase.OPEN)).with_gate_open(
+                    gate_coord
+                )
         return replace(game, others=(*game.others, mouse), flags=new_flags, state=new_state)
     return game

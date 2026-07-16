@@ -623,15 +623,29 @@ def step_physics(
     in_air = char.action in (Action.IN_FREEFALL, Action.IN_MIDAIR)
     in_cell = 0 <= char.curr_row < SCREEN_TILECOUNT_Y and 0 <= char.curr_col < SCREEN_TILECOUNT_X
 
+    # 5b. Head-bump: subiendo en un salto contra un sólido (el techo /
+    #     suelo del piso de arriba) → el arco se aplana a la fila previa.
+    if (
+        char.action is Action.IN_MIDAIR
+        and char.alive < 0
+        and char.room == snapshot.room
+        and char.curr_row < snapshot.curr_row
+        and in_cell
+        and is_solid_at(room, char.curr_col, char.curr_row, broken_floors)
+    ):
+        char = replace(char, curr_row=snapshot.curr_row, y=0)
+
     # 6. Colisión horizontal: acabó dentro de un tile que bloquea el
-    #    cuerpo sin estar cayendo ni trepando → revierte + BUMP.
+    #    cuerpo (muro, gate cerrada) → en tierra revierte + BUMP; en el
+    #    aire corta el vuelo y cae recto desde la posición previa.
     if (
         in_cell
         and blocks_body_at(room, char.curr_col, char.curr_row, open_gates)
-        and not in_air
         and char.action not in _CLIMB_ACTIONS
         and char.alive < 0
     ):
+        if in_air:
+            return start_fall(replace(snapshot, landed_fall_y=0))
         return replace(
             snapshot,
             landed_fall_y=0,
@@ -641,9 +655,26 @@ def step_physics(
             frame=char.frame,
         )
 
-    # 7. Aterrizaje: cayendo y entró en un tile sólido → aterriza encima.
+    # 7. Aterrizaje: cayendo y ENTRÓ este tick en un tile sólido →
+    #    aterriza encima. La condición de entrada evita falsos
+    #    aterrizajes cuando la caída empieza DENTRO de una celda-soporte
+    #    (p.ej. walk-off dentro de una plataforma o del hueco del techo).
     if char.action is Action.IN_FREEFALL and char.alive < 0:
-        if in_cell and is_solid_at(room, char.curr_col, char.curr_row, broken_floors):
+        entered_new_cell = (
+            char.room != snapshot.room
+            or char.curr_row != snapshot.curr_row
+            or char.curr_col != snapshot.curr_col
+        )
+        if (
+            in_cell
+            and entered_new_cell
+            and is_solid_at(room, char.curr_col, char.curr_row, broken_floors)
+        ):
+            if char.curr_row == 0 and room.link_n:
+                # El sólido es el techo de esta sala: el char queda de
+                # pie ENCIMA, es decir, en la fila 2 de la sala norte.
+                char = replace(char, room=room.link_n)
+                return _land(char, on_row=SCREEN_TILECOUNT_Y - 1)
             return _land(char, on_row=char.curr_row - 1)
         if char.curr_row >= SCREEN_TILECOUNT_Y:
             # Bajo la última fila sin link sur: abismo.

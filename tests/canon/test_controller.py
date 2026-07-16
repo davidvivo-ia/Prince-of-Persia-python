@@ -87,7 +87,8 @@ class TestStandTransitions:
 
 class TestRunningTransitions:
     def _kid_running(self) -> Char:
-        return replace(_kid_standing(), action=Action.RUN_JUMP)
+        # Corriendo de verdad: acción RUN_JUMP + ciclo RUN en curso.
+        return replace(_kid_standing(), action=Action.RUN_JUMP, curr_seq_id=int(Seq.RUN))
 
     def test_up_triggers_run_jump(self) -> None:
         kid = self._kid_running()
