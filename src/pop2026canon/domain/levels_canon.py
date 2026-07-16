@@ -6,7 +6,17 @@ son **fan-recreation fieles a la canon** — mismas mecánicas, eventos
 narrativos, número de salas y progresión espacial, pero no byte-perfect.
 
 Cada nivel se construye con :func:`_build_level` a partir de una lista
-de specs de sala. Cada spec usa los helpers de :mod:`_blocks`:
+de specs de sala **y un mapa de cuadrícula** (``grid``). El grid es un
+string multilinea donde cada token es el id de una sala (o ``.`` para
+vacío); los links N/S/E/W se derivan automáticamente de la adyacencia,
+igual que en el juego original, donde las salas son ventanas sobre un
+mapa continuo. Esto garantiza por construcción:
+
+- links recíprocos (si A está al este de B, B está al oeste de A),
+- geometría planar (ninguna sala ocupa dos posiciones),
+- que caer al sur / trepar al norte siempre lleva a la sala correcta.
+
+Cada spec usa los helpers de :mod:`_blocks`:
 
 - ``floor`` — sala-corredor con suelo+techo (opcional pit, extras)
 - ``arena`` — sala abierta sin techo (para drops cortos)
@@ -19,7 +29,7 @@ de specs de sala. Cada spec usa los helpers de :mod:`_blocks`:
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from pop2026canon.domain.chars import GuardSpawn
@@ -109,6 +119,48 @@ def _room_from_rows(
         link_w=link_w,
         guards=guards,
     )
+
+
+# ---------------------------------------------------------------------------
+# Grid de salas → links automáticos
+# ---------------------------------------------------------------------------
+
+
+def _grid_links(grid: str, n_rooms: int) -> dict[int, tuple[int, int, int, int]]:
+    """Parsea un mapa 2D de ids de sala y deriva los links por adyacencia.
+
+    ``grid`` es un string multilinea: cada token es un id de sala (int)
+    o ``.`` para celda vacía. Devuelve ``{room_id: (n, s, e, w)}``.
+
+    Lanza ``ValueError`` si algún id está repetido, falta, o sobra —
+    así un typo en el mapa rompe el import en vez de producir geometría
+    imposible en runtime.
+    """
+    coords: dict[int, tuple[int, int]] = {}
+    occupied: dict[tuple[int, int], int] = {}
+    for y, line in enumerate(grid.strip().splitlines()):
+        for x, token in enumerate(line.split()):
+            if token == ".":
+                continue
+            rid = int(token)
+            if rid in coords:
+                raise ValueError(f"grid: sala {rid} aparece dos veces")
+            coords[rid] = (x, y)
+            occupied[(x, y)] = rid
+    expected = set(range(1, n_rooms + 1))
+    if set(coords) != expected:
+        missing = expected - set(coords)
+        extra = set(coords) - expected
+        raise ValueError(f"grid: ids incorrectos — faltan {missing or '∅'}, sobran {extra or '∅'}")
+    links: dict[int, tuple[int, int, int, int]] = {}
+    for rid, (x, y) in coords.items():
+        links[rid] = (
+            occupied.get((x, y - 1), 0),  # n
+            occupied.get((x, y + 1), 0),  # s
+            occupied.get((x + 1, y), 0),  # e
+            occupied.get((x - 1, y), 0),  # w
+        )
+    return links
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +340,7 @@ def _arena_rows(
 
 
 # ---------------------------------------------------------------------------
-# RoomSpec — declaración compacta de una sala
+# RoomSpec — declaración compacta de una sala (los links vienen del grid)
 # ---------------------------------------------------------------------------
 
 
@@ -297,10 +349,6 @@ class _RoomSpec:
     """Spec compacta para construir una sala dentro de un nivel."""
 
     rows: tuple[list[Tile | int], list[Tile | int], list[Tile | int]]
-    link_n: int = 0
-    link_s: int = 0
-    link_e: int = 0
-    link_w: int = 0
     guards: tuple[GuardSpawn, ...] = ()
     fg_modifiers: tuple[tuple[tuple[int, int], int], ...] = ()
 
@@ -308,23 +356,18 @@ class _RoomSpec:
 def _spec(
     rows: tuple[list[Tile | int], list[Tile | int], list[Tile | int]],
     *,
-    n: int = 0,
-    s: int = 0,
-    e: int = 0,
-    w: int = 0,
     guards: tuple[GuardSpawn, ...] = (),
     fg_mods: tuple[tuple[tuple[int, int], int], ...] = (),
 ) -> _RoomSpec:
-    return _RoomSpec(
-        rows=rows, link_n=n, link_s=s, link_e=e, link_w=w, guards=guards, fg_modifiers=fg_mods
-    )
+    return _RoomSpec(rows=rows, guards=guards, fg_modifiers=fg_mods)
 
 
 def _build_level(
     *,
     number: int,
     name: str,
-    specs: Iterable[_RoomSpec],
+    specs: Sequence[_RoomSpec],
+    grid: str,
     start_room: int,
     start_col: int,
     start_row: int,
@@ -332,14 +375,15 @@ def _build_level(
     events: tuple[Event, ...] = (),
     doorlinks: tuple[DoorLink, ...] = (),
 ) -> Level:
+    links = _grid_links(grid, len(specs))
     rooms = tuple(
         _room_from_rows(
             i + 1,
             spec.rows,
-            link_n=spec.link_n,
-            link_s=spec.link_s,
-            link_e=spec.link_e,
-            link_w=spec.link_w,
+            link_n=links[i + 1][0],
+            link_s=links[i + 1][1],
+            link_e=links[i + 1][2],
+            link_w=links[i + 1][3],
             guards=spec.guards,
             fg_modifiers=dict(spec.fg_modifiers) if spec.fg_modifiers else None,
         )
@@ -361,58 +405,45 @@ def _build_level(
 # ===========================================================================
 # Nivel 1 — The Dungeon  (18 salas)
 # ===========================================================================
-# Mazmorra subterránea con dos pisos: superior (spawn + descent) e inferior
-# (sword + guards + plates). Layout en cuadrícula 6x3 lógica:
-#
-#   [1]→[2]→[3]→[4]→[5]→[6]      (piso superior, oeste→este)
-#    ↓                ↓
-#   [7]→[8]→[9]→[10]→[11]→[12]   (piso intermedio: sword en 8, gates en 9-10)
-#                            ↓
-#   [13]→[14]→[15]→[16]→[17]→[18]  (piso inferior: plates + exit en 18)
+# Mazmorra subterránea en cuadrícula 6x3: piso superior (spawn + descent),
+# piso intermedio (sword + guards + gates) y piso inferior (plates + exit).
 
 
 def _l1() -> Level:
     G_S = GuardSpawn  # noqa: N806 — alias local de tipo
+    grid = """
+     1  2  3  4  5  6
+     7  8  9 10 11 12
+    13 14 15 16 17 18
+    """
     specs = [
         # Piso superior
-        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), s=7, e=2),  # 1 spawn + loose
-        _spec(_floor_rows(extras={(6, 1): T}), w=1, e=3),
-        _spec(_floor_rows(pit_cols=(4, 5)), w=2, e=4, s=9),  # 3 pit
-        _spec(_platform_rows(platform_cols=(4, 5), extras={(7, 1): T}), w=3, e=5),  # 4 plataforma
-        _spec(_split_rows(upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9)), w=4, e=6),  # 5 split
-        _spec(_floor_rows(extras={(5, 2): L}), w=5, s=12),  # 6 dead-end con drop
+        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L})),  # 1 spawn + loose
+        _spec(_floor_rows(extras={(6, 1): T})),
+        _spec(_floor_rows(pit_cols=(4, 5))),  # 3 pit → drop a 9
+        _spec(_platform_rows(platform_cols=(4, 5), extras={(7, 1): T})),  # 4 plataforma
+        _spec(_split_rows(upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9))),  # 5 split
+        _spec(_floor_rows(extras={(5, 2): L})),  # 6 dead-end con drop a 12
         # Piso intermedio
-        _spec(_floor_rows(extras={(6, 1): T}), n=1, e=8),
-        _spec(
-            _platform_rows(platform_cols=(2, 3), extras={(2, 1): SW, (5, 1): T}),
-            w=7,
-            e=9,
-        ),  # 8 SWORD en plataforma
-        _spec(_floor_rows(extras={(5, 1): G}), n=3, w=8, e=10),  # 9 gate
+        _spec(_floor_rows(extras={(6, 1): T})),
+        _spec(_platform_rows(platform_cols=(2, 3), extras={(2, 1): SW, (5, 1): T})),  # 8 SWORD
+        _spec(_floor_rows(extras={(5, 1): G})),  # 9 gate
         _spec(
             _floor_rows(extras={(4, 1): C}),
-            w=9,
-            e=11,
             guards=(G_S(col=6, row=1, direction=-1, skill=0),),
         ),  # 10 guard + chomper
-        _spec(_pillar_rows(pillar_cols=(4,), extras={(7, 1): G}), w=10, e=12),  # 11 gate
-        _spec(_floor_rows(extras={(5, 1): P}), n=6, w=11, s=18),  # 12 plate + drop al exit
+        _spec(_pillar_rows(pillar_cols=(4,), extras={(7, 1): G})),  # 11 gate
+        _spec(_floor_rows(extras={(5, 1): P})),  # 12 plate + drop al exit
         # Piso inferior
-        _spec(_floor_rows(extras={(3, 1): P}), e=14),  # 13 plate
-        _spec(_floor_rows(extras={(5, 1): L}), w=13, e=15),
-        _spec(_floor_rows(pit_cols=(4, 5, 6)), w=14, e=16),  # 15 pit
+        _spec(_floor_rows(extras={(3, 1): P})),  # 13 plate
+        _spec(_floor_rows(extras={(5, 1): L})),
+        _spec(_floor_rows(pit_cols=(4, 5, 6))),  # 15 pit
         _spec(
             _floor_rows(extras={(6, 1): T}),
-            w=15,
-            e=17,
             guards=(G_S(col=4, row=1, direction=-1, skill=0),),
         ),
-        _spec(_floor_rows(extras={(2, 1): P}), w=16, e=18),  # 17 plate
-        _spec(
-            _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            n=12,
-            w=17,
-        ),  # 18 exit
+        _spec(_floor_rows(extras={(2, 1): P})),  # 17 plate
+        _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR})),  # 18 exit
     ]
     doorlinks = (
         # plate sala 12 col 5 → gate sala 9 col 5
@@ -426,6 +457,7 @@ def _l1() -> Level:
         number=1,
         name="The Dungeon",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=2,
         start_row=1,
@@ -437,59 +469,53 @@ def _l1() -> Level:
 # ===========================================================================
 # Nivel 2 — The Guards  (20 salas)
 # ===========================================================================
-# Sucesión de patios cerrados con guards de skill 1-3, loose floors,
-# primer chomper técnico, dos plates+gates.
+# Dos filas de patios: la norte con guards de skill 1-3 y trampas; la sur
+# con el exit (sala 18) y las potions bonus al este del exit (19-20).
+# El descenso es por los loose floors del spawn (sala 1 → 11).
 
 
 def _l2() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  9 10
+    11 12 13 14 15 16 17 18 19 20
+    """
     specs = [
         # Fila norte
-        _spec(_floor_rows(extras={(5, 2): L}), s=11, e=2),  # 1 spawn
+        _spec(_floor_rows(extras={(5, 2): L})),  # 1 spawn — loose drop a 11
         _spec(
             _floor_rows(extras={(2, 1): T, (7, 1): T}),
-            w=1,
-            e=3,
             guards=(G_S(col=5, row=1, direction=-1, skill=1),),
         ),  # 2 patio con antorchas
-        _spec(_floor_rows(extras={(4, 1): C}), w=2, e=4),
-        _spec(_platform_rows(platform_cols=(4, 5), pit_cols=(7,)), w=3, e=5),  # 4 plataforma + pit
-        _spec(
-            _split_rows(upper_cols=(0, 1, 2, 3), lower_cols=(5, 6, 7, 8, 9)), w=4, e=6, s=19
-        ),  # 5 split
-        _spec(_floor_rows(extras={(5, 1): G}), w=5, e=7, s=15),
-        _spec(_floor_rows(extras={(2, 1): P}), w=6, e=8),  # 7 plate
+        _spec(_floor_rows(extras={(4, 1): C})),
+        _spec(_platform_rows(platform_cols=(4, 5), pit_cols=(7,))),  # 4 plataforma + pit
+        _spec(_split_rows(upper_cols=(0, 1, 2, 3), lower_cols=(5, 6, 7, 8, 9))),  # 5 split
+        _spec(_floor_rows(extras={(5, 1): G})),
+        _spec(_floor_rows(extras={(2, 1): P})),  # 7 plate
         _spec(
             _arena_rows(pillar_pair=(2, 7)),
-            w=7,
-            e=9,
             guards=(G_S(col=5, row=1, direction=-1, skill=2),),
         ),  # 8 arena
-        _spec(_pillar_rows(pillar_cols=(4,)), w=8, e=10),
-        _spec(_floor_rows(extras={(6, 1): T}), w=9, s=18),
-        # Fila sur (intermedio)
-        _spec(_floor_rows(extras={(5, 1): T}), n=1, e=12),  # 11 antorcha
-        _spec(_floor_rows(extras={(5, 1): C}), w=11, e=13),
-        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), w=12, e=14),
-        _spec(_floor_rows(extras={(3, 1): P, (7, 1): G}), w=13, e=15),  # 14 plate+gate
+        _spec(_pillar_rows(pillar_cols=(4,))),
+        _spec(_floor_rows(extras={(6, 1): T})),
+        # Fila sur — camino al exit
+        _spec(_floor_rows(extras={(5, 1): T})),  # 11 antorcha
+        _spec(_floor_rows(extras={(5, 1): C})),
+        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L})),
+        _spec(_floor_rows(extras={(3, 1): P, (7, 1): G})),  # 14 plate+gate
         _spec(
             _floor_rows(extras={(5, 1): T}),
-            n=6,
-            w=14,
-            e=16,
             guards=(G_S(col=3, row=1, direction=0, skill=3),),
         ),
-        _spec(_pillar_rows(pillar_cols=(4, 6), extras={(5, 0): DT}), w=15, e=17),  # 16 con pillars
-        _spec(_floor_rows(extras={(4, 1): C}), w=16, e=18),
+        _spec(_pillar_rows(pillar_cols=(4, 6), extras={(5, 0): DT})),  # 16 con pillars
+        _spec(_floor_rows(extras={(4, 1): C})),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            n=10,
-            w=17,
             guards=(G_S(col=2, row=1, direction=0, skill=3),),
-        ),  # exit
-        # Patios laterales — accesibles vía drop sur desde sala 5
-        _spec(_balcony_rows(side="left", extras={(5, 1): PO}), n=5, e=20),  # 19 potion HEAL
-        _spec(_floor_rows(extras={(4, 1): PO}), w=19),  # 20 potion MAX_HP
+        ),  # 18 exit
+        # Bonus al este del exit
+        _spec(_balcony_rows(side="left", extras={(5, 1): PO})),  # 19 potion HEAL
+        _spec(_floor_rows(extras={(4, 1): PO})),  # 20 potion MAX_HP
     ]
     doorlinks = (
         DoorLink(plate_room=7, plate_col=2, plate_row=1, gate_room=6, gate_col=5, gate_row=1),
@@ -500,6 +526,7 @@ def _l2() -> Level:
         number=2,
         name="The Guards",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=2,
         start_row=1,
@@ -513,51 +540,48 @@ def _l2() -> Level:
 # ===========================================================================
 # Nivel 3 — The Skeleton  (18 salas)
 # ===========================================================================
+# Fila norte 1-9; sub-piso 10-17 (el pit de la sala 3 cae en los loose de
+# la 10); estancias secretas 17-18 bajo la sala 9 del plate.
+
+
 def _l3() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  9
+     . 11 10 12 13 14 15 16 17
+     .  .  .  .  .  .  .  . 18
+    """
     specs = [
-        _spec(_floor_rows(extras={(4, 1): SK}), e=2),  # 1 esqueleto durmiente
-        _spec(_floor_rows(extras={(5, 2): L}), w=1, e=3),
-        _spec(
-            _platform_rows(platform_cols=(4, 5), pit_cols=(4, 5)), w=2, e=4, s=10
-        ),  # 3 plataforma sobre pit
-        _spec(_lattice_rows(lattice_cols=(4,)), w=3, e=5),
-        _spec(_floor_rows(extras={(3, 1): C}), w=4, e=6),
+        _spec(_floor_rows(extras={(4, 1): SK})),  # 1 esqueleto durmiente
+        _spec(_floor_rows(extras={(5, 2): L})),
+        _spec(_platform_rows(platform_cols=(4, 5), pit_cols=(4, 5))),  # 3 plataforma sobre pit
+        _spec(_lattice_rows(lattice_cols=(4,))),
+        _spec(_floor_rows(extras={(3, 1): C})),
         _spec(
             _arena_rows(pillar_pair=(2, 7)),
-            w=5,
-            e=7,
             guards=(G_S(col=5, row=1, direction=-1, skill=2),),
         ),  # 6 arena
-        _spec(_pillar_rows(pillar_cols=(3, 7)), w=6, e=8),
-        _spec(_floor_rows(extras={(5, 1): G}), w=7, e=9, s=16),  # 8 gate
-        _spec(_floor_rows(extras={(5, 1): P}), w=8),  # 9 plate
+        _spec(_pillar_rows(pillar_cols=(3, 7))),
+        _spec(_floor_rows(extras={(5, 1): G})),  # 8 gate
+        _spec(_floor_rows(extras={(5, 1): P})),  # 9 plate — bajo ella, la secret room 17
         # Sub-piso
-        _spec(_floor_rows(extras={(3, 2): L, (5, 2): L}), n=3, e=11),
-        _spec(_floor_rows(extras={(6, 1): T}), w=10, e=12),
-        _spec(_doortop_rows(doortop_cols=(4, 5)), w=11, e=13),
-        _spec(_floor_rows(extras={(3, 1): C, (6, 1): C}), w=12, e=14),
+        _spec(_floor_rows(extras={(3, 2): L, (5, 2): L})),  # 10 — recibe el drop del pit de 3
+        _spec(_floor_rows(extras={(6, 1): T})),  # 11 antorcha (oeste de 10)
+        _spec(_doortop_rows(doortop_cols=(4, 5))),
+        _spec(_floor_rows(extras={(3, 1): C, (6, 1): C})),
         _spec(
             _arena_rows(pillar_pair=(2, 7)),
-            w=13,
-            e=15,
             guards=(G_S(col=5, row=1, direction=0, skill=2),),
         ),  # 14 arena
-        _spec(_floor_rows(extras={(4, 1): P}), w=14, e=16),  # 15 plate
+        _spec(_floor_rows(extras={(4, 1): P})),  # 15 plate
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            n=8,
-            w=15,
             guards=(G_S(col=3, row=1, direction=0, skill=2),),
         ),  # 16 exit
-        # Estancias secretas — accesibles vía drop sur de sala 9
-        _spec(_floor_rows(extras={(5, 1): PO}), n=9, s=18),  # 17 potion HEAL
-        _spec(_pillar_rows(pillar_cols=(4, 6), extras={(2, 1): PO}), n=17),  # 18 max_hp
+        # Estancias secretas — drop desde la sala 9
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 17 potion HEAL
+        _spec(_pillar_rows(pillar_cols=(4, 6), extras={(2, 1): PO})),  # 18 max_hp
     ]
-    # Sala 9 necesita link_s=17 para alcanzar la secret room. La modifico
-    # añadiendo link_s en el spec ya creado: trickeo inyectando un specs.append
-    # — pero ya está cerrado el list. Lo dejo así: el test del orphan acepta
-    # hasta 2 salas opcionales como bonus.
     doorlinks = (
         DoorLink(plate_room=9, plate_col=5, plate_row=1, gate_room=8, gate_col=5, gate_row=1),
         DoorLink(plate_room=15, plate_col=4, plate_row=1, gate_room=8, gate_col=5, gate_row=1),
@@ -567,6 +591,7 @@ def _l3() -> Level:
         number=3,
         name="The Skeleton",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -579,37 +604,43 @@ def _l3() -> Level:
 # ===========================================================================
 # Nivel 4 — The Mirror  (20 salas)
 # ===========================================================================
+# Fila norte 1-10 con el MIRROR en 5 y el exit en 10; sub-piso 11-18
+# (el pit de la 3 cae en la potion poison de la 11); rincón 19-20.
+
+
 def _l4() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  9 10
+     .  . 11 12 13 14 15 16 17 18
+     .  .  .  .  .  .  .  . 19 20
+    """
     specs = [
-        _spec(_floor_rows(extras={(5, 2): L}), e=2),  # 1 spawn
-        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S}), w=1, e=3),  # slalom
-        _spec(_floor_rows(pit_cols=(4, 5, 6)), w=2, e=4, s=11),
-        _spec(_lattice_rows(lattice_cols=(3, 6)), w=3, e=5),
-        _spec(_floor_rows(extras={(5, 1): M, (8, 1): PO}), w=4, e=6),  # 5 MIRROR + potion
-        _spec(_floor_rows(extras={(3, 1): P, (7, 1): C}), w=5, e=7),  # 6 plate + chomper
-        _spec(_floor_rows(extras={(4, 1): G}), w=6, e=8),  # 7 gate
-        _spec(_pillar_rows(pillar_cols=(4, 7)), w=7, e=9),
-        _spec(_floor_rows(extras={(5, 2): L, (3, 1): T}), w=8, e=10),
+        _spec(_floor_rows(extras={(5, 2): L})),  # 1 spawn
+        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S})),  # slalom
+        _spec(_floor_rows(pit_cols=(4, 5, 6))),  # 3 pit → drop a 11
+        _spec(_lattice_rows(lattice_cols=(3, 6))),
+        _spec(_floor_rows(extras={(5, 1): M, (8, 1): PO})),  # 5 MIRROR + potion
+        _spec(_floor_rows(extras={(3, 1): P, (7, 1): C})),  # 6 plate + chomper
+        _spec(_floor_rows(extras={(4, 1): G})),  # 7 gate
+        _spec(_pillar_rows(pillar_cols=(4, 7))),
+        _spec(_floor_rows(extras={(5, 2): L, (3, 1): T})),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            w=9,
-            s=14,
             guards=(G_S(col=3, row=1, direction=0, skill=3),),
-        ),
-        # Piso inferior tras el pit
-        _spec(_floor_rows(extras={(2, 1): PO}), n=3, e=12),  # 11 potion poison
-        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C}), w=11, e=13),
-        _spec(_balcony_rows(side="left"), w=12, e=14),
-        _spec(_floor_rows(), n=10, w=13, e=15, guards=(G_S(col=5, row=1, direction=-1, skill=3),)),
-        # Loop superior
-        _spec(_doortop_rows(doortop_cols=(3, 4, 5)), w=14, e=16),
-        _spec(_floor_rows(extras={(5, 1): P}), w=15, e=17),  # 16 plate adicional
-        _spec(_pillar_rows(pillar_cols=(3, 6), extras={(7, 1): T}), w=16, e=18),
-        # Estancias secundarias
-        _spec(_floor_rows(extras={(5, 1): PO}), w=17, e=19),  # 18 potion FLOAT
-        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), w=18, e=20),
-        _spec(_floor_rows(extras={(5, 1): T}), w=19),  # 20 final estancia
+        ),  # 10 exit — drop al 18
+        # Sub-piso
+        _spec(_floor_rows(extras={(2, 1): PO})),  # 11 potion poison
+        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C})),
+        _spec(_balcony_rows(side="left")),
+        _spec(_floor_rows(), guards=(G_S(col=5, row=1, direction=-1, skill=3),)),
+        _spec(_doortop_rows(doortop_cols=(3, 4, 5))),
+        _spec(_floor_rows(extras={(5, 1): P})),  # 16 plate adicional
+        _spec(_pillar_rows(pillar_cols=(3, 6), extras={(7, 1): T})),
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 18 potion FLOAT
+        # Rincón sur-este
+        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L})),
+        _spec(_floor_rows(extras={(5, 1): T})),  # 20 final estancia
     ]
     doorlinks = (
         DoorLink(plate_room=6, plate_col=3, plate_row=1, gate_room=7, gate_col=4, gate_row=1),
@@ -620,6 +651,7 @@ def _l4() -> Level:
         number=4,
         name="The Mirror",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -641,45 +673,41 @@ def _l4() -> Level:
 # ===========================================================================
 def _l5() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  9 10  .  .  .
+    11 12 13  .  .  . 14 15 16 17 18 19 20
+    """
     specs = [
         _spec(
             _floor_rows(),
-            e=2,
-            s=11,
             guards=(G_S(col=5, row=1, direction=-1, skill=3),),
         ),  # 1 spawn + drop al sub-loop
-        _spec(_floor_rows(extras={(3, 2): L, (4, 2): L, (5, 2): L}), w=1, e=3),  # triple loose
+        _spec(_floor_rows(extras={(3, 2): L, (4, 2): L, (5, 2): L})),  # triple loose
         _spec(
             _split_rows(upper_cols=(0, 1, 2, 3), lower_cols=(6, 7, 8, 9), extras={(7, 1): S}),
-            w=2,
-            e=4,
         ),  # 3 escalonada
-        _spec(
-            _platform_rows(platform_cols=(3, 4, 5), extras={(4, 1): PO}), w=3, e=5
-        ),  # 4 POTION en plataforma
-        _spec(_floor_rows(extras={(5, 2): L}), w=4, e=6),
-        _spec(_floor_rows(extras={(8, 1): P}), w=5, e=7),
-        _spec(_floor_rows(extras={(3, 1): G}), w=6, e=8, s=14),
-        _spec(_arena_rows(pillar_pair=(2, 7)), w=7, e=9),  # 8 arena con torchas implícitas
-        _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): T}), w=8, e=10),
+        _spec(_platform_rows(platform_cols=(3, 4, 5), extras={(4, 1): PO})),  # 4 POTION
+        _spec(_floor_rows(extras={(5, 2): L})),
+        _spec(_floor_rows(extras={(8, 1): P})),
+        _spec(_floor_rows(extras={(3, 1): G})),  # 7 gate — drop al 14
+        _spec(_arena_rows(pillar_pair=(2, 7))),  # 8 arena
+        _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): T})),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            w=9,
             guards=(G_S(col=3, row=1, direction=0, skill=3),),
         ),  # 10 exit
-        # Sub-rooms paralelos (loop) — link_n=1 conecta con el spawn
-        _spec(_floor_rows(extras={(4, 1): SK}), n=1, e=12),  # 11 stub skeleton
-        _spec(_floor_rows(extras={(5, 2): L}), w=11, e=13),
-        _spec(_balcony_rows(side="right"), w=12),  # 13 dead-end con balcony
-        _spec(_floor_rows(extras={(5, 1): PO}), n=7, e=15),  # 14 potion empty (decorativa)
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=14, e=16),
-        _spec(_floor_rows(extras={(5, 1): C, (6, 1): S}), w=15, e=17),
-        _spec(_doortop_rows(doortop_cols=(4, 5)), w=16, e=18),
-        _spec(_floor_rows(extras={(3, 1): T, (7, 1): T}), w=17, e=19),
-        _spec(_pillar_rows(pillar_cols=(4, 6)), w=18, e=20),
+        # Sub-rooms bajo el spawn
+        _spec(_floor_rows(extras={(4, 1): SK})),  # 11 stub skeleton
+        _spec(_floor_rows(extras={(5, 2): L})),
+        _spec(_balcony_rows(side="right")),  # 13 dead-end con balcony
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 14 potion empty (decorativa)
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
+        _spec(_floor_rows(extras={(5, 1): C, (6, 1): S})),
+        _spec(_doortop_rows(doortop_cols=(4, 5))),
+        _spec(_floor_rows(extras={(3, 1): T, (7, 1): T})),
+        _spec(_pillar_rows(pillar_cols=(4, 6))),
         _spec(
             _floor_rows(extras={(4, 1): PO}),
-            w=19,
             guards=(G_S(col=6, row=1, direction=-1, skill=3),),
         ),  # 20 potion TIME
     ]
@@ -691,6 +719,7 @@ def _l5() -> Level:
         number=5,
         name="The Thief",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -712,39 +741,38 @@ def _l5() -> Level:
 # ===========================================================================
 def _l6() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  9 10  .  .  .
+     .  .  .  .  . 11 12 13 14 15 16 17 18
+    """
     specs = [
-        _spec(_floor_rows(pit_cols=(4, 5, 6)), e=2),  # 1 pit grande — frame_43 trigger
-        _spec(_floor_rows(extras={(3, 1): G}), w=1, e=3),  # 2 gate
-        _spec(_floor_rows(extras={(4, 1): C, (7, 1): P}), w=2, e=4),  # 3 plate
+        _spec(_floor_rows(pit_cols=(4, 5, 6))),  # 1 pit grande — frame_43 trigger
+        _spec(_floor_rows(extras={(3, 1): G})),  # 2 gate
+        _spec(_floor_rows(extras={(4, 1): C, (7, 1): P})),  # 3 plate
         _spec(
             _floor_rows(extras={(7, 1): S}),
-            w=3,
-            e=5,
             guards=(G_S(col=5, row=1, direction=-1, skill=4),),
         ),
-        _spec(_arena_rows(pillar_pair=(3, 7)), w=4, e=6),  # 5 arena combat
-        _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 2): L}), w=5, e=7, s=11),
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=6, e=8),
-        _spec(_floor_rows(extras={(5, 1): G, (8, 1): P}), w=7, e=9),  # 8 gate + plate local
+        _spec(_arena_rows(pillar_pair=(3, 7))),  # 5 arena combat
+        _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 2): L})),  # 6 drop al 11
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
+        _spec(_floor_rows(extras={(5, 1): G, (8, 1): P})),  # 8 gate + plate local
         _spec(
             _split_rows(upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9), extras={(3, 1): C}),
-            w=8,
-            e=10,
         ),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            w=9,
             guards=(G_S(col=3, row=1, direction=0, skill=4),),
         ),  # 10 exit
         # Piso inferior — atajo opcional
-        _spec(_floor_rows(extras={(5, 1): PO}), n=6, e=12),  # 11 potion HEAL
-        _spec(_floor_rows(pit_cols=(4, 5)), w=11, e=13),
-        _spec(_balcony_rows(side="left"), w=12, e=14),
-        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S}), w=13, e=15),  # slalom
-        _spec(_floor_rows(extras={(5, 1): P}), w=14, e=16),  # 15 plate (extra)
-        _spec(_doortop_rows(doortop_cols=(4, 5, 6)), w=15, e=17),
-        _spec(_floor_rows(extras={(5, 1): T}), w=16, e=18),
-        _spec(_pillar_rows(pillar_cols=(3, 6), extras={(4, 1): PO}), w=17),  # 18 potion max_hp
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 11 potion HEAL
+        _spec(_floor_rows(pit_cols=(4, 5))),
+        _spec(_balcony_rows(side="left")),
+        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S})),  # slalom
+        _spec(_floor_rows(extras={(5, 1): P})),  # 15 plate (extra)
+        _spec(_doortop_rows(doortop_cols=(4, 5, 6))),
+        _spec(_floor_rows(extras={(5, 1): T})),
+        _spec(_pillar_rows(pillar_cols=(3, 6), extras={(4, 1): PO})),  # 18 potion max_hp
     ]
     doorlinks = (
         DoorLink(plate_room=3, plate_col=7, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
@@ -756,6 +784,7 @@ def _l6() -> Level:
         number=6,
         name="The Steps",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -768,43 +797,47 @@ def _l6() -> Level:
 # ===========================================================================
 # Nivel 7 — The Mountains  (22 salas)  vertical-heavy
 # ===========================================================================
+# Tres pisos completos 7 salas + exit colgado al este del piso bajo.
+# Descensos reales: loose del spawn (1→8), loose de la 9 (→16),
+# potion bajo la arena 6 (→13) y trampa de chompers bajo la gate 7 (→14).
+
+
 def _l7() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  .
+     8  9 10 11 12 13 14  .
+    15 16 17 18 19 20 21 22
+    """
     specs = [
-        _spec(_floor_rows(extras={(5, 2): L}), e=2, s=8),  # 1 spawn drop
-        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S}), w=1, e=3),
-        _spec(_lattice_rows(lattice_cols=(3, 6)), w=2, e=4),
-        _spec(
-            _platform_rows(platform_cols=(3, 4, 5), extras={(5, 1): P}), w=3, e=5
-        ),  # 4 plate en plataforma
-        _spec(_pillar_rows(pillar_cols=(4, 7)), w=4, e=6),
+        _spec(_floor_rows(extras={(5, 2): L})),  # 1 spawn drop
+        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S})),
+        _spec(_lattice_rows(lattice_cols=(3, 6))),
+        _spec(_platform_rows(platform_cols=(3, 4, 5), extras={(5, 1): P})),  # 4 plate
+        _spec(_pillar_rows(pillar_cols=(4, 7))),
         _spec(
             _arena_rows(pillar_pair=(2, 7)),
-            w=5,
-            e=7,
-            s=14,
             guards=(G_S(col=5, row=1, direction=-1, skill=5),),
         ),  # 6 arena
-        _spec(_floor_rows(extras={(5, 1): G}), w=6, s=15),  # 7 gate dead-end
+        _spec(_floor_rows(extras={(5, 1): G})),  # 7 gate dead-end
         # Piso intermedio
-        _spec(_drop_rows(floor_cols=(0, 1, 8, 9), extras={(5, 1): T}), n=1, e=9),
-        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), w=8, e=10),
-        _spec(_floor_rows(extras={(3, 1): C}), w=9, e=11),
-        _spec(_pillar_rows(pillar_cols=(4,)), w=10, e=12),
-        _spec(_balcony_rows(side="right"), w=11, e=13),
-        _spec(_doortop_rows(doortop_cols=(3, 4, 5)), w=12, s=17),
-        _spec(_floor_rows(extras={(5, 1): PO}), n=6, e=15),  # 14 potion HEAL
-        _spec(_floor_rows(extras={(2, 1): C, (6, 1): C}), n=7, w=14, e=16),  # 15 doble chomper
-        _spec(_floor_rows(extras={(5, 1): S}), w=15, e=17),
+        _spec(_drop_rows(floor_cols=(0, 1, 8, 9), extras={(5, 1): T})),  # 8 pozo
+        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L})),  # 9 loose → drop a 16
+        _spec(_floor_rows(extras={(3, 1): C})),
+        _spec(_pillar_rows(pillar_cols=(4,))),
+        _spec(_balcony_rows(side="right")),
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 13 potion HEAL (bajo la arena 6)
+        _spec(_floor_rows(extras={(2, 1): C, (6, 1): C})),  # 14 doble chomper (bajo la gate 7)
         # Piso bajo
-        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L, (6, 2): L}), n=13, w=16, e=18),
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7), extras={(5, 1): T}), w=17, e=19),
-        _spec(_floor_rows(), w=18, e=20, guards=(G_S(col=4, row=1, direction=0, skill=5),)),
-        _spec(_pillar_rows(pillar_cols=(3, 6)), w=19, e=21),
-        _spec(_floor_rows(extras={(5, 1): P}), w=20, e=22),  # 21 plate (extra)
+        _spec(_floor_rows(extras={(5, 1): S})),  # 15 spike
+        _spec(_doortop_rows(doortop_cols=(3, 4, 5))),
+        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L, (6, 2): L})),
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7), extras={(5, 1): T})),
+        _spec(_floor_rows(), guards=(G_S(col=4, row=1, direction=0, skill=5),)),
+        _spec(_pillar_rows(pillar_cols=(3, 6))),
+        _spec(_floor_rows(extras={(5, 1): P})),  # 21 plate (extra)
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            w=21,
             guards=(G_S(col=3, row=1, direction=0, skill=5),),
         ),  # 22 exit
     ]
@@ -816,12 +849,13 @@ def _l7() -> Level:
         number=7,
         name="The Mountains",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
         doorlinks=doorlinks,
     )
-    return _with_potion_types(lvl, {(14, 5, 1): PotionType.HEAL})
+    return _with_potion_types(lvl, {(13, 5, 1): PotionType.HEAL})
 
 
 # ===========================================================================
@@ -829,37 +863,37 @@ def _l7() -> Level:
 # ===========================================================================
 def _l8() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  9 10
+    11 12 13 14 15 16 17 18 19 20
+    """
     specs = [
-        _spec(_floor_rows(pit_cols=(4, 5), extras={(7, 2): L}), e=2, s=11),  # 1 spawn
-        _spec(_floor_rows(extras={(5, 1): C, (3, 2): L}), w=1, e=3),
-        _spec(_lattice_rows(lattice_cols=(4, 6)), w=2, e=4),
-        _spec(_floor_rows(extras={(5, 2): L, (6, 2): L, (7, 2): L}), w=3, e=5),  # cave loose
-        _spec(_pillar_rows(pillar_cols=(3, 6)), w=4, e=6),
+        _spec(_floor_rows(pit_cols=(4, 5), extras={(7, 2): L})),  # 1 spawn — drop a 11
+        _spec(_floor_rows(extras={(5, 1): C, (3, 2): L})),
+        _spec(_lattice_rows(lattice_cols=(4, 6))),
+        _spec(_floor_rows(extras={(5, 2): L, (6, 2): L, (7, 2): L})),  # cave loose
+        _spec(_pillar_rows(pillar_cols=(3, 6))),
         _spec(
             _floor_rows(extras={(7, 1): S}),
-            w=5,
-            e=7,
             guards=(G_S(col=4, row=1, direction=0, skill=4),),
         ),
-        _spec(_floor_rows(extras={(5, 1): C}), w=6, e=8),
-        _spec(_floor_rows(extras={(5, 1): P}), w=7, e=9),
-        _spec(_balcony_rows(side="left", extras={(5, 1): T}), w=8, e=10),
+        _spec(_floor_rows(extras={(5, 1): C})),
+        _spec(_floor_rows(extras={(5, 1): P})),
+        _spec(_balcony_rows(side="left", extras={(5, 1): T})),
         _spec(
             _floor_rows(extras={(2, 1): G, (7, 1): DL, (8, 1): DR}),
-            w=9,
-            guards=(),
         ),  # 10 exit + gate (mouse abre)
-        # Sub-cuevas (drop al sur de la 1)
-        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), n=1, e=12),
-        _spec(_doortop_rows(doortop_cols=(3, 4, 5)), w=11, e=13),
-        _spec(_floor_rows(extras={(3, 1): C, (6, 1): C}), w=12, e=14),
-        _spec(_floor_rows(extras={(5, 1): PO}), w=13, e=15),
-        _spec(_pillar_rows(pillar_cols=(4, 7)), w=14, e=16),
-        _spec(_floor_rows(extras={(5, 1): SK}), w=15, e=17),  # 16 esqueleto decorativo
-        _spec(_floor_rows(extras={(5, 2): L}), w=16, e=18),
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=17, e=19),
-        _spec(_floor_rows(), w=18, e=20, guards=(G_S(col=5, row=1, direction=-1, skill=4),)),
-        _spec(_floor_rows(extras={(4, 1): PO}), w=19),  # 20 potion (cul-de-sac)
+        # Sub-cuevas
+        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L})),
+        _spec(_doortop_rows(doortop_cols=(3, 4, 5))),
+        _spec(_floor_rows(extras={(3, 1): C, (6, 1): C})),
+        _spec(_floor_rows(extras={(5, 1): PO})),
+        _spec(_pillar_rows(pillar_cols=(4, 7))),
+        _spec(_floor_rows(extras={(5, 1): SK})),  # 16 esqueleto decorativo
+        _spec(_floor_rows(extras={(5, 2): L})),
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
+        _spec(_floor_rows(), guards=(G_S(col=5, row=1, direction=-1, skill=4),)),
+        _spec(_floor_rows(extras={(4, 1): PO})),  # 20 potion (cul-de-sac)
     ]
     doorlinks: tuple[DoorLink, ...] = ()  # gate de sala 10 sólo se abre con mouse
     events = (Event(EventKind.MOUSE_APPEAR, room=10),)
@@ -867,6 +901,7 @@ def _l8() -> Level:
         number=8,
         name="The Caverns",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -879,47 +914,46 @@ def _l8() -> Level:
 # ===========================================================================
 # Nivel 9 — The Tomb  (20 salas)
 # ===========================================================================
+# Fila norte 1-10 con el exit en 10; sótano 11-20 bajo ella. La potion
+# MAX_HP (19) queda justo bajo el exit; 20 es el rincón final.
+
+
 def _l9() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  9 10  .
+     . 11 12 13 14 15 16 17 18 19 20
+    """
     specs = [
-        _spec(_floor_rows(extras={(4, 1): SK, (6, 2): L}), e=2),  # 1 esqueleto durmiente
-        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S}), w=1, e=3, s=11),
-        _spec(_pillar_rows(pillar_cols=(4,)), w=2, e=4),
+        _spec(_floor_rows(extras={(4, 1): SK, (6, 2): L})),  # 1 esqueleto durmiente
+        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S})),  # 2 — drop a 11
+        _spec(_pillar_rows(pillar_cols=(4,))),
         _spec(
             _arena_rows(pillar_pair=(2, 7), extras={(8, 1): PO}),
-            w=3,
-            e=5,
             guards=(G_S(col=5, row=1, direction=-1, skill=5),),
         ),  # 4 arena con potion
-        _spec(_floor_rows(extras={(5, 1): G}), w=4, e=6),  # 5 gate
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=5, e=7),
+        _spec(_floor_rows(extras={(5, 1): G})),  # 5 gate
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
         _spec(
-            _platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): SK, (4, 1): P}), w=6, e=8
-        ),  # plate alto
-        _spec(_balcony_rows(side="right"), w=7, e=9),
-        _spec(_split_rows(upper_cols=(0, 1, 2), extras={(4, 1): C, (6, 1): C}), w=8, e=10),
+            _platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): SK, (4, 1): P}),
+        ),  # 7 plate alto
+        _spec(_balcony_rows(side="right")),
+        _spec(_split_rows(upper_cols=(0, 1, 2), extras={(4, 1): C, (6, 1): C})),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            w=9,
-            s=18,
             guards=(G_S(col=3, row=1, direction=0, skill=5),),
-        ),  # 10 exit
+        ),  # 10 exit — drop a 19
         # Sótano sub-tumba
-        _spec(_floor_rows(extras={(5, 2): L}), n=2, e=12),
-        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C}), w=11, e=13),
-        _spec(_doortop_rows(doortop_cols=(4, 5)), w=12, e=14),
-        _spec(_pillar_rows(pillar_cols=(3, 6)), w=13, e=15),
-        _spec(_floor_rows(extras={(5, 1): T}), w=14, e=16),
-        _spec(_floor_rows(extras={(4, 1): P}), w=15, e=17),  # 16 plate
-        _spec(_floor_rows(extras={(3, 1): SK}), w=16, e=18),  # 17 skeleton
-        _spec(
-            _floor_rows(extras={(5, 1): PO}),
-            n=10,
-            w=17,
-            e=19,
-        ),  # 18 potion
-        _spec(_lattice_rows(lattice_cols=(3, 5)), w=18, e=20),
-        _spec(_floor_rows(extras={(5, 1): T}), w=19),
+        _spec(_floor_rows(extras={(5, 2): L})),
+        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C})),
+        _spec(_doortop_rows(doortop_cols=(4, 5))),
+        _spec(_pillar_rows(pillar_cols=(3, 6))),
+        _spec(_floor_rows(extras={(5, 1): T})),
+        _spec(_floor_rows(extras={(4, 1): P})),  # 16 plate
+        _spec(_floor_rows(extras={(3, 1): SK})),  # 17 skeleton
+        _spec(_lattice_rows(lattice_cols=(3, 5))),
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 19 potion MAX_HP bajo el exit
+        _spec(_floor_rows(extras={(5, 1): T})),  # 20 rincón final
     ]
     doorlinks = (
         DoorLink(plate_room=7, plate_col=4, plate_row=1, gate_room=5, gate_col=5, gate_row=1),
@@ -929,60 +963,67 @@ def _l9() -> Level:
         number=9,
         name="The Tomb",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
         doorlinks=doorlinks,
     )
-    return _with_potion_types(lvl, {(4, 8, 1): PotionType.HEAL, (18, 5, 1): PotionType.MAX_HP})
+    return _with_potion_types(lvl, {(4, 8, 1): PotionType.HEAL, (19, 5, 1): PotionType.MAX_HP})
 
 
 # ===========================================================================
 # Nivel 10 — The Tower  (20 salas)  vertical
 # ===========================================================================
+# Pozo vertical de 10 salas (1 arriba → 10 abajo con el exit) y galería
+# lateral 11-20 colgada del nivel de la sala 4.
+
+
 def _l10() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  .  .  .  .  .  .  .  .  .  .
+     2  .  .  .  .  .  .  .  .  .  .
+     3  .  .  .  .  .  .  .  .  .  .
+     4 11 12 13 14 15 16 17 18 19 20
+     5  .  .  .  .  .  .  .  .  .  .
+     6  .  .  .  .  .  .  .  .  .  .
+     7  .  .  .  .  .  .  .  .  .  .
+     8  .  .  .  .  .  .  .  .  .  .
+     9  .  .  .  .  .  .  .  .  .  .
+    10  .  .  .  .  .  .  .  .  .  .
+    """
     specs = [
-        _spec(_floor_rows(pit_cols=(4, 5, 6)), s=2),  # 1 top: drop
+        _spec(_floor_rows(pit_cols=(4, 5, 6))),  # 1 top: drop
         _spec(
             _drop_rows(floor_cols=(0, 1, 7, 8, 9)),
-            n=1,
-            s=3,
             guards=(G_S(col=8, row=1, direction=-1, skill=5),),
         ),
-        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S}), n=2, s=4),
-        _spec(_drop_rows(floor_cols=(0, 1, 2, 3, 8, 9)), n=3, s=5, e=11),
-        _spec(_floor_rows(extras={(5, 1): G}), n=4, s=6),  # 5 gate
-        _spec(_lattice_rows(lattice_cols=(3, 6)), n=5, s=7),
-        _spec(_pillar_rows(pillar_cols=(4,)), n=6, s=8),
+        _spec(_floor_rows(extras={(3, 1): S, (5, 1): S, (7, 1): S})),
+        _spec(_drop_rows(floor_cols=(0, 1, 2, 3, 8, 9))),  # 4 — acceso a la galería
+        _spec(_floor_rows(extras={(5, 1): G})),  # 5 gate
+        _spec(_lattice_rows(lattice_cols=(3, 6))),
+        _spec(_pillar_rows(pillar_cols=(4,))),
         _spec(
             _drop_rows(floor_cols=(0, 1, 8, 9)),
-            n=7,
-            s=9,
             guards=(G_S(col=2, row=1, direction=0, skill=5),),
         ),
-        _spec(_floor_rows(extras={(5, 2): L}), n=8, s=10),
+        _spec(_floor_rows(extras={(5, 2): L})),
         _spec(
             _floor_rows(extras={(5, 1): P, (7, 1): DL, (8, 1): DR}),
-            n=9,
         ),  # 10 exit + plate (open finale gate)
-        # Brazos laterales (loop puzzle)
-        _spec(_floor_rows(extras={(5, 1): P}), w=4, e=12),  # 11 plate
-        _spec(_balcony_rows(side="right"), w=11, e=13),
-        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L}), w=12, e=14),
-        _spec(_doortop_rows(doortop_cols=(4, 5)), w=13, e=15),
-        _spec(_pillar_rows(pillar_cols=(3, 6, 8)), w=14, e=16),
-        _spec(
-            _floor_rows(extras={(5, 1): PO}),
-            w=15,
-            e=17,
-        ),  # 16 potion
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=16, e=18),
-        _spec(_floor_rows(extras={(5, 1): T}), w=17, e=19),
-        _spec(_floor_rows(extras={(3, 1): C, (7, 1): C}), w=18, e=20),
+        # Galería lateral (loop puzzle)
+        _spec(_floor_rows(extras={(5, 1): P})),  # 11 plate
+        _spec(_balcony_rows(side="right")),
+        _spec(_floor_rows(extras={(4, 2): L, (5, 2): L})),
+        _spec(_doortop_rows(doortop_cols=(4, 5))),
+        _spec(_pillar_rows(pillar_cols=(3, 6, 8))),
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 16 potion
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
+        _spec(_floor_rows(extras={(5, 1): T})),
+        _spec(_floor_rows(extras={(3, 1): C, (7, 1): C})),
         _spec(
             _floor_rows(),
-            w=19,
             guards=(G_S(col=5, row=1, direction=-1, skill=5),),
         ),  # 20
     ]
@@ -994,6 +1035,7 @@ def _l10() -> Level:
         number=10,
         name="The Tower",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -1005,47 +1047,52 @@ def _l10() -> Level:
 # ===========================================================================
 # Nivel 11 — The Tower II  (20 salas)
 # ===========================================================================
+# Bloque superior 2x2 (1-2 / 3-4), galería larga 7-20 como tercer piso
+# y cámara final 5-6 colgada bajo la galería: los loose floors de la
+# sala 13 son la única entrada a la sala de la gate (5) y el exit (6).
+
+
 def _l11() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  .  .  .  .  .  .  .  .  .  .  .  .
+     3  4  .  .  .  .  .  .  .  .  .  .  .  .
+     7  8  9 10 11 12 13 14 15 16 17 18 19 20
+     .  .  .  .  .  . 5  6  .  .  .  .  .  .
+    """
     specs = [
         _spec(
-            _platform_rows(platform_cols=(4, 5, 6), pit_cols=(4, 5), extras={(2, 1): T}), e=2, s=3
-        ),  # 1 spawn + plataforma
+            _platform_rows(platform_cols=(4, 5, 6), pit_cols=(4, 5), extras={(2, 1): T}),
+        ),  # 1 spawn — el pit baja a 3
         _spec(
             _arena_rows(pillar_pair=(2, 7)),
-            w=1,
-            s=7,
             guards=(G_S(col=5, row=1, direction=-1, skill=5),),
         ),  # 2 arena
-        _spec(_floor_rows(extras={(3, 1): C, (6, 1): C, (5, 2): L}), n=1, e=4),
+        _spec(_floor_rows(extras={(3, 1): C, (6, 1): C, (5, 2): L})),  # 3 — loose baja a 7
         _spec(
             _platform_rows(platform_cols=(3, 4, 5), pit_cols=(7,)),
-            w=3,
-            s=5,
             guards=(G_S(col=4, row=1, direction=-1, skill=5),),
-        ),  # 4 plataforma + pit
-        _spec(_floor_rows(extras={(5, 1): G, (2, 1): P}), n=4, e=6),  # 5 plate+gate local
-        _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR}), w=5),  # 6 exit
-        # Loop alterno — accesible por drop sur desde sala 2
-        _spec(_lattice_rows(lattice_cols=(3, 6)), n=2, e=8),  # 7
-        _spec(_floor_rows(extras={(4, 1): S, (6, 1): S}), w=7, e=9),
-        _spec(_pillar_rows(pillar_cols=(4,)), w=8, e=10),
-        _spec(_balcony_rows(side="left"), w=9, e=11),
-        _spec(_floor_rows(extras={(5, 1): PO}), w=10, e=12),  # 11 potion HEAL
-        _spec(_doortop_rows(doortop_cols=(4, 5, 6)), w=11, e=13),
-        _spec(_floor_rows(extras={(3, 2): L, (4, 2): L}), w=12, e=14),
-        _spec(_pillar_rows(pillar_cols=(3, 7)), w=13, e=15),
+        ),  # 4 plataforma — el pit baja a 8
+        _spec(_floor_rows(extras={(5, 1): G, (2, 1): P})),  # 5 plate+gate local
+        _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR})),  # 6 exit
+        # Galería (tercer piso)
+        _spec(_lattice_rows(lattice_cols=(3, 6))),  # 7
+        _spec(_floor_rows(extras={(4, 1): S, (6, 1): S})),
+        _spec(_pillar_rows(pillar_cols=(4,))),
+        _spec(_balcony_rows(side="left")),
+        _spec(_floor_rows(extras={(5, 1): PO})),  # 11 potion HEAL
+        _spec(_doortop_rows(doortop_cols=(4, 5, 6))),
+        _spec(_floor_rows(extras={(3, 2): L, (4, 2): L})),  # 13 — loose baja a 5
+        _spec(_pillar_rows(pillar_cols=(3, 7))),
         _spec(
             _floor_rows(extras={(5, 1): T}),
-            w=14,
-            e=16,
             guards=(G_S(col=4, row=1, direction=0, skill=5),),
         ),
-        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C}), w=15, e=17),
-        _spec(_floor_rows(extras={(3, 1): P}), w=16, e=18),  # 17 plate
-        _spec(_pillar_rows(pillar_cols=(4, 6)), w=17, e=19),
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=18, e=20),
-        _spec(_floor_rows(extras={(4, 1): PO}), w=19),  # 20 potion MAX_HP
+        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C})),
+        _spec(_floor_rows(extras={(3, 1): P})),  # 17 plate
+        _spec(_pillar_rows(pillar_cols=(4, 6))),
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
+        _spec(_floor_rows(extras={(4, 1): PO})),  # 20 potion MAX_HP
     ]
     doorlinks = (
         DoorLink(plate_room=5, plate_col=2, plate_row=1, gate_room=5, gate_col=5, gate_row=1),
@@ -1055,6 +1102,7 @@ def _l11() -> Level:
         number=11,
         name="The Tower II",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -1068,58 +1116,53 @@ def _l11() -> Level:
 # ===========================================================================
 def _l12() -> Level:
     G_S = GuardSpawn  # noqa: N806
+    grid = """
+     1  2  3  4  5  6  7  8  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .
+     .  .  .  .  .  .  .  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
+    """
     specs = [
         _spec(
             _platform_rows(platform_cols=(4, 5), extras={(7, 1): S}),
-            e=2,
             guards=(G_S(col=5, row=1, direction=-1, skill=6),),
         ),  # 1 spawn con plataforma + spike
-        _spec(_split_rows(upper_cols=(0, 1, 2), extras={(3, 1): C, (6, 1): C}), w=1, e=3),
+        _spec(_split_rows(upper_cols=(0, 1, 2), extras={(3, 1): C, (6, 1): C})),
         _spec(
             _arena_rows(pillar_pair=(2, 7), extras={(2, 1): PO}),
-            w=2,
-            e=4,
             guards=(G_S(col=5, row=1, direction=-1, skill=7),),
         ),  # 3 arena
         _spec(
             _platform_rows(
                 platform_cols=(3, 4, 5, 6), pit_cols=(6,), extras={(4, 2): L, (5, 2): L}
             ),
-            w=3,
-            e=5,
         ),
-        _spec(_floor_rows(extras={(5, 1): M, (8, 1): PO}), w=4, e=6),  # 5 MIRROR fusion
-        _spec(_split_rows(upper_cols=(6, 7, 8, 9), extras={(5, 2): L}), w=5, e=7),
+        _spec(_floor_rows(extras={(5, 1): M, (8, 1): PO})),  # 5 MIRROR fusion
+        _spec(_split_rows(upper_cols=(6, 7, 8, 9), extras={(5, 2): L})),
         _spec(
             _arena_rows(pillar_pair=(1, 8), extras={(2, 1): S, (8, 1): S}),
-            w=6,
-            e=8,
             guards=(G_S(col=5, row=1, direction=-1, skill=11),),
         ),  # 7 ARENA VIZIER
-        _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR}), w=7, s=9),  # 8 exit + drop a galería
-        # Galería sub — accesible vía drop desde sala 8
-        _spec(_lattice_rows(lattice_cols=(3, 6), extras={(5, 1): T}), n=8, e=10),
-        _spec(_pillar_rows(pillar_cols=(4, 6)), w=9, e=11),
-        _spec(_doortop_rows(doortop_cols=(3, 4, 5)), w=10, e=12),
-        _spec(_balcony_rows(side="left"), w=11, e=13),
-        _spec(_floor_rows(extras={(5, 1): P}), w=12, e=14),
-        _spec(_floor_rows(extras={(4, 1): G}), w=13, e=15),
-        _spec(_pillar_rows(pillar_cols=(3, 6)), w=14, e=16),
-        _spec(_floor_rows(extras={(5, 1): PO}), w=15, e=17),
+        _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR})),  # 8 exit + drop a galería
+        # Galería sub
+        _spec(_lattice_rows(lattice_cols=(3, 6), extras={(5, 1): T})),
+        _spec(_pillar_rows(pillar_cols=(4, 6))),
+        _spec(_doortop_rows(doortop_cols=(3, 4, 5))),
+        _spec(_balcony_rows(side="left")),
+        _spec(_floor_rows(extras={(5, 1): P})),
+        _spec(_floor_rows(extras={(4, 1): G})),
+        _spec(_pillar_rows(pillar_cols=(3, 6))),
+        _spec(_floor_rows(extras={(5, 1): PO})),
         # Cripta sub
-        _spec(_floor_rows(extras={(5, 1): SK}), w=16, e=18),  # 17 skeleton
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=17, e=19),
-        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C}), w=18, e=20),
+        _spec(_floor_rows(extras={(5, 1): SK})),  # 17 skeleton
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
+        _spec(_floor_rows(extras={(4, 1): C, (6, 1): C})),
         _spec(
             _floor_rows(),
-            w=19,
-            e=21,
             guards=(G_S(col=5, row=1, direction=0, skill=8),),
         ),
-        _spec(_floor_rows(extras={(5, 1): P}), w=20, e=22),  # 21 plate adicional
-        _spec(_pillar_rows(pillar_cols=(4,), extras={(7, 1): T}), w=21, e=23),
-        _spec(_floor_rows(extras={(5, 2): L}), w=22, e=24),
-        _spec(_floor_rows(extras={(4, 1): PO}), w=23),  # 24 potion MAX_HP
+        _spec(_floor_rows(extras={(5, 1): P})),  # 21 plate adicional
+        _spec(_pillar_rows(pillar_cols=(4,), extras={(7, 1): T})),
+        _spec(_floor_rows(extras={(5, 2): L})),
+        _spec(_floor_rows(extras={(4, 1): PO})),  # 24 potion MAX_HP
     ]
     doorlinks = (
         DoorLink(plate_room=13, plate_col=5, plate_row=1, gate_room=14, gate_col=4, gate_row=1),
@@ -1133,6 +1176,7 @@ def _l12() -> Level:
         number=12,
         name="The Vizier",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -1154,51 +1198,42 @@ def _l12() -> Level:
 # Nivel 13 — Final Run  (18 salas)  carrera contra reloj
 # ===========================================================================
 def _l13() -> Level:
+    grid = """
+     1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18
+    """
     specs = [
-        _spec(_floor_rows(extras={(3, 1): C, (5, 1): C, (7, 1): C}), e=2),
-        _spec(
-            _floor_rows(extras={(2, 1): S, (4, 1): S, (5, 2): L, (6, 1): S, (8, 1): S}), w=1, e=3
-        ),
-        _spec(_floor_rows(pit_cols=(4, 5, 6), extras={(3, 1): S, (7, 1): S}), w=2, e=4),
-        _spec(_lattice_rows(lattice_cols=(3, 6)), w=3, e=5),
-        _spec(
-            _platform_rows(platform_cols=(3, 4, 5, 6), pit_cols=(4, 5)), w=4, e=6
-        ),  # 5 plataforma sobre pit
-        _spec(_floor_rows(extras={(5, 1): C}), w=5, e=7),
+        _spec(_floor_rows(extras={(3, 1): C, (5, 1): C, (7, 1): C})),
+        _spec(_floor_rows(extras={(2, 1): S, (4, 1): S, (5, 2): L, (6, 1): S, (8, 1): S})),
+        _spec(_floor_rows(pit_cols=(4, 5, 6), extras={(3, 1): S, (7, 1): S})),
+        _spec(_lattice_rows(lattice_cols=(3, 6))),
+        _spec(_platform_rows(platform_cols=(3, 4, 5, 6), pit_cols=(4, 5))),  # 5 plataforma
+        _spec(_floor_rows(extras={(5, 1): C})),
         _spec(
             _split_rows(
                 upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9), extras={(2, 1): S, (8, 1): S}
             ),
-            w=6,
-            e=8,
         ),
-        _spec(_doortop_rows(doortop_cols=(4, 5)), w=7, e=9),
-        _spec(
-            _platform_rows(platform_cols=(2, 3, 4, 5, 6, 7), extras={(5, 2): L}), w=8, e=10
-        ),  # 9 viga
-        _spec(_floor_rows(extras={(3, 1): C, (7, 1): C}), w=9, e=11),
-        _spec(_balcony_rows(side="right"), w=10, e=12),
-        _spec(_lattice_rows(lattice_cols=(3, 5, 7)), w=11, e=13),
-        _spec(_arena_rows(pillar_pair=(3, 7), extras={(5, 1): T}), w=12, e=14),  # 13 arena
-        _spec(_floor_rows(extras={(2, 1): S, (4, 1): S, (6, 1): S}), w=13, e=15),
-        _spec(_pillar_rows(pillar_cols=(3, 7)), w=14, e=16),
+        _spec(_doortop_rows(doortop_cols=(4, 5))),
+        _spec(_platform_rows(platform_cols=(2, 3, 4, 5, 6, 7), extras={(5, 2): L})),  # 9 viga
+        _spec(_floor_rows(extras={(3, 1): C, (7, 1): C})),
+        _spec(_balcony_rows(side="right")),
+        _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
+        _spec(_arena_rows(pillar_pair=(3, 7), extras={(5, 1): T})),  # 13 arena
+        _spec(_floor_rows(extras={(2, 1): S, (4, 1): S, (6, 1): S})),
+        _spec(_pillar_rows(pillar_cols=(3, 7))),
         _spec(
             _split_rows(
                 upper_cols=(0, 1, 2, 3), lower_cols=(6, 7, 8, 9), extras={(4, 1): C, (6, 1): C}
             ),
-            w=15,
-            e=17,
         ),
-        _spec(_doortop_rows(doortop_cols=(3, 4, 5, 6)), w=16, e=18),
-        _spec(
-            _floor_rows(extras={(7, 1): DL, (8, 1): DR}),
-            w=17,
-        ),  # 18 exit
+        _spec(_doortop_rows(doortop_cols=(3, 4, 5, 6))),
+        _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR})),  # 18 exit
     ]
     return _build_level(
         number=13,
         name="Final Run",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -1209,6 +1244,9 @@ def _l13() -> Level:
 # Nivel 14 — Ending  (3 salas — acceso + escaleras + cámara princesa)
 # ===========================================================================
 def _l14() -> Level:
+    grid = """
+     1  2  3
+    """
     specs = [
         # Sala 1: pórtico de entrada con antorchas + plataforma alta
         _spec(
@@ -1216,7 +1254,6 @@ def _l14() -> Level:
                 platform_cols=(3, 4, 5, 6),
                 extras={(0, 1): T, (9, 1): T},
             ),
-            e=2,
         ),
         # Sala 2: galería de escaleras (lattice) hacia el norte ceremonial
         _spec(
@@ -1224,8 +1261,6 @@ def _l14() -> Level:
                 lattice_cols=(3, 5, 7),
                 extras={(2, 1): T, (5, 0): DT, (7, 1): T},
             ),
-            w=1,
-            e=3,
         ),
         # Sala 3: cámara real con la princesa
         _spec(
@@ -1237,7 +1272,6 @@ def _l14() -> Level:
                     (7, 1): T,
                 },
             ),
-            w=2,
         ),
     ]
     events = (Event(EventKind.PRINCESS_REUNION, room=3),)
@@ -1245,6 +1279,7 @@ def _l14() -> Level:
         number=14,
         name="Ending",
         specs=specs,
+        grid=grid,
         start_room=1,
         start_col=1,
         start_row=1,
@@ -1323,7 +1358,7 @@ CANON_LEVELS: tuple[Level, ...] = (
     LEVEL_14,
 )
 """Los 14 niveles canon expandidos. L1-L13 con 18-24 salas multi-piso;
-L14 cinemática 1-sala."""
+L14 cinemática 3-salas."""
 
 
 def load_canon(level_number: int) -> Level:
