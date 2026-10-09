@@ -77,6 +77,11 @@ def advance(game: Game, cmd: Command) -> Game:
         for c in game.others
     )
 
+    # 2''. Los guards vivos bloquean el paso (canon: no se les atraviesa;
+    #      hay que luchar). Sólo en aproximación horizontal — una caída
+    #      desde arriba no se congela en el aire.
+    new_kid = _block_kid_by_guards(game.kid, new_kid, new_others)
+
     # 7. Avanzar trampas de la sala actual
     new_state = _tick_traps(game, new_kid)
 
@@ -237,6 +242,33 @@ def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
     return pressed
 
 
+def _block_kid_by_guards(prev_kid: Char, kid: Char, others: tuple[Char, ...]) -> Char:
+    """Si el kid acabó en la celda de un guard vivo viniendo por su misma
+    fila, revierte su posición a la del tick anterior (conserva la
+    secuencia/acción: el choque se resuelve en combate)."""
+    if kid.alive >= 0:
+        return kid
+    for other in others:
+        if other.charid is not CharId.GUARD or other.alive >= 0:
+            continue
+        if (
+            kid.room == other.room
+            and kid.curr_row == other.curr_row
+            and kid.curr_col == other.curr_col
+            and prev_kid.room == other.room
+            and prev_kid.curr_row == other.curr_row
+        ):
+            return replace(
+                kid,
+                room=prev_kid.room,
+                curr_col=prev_kid.curr_col,
+                curr_row=prev_kid.curr_row,
+                x=prev_kid.x,
+                y=prev_kid.y,
+            )
+    return kid
+
+
 def _resolve_room_combat(kid: Char, others: tuple[Char, ...]) -> tuple[Char, tuple[Char, ...]]:
     """Resuelve combate entre kid y guards adyacentes."""
     new_kid = kid
@@ -297,7 +329,7 @@ def _resolve_pickup(game: Game, kid: Char, state):  # type: ignore[no-untyped-de
 
         new_flags = replace(new_flags, sword_picked=True)
         new_state = new_state.with_potion_consumed(coord)  # marca como recogido
-        kid = replace(kid, sword=SwordStatus.DRAWN)
+        kid = replace(kid, sword=SwordStatus.DRAWN, has_sword=True)
 
     elif tile is Tile.POTION and coord not in new_state.consumed_potions:
         from pop2026canon.domain.combat import heal, heal_max

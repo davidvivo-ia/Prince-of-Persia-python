@@ -56,15 +56,15 @@ def draw(
 
     # Panel semi-transparente para los controles al pie
     controls = [
-        "← → ↑ ↓   Mover",
-        "SHIFT    Agarrar / Andar lento",
-        "SPACE    Atacar",
-        "ESC      Salir",
+        "IZQ / DER  Correr     ARRIBA  Saltar / Trepar     ABAJO  Agacharse / Envainar",
+        "SHIFT  Agarrar cornisa / En guardia   -   ARRIBA+SHIFT  Desenvainar",
+        "ESPACIO  Atacar   -   ARRIBA en guardia = Bloquear",
+        "P Pausa   -   TAB Tiempo restante   -   ESC Salir",
         "",
         "Pulsa ENTER para empezar",
     ]
     panel_h = 22 * len(controls) + 16
-    panel = pygame.Surface((w // 2, panel_h), pygame.SRCALPHA)
+    panel = pygame.Surface((w - 40, panel_h), pygame.SRCALPHA)
     pygame.draw.rect(panel, (*PALETTE.bg, 180), panel.get_rect(), border_radius=8)
     surf.blit(panel, panel.get_rect(center=(w // 2, h - panel_h // 2 - 12)))
 

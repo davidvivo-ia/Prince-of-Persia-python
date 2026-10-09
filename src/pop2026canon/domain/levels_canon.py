@@ -738,10 +738,7 @@ def _l5() -> Level:
     11 12 13  .  .  . 14 15 16 17 18 19 20
     """
     specs = [
-        _spec(
-            _floor_rows(),
-            guards=(G_S(col=5, row=1, direction=-1, skill=3),),
-        ),  # 1 spawn + drop al sub-loop
+        _spec(_floor_rows(extras={(6, 1): T})),  # 1 spawn + drop al sub-loop
         _spec(_floor_rows(extras={(3, 2): L, (4, 2): L, (5, 2): L})),  # triple loose
         _spec(
             _split_rows(upper_cols=(0, 1, 2, 3), lower_cols=(6, 7, 8, 9), extras={(7, 1): S}),
@@ -750,7 +747,10 @@ def _l5() -> Level:
         _spec(_floor_rows(extras={(5, 2): L})),
         _spec(_floor_rows(extras={(8, 1): P})),
         _spec(_floor_rows(extras={(3, 1): G})),  # 7 gate — drop al 14
-        _spec(_arena_rows(pillar_pair=(2, 7))),  # 8 arena
+        _spec(
+            _arena_rows(pillar_pair=(2, 7)),
+            guards=(G_S(col=5, row=1, direction=-1, skill=3),),
+        ),  # 8 arena — el guard del nivel vive aquí, no en el spawn
         _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 1): T})),
         _spec(
             _floor_rows(extras={(7, 1): DL, (8, 1): DR}),

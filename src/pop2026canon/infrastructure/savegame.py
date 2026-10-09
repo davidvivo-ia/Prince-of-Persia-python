@@ -10,7 +10,7 @@ from pop2026canon.domain.actions import SwordStatus
 from pop2026canon.domain.game import Game, GameFlags, GameStatus, TimeRemaining
 from pop2026canon.domain.levels_canon import load_canon
 
-SAVE_VERSION = 2
+SAVE_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,12 +37,16 @@ class SaveSlot:
     deaths: int = 0
     """Muertes acumuladas de la campaña (estadística de sesión)."""
 
+    has_sword: bool = False
+    """El kid posee la espada (se conserva entre niveles)."""
+
 
 def save_game(game: Game, *, deaths: int = 0) -> SaveSlot:
     """Construye un SaveSlot a partir del Game actual."""
     return SaveSlot(
         version=SAVE_VERSION,
         deaths=deaths,
+        has_sword=game.kid.has_sword,
         level=game.level.number,
         kid_room=game.kid.room,
         kid_col=game.kid.curr_col,
@@ -69,7 +73,8 @@ def load_save(slot: SaveSlot) -> Game:
     from pop2026canon.domain.game import new_game
 
     level = load_canon(slot.level)
-    game = new_game(level, starting_hp=slot.kid_hp_max)
+    has_sword = slot.has_sword or slot.kid_sword != int(SwordStatus.SHEATHED) or slot.level >= 2
+    game = new_game(level, starting_hp=slot.kid_hp_max, has_sword=has_sword)
     new_kid = _replace(
         game.kid,
         room=slot.kid_room,
@@ -79,6 +84,7 @@ def load_save(slot: SaveSlot) -> Game:
         hp_curr=slot.kid_hp_curr,
         hp_max=slot.kid_hp_max,
         sword=SwordStatus(slot.kid_sword),
+        has_sword=has_sword,
     )
     flags = GameFlags(
         sword_picked=slot.sword_picked,
@@ -107,10 +113,12 @@ def read_from_disk(path: Path) -> SaveSlot:
     """Carga un slot desde JSON. Lanza si la versión no es compatible."""
     data = json.loads(path.read_text(encoding="utf-8"))
     version = data.get("version")
-    if version == 1:
-        # v1 no tenía contador de muertes — migra sobre la marcha.
+    if version in (1, 2):
+        # v1 no tenía contador de muertes; v2 no tenía has_sword —
+        # migran sobre la marcha (has_sword se deduce en load_save).
         data["version"] = SAVE_VERSION
         data.setdefault("deaths", 0)
+        data.setdefault("has_sword", False)
     elif version != SAVE_VERSION:
         raise ValueError(f"save version {version} != {SAVE_VERSION}")
     return SaveSlot(**data)

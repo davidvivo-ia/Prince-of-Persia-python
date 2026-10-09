@@ -63,10 +63,17 @@ class TestStandTransitions:
         assert new_kid.curr_seq_id == int(Seq.STANDING_JUMP)
 
     def test_up_shift_draws_sword(self) -> None:
-        kid = _kid_standing()
+        kid = replace(_kid_standing(), has_sword=True)
         new_kid = apply_input(kid, Command(up=True, shift=True))
         assert new_kid.curr_seq_id == int(Seq.DRAW_SWORD)
         assert new_kid.sword == SwordStatus.DRAWN
+
+    def test_up_shift_without_sword_does_not_draw(self) -> None:
+        """Sin poseer la espada no se puede desenvainar (canon have_sword)."""
+        kid = _kid_standing()  # has_sword=False
+        new_kid = apply_input(kid, Command(up=True, shift=True))
+        assert new_kid.sword == SwordStatus.SHEATHED
+        assert new_kid.curr_seq_id != int(Seq.DRAW_SWORD)
 
     def test_down_crouches(self) -> None:
         kid = _kid_standing()

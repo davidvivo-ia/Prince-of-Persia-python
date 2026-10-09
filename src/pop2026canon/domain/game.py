@@ -117,8 +117,12 @@ class Game:
         return None
 
 
-def new_game(level: Level, *, starting_hp: int = START_HITP) -> Game:
-    """Construye un Game listo para jugar desde un Level."""
+def new_game(level: Level, *, starting_hp: int = START_HITP, has_sword: bool = False) -> Game:
+    """Construye un Game listo para jugar desde un Level.
+
+    ``has_sword``: el kid empieza con la espada (canon: desde L2 en
+    adelante la trae de L1; aparece envainada).
+    """
     from pop2026canon.domain.actions import Seq
 
     kid = Char(
@@ -130,6 +134,7 @@ def new_game(level: Level, *, starting_hp: int = START_HITP) -> Game:
         hp_curr=starting_hp,
         hp_max=starting_hp,
         curr_seq_id=int(Seq.STAND),
+        has_sword=has_sword,
     )
 
     # Instanciar guards de cada room

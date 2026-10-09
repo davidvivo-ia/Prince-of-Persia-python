@@ -81,6 +81,7 @@ select = [
 ]
 ignore = [
     "PLR0913",  # too many args (use cases pass many things)
+    "PLR0917",  # too many positional args (misma razón; regla nueva de ruff)
     "PLR2004",  # magic values: ubiquitous in games
     "PLR0911",  # too many returns (FSM patterns)
     "PLR0912",  # too many branches (FSM patterns)

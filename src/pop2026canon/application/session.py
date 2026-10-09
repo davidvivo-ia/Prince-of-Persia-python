@@ -36,17 +36,29 @@ class Session:
     hp_max: int = 3
     time: TimeRemaining = TimeRemaining()  # noqa: RUF009 — inmutable
     deaths: int = 0
+    has_sword: bool = False
+    """La espada se consigue en L1 y se conserva toda la campaña."""
     levels: tuple = CANON_LEVELS  # type: ignore[type-arg]
+
+    @property
+    def kid_has_sword(self) -> bool:
+        """Canon: a partir de L2 el kid siempre lleva la espada."""
+        return self.has_sword or self.level_number >= 2
 
     def start_game(self) -> Game:
         """Construye el ``Game`` del nivel actual con el estado heredado."""
         level = self.levels[self.level_number - 1]
-        game = new_game(level, starting_hp=self.hp_max)
+        game = new_game(level, starting_hp=self.hp_max, has_sword=self.kid_has_sword)
         return replace(game, time=self.time)
 
     def after_tick(self, game: Game) -> Session:
-        """Sincroniza el estado persistente tras cada tick (reloj, hp_max)."""
-        return replace(self, time=game.time, hp_max=max(self.hp_max, game.kid.hp_max))
+        """Sincroniza el estado persistente tras cada tick (reloj, hp_max, espada)."""
+        return replace(
+            self,
+            time=game.time,
+            hp_max=max(self.hp_max, game.kid.hp_max),
+            has_sword=self.has_sword or game.kid.has_sword,
+        )
 
     def on_level_won(self, game: Game) -> Session:
         """El kid cruzó la exit door: avanza al siguiente nivel."""
@@ -55,15 +67,18 @@ class Session:
             level_number=min(FINAL_LEVEL, self.level_number + 1),
             hp_max=max(self.hp_max, game.kid.hp_max),
             time=game.time,
+            has_sword=self.has_sword or game.kid.has_sword,
         )
 
     def on_death(self, game: Game) -> Session:
-        """El kid murió: mismo nivel, reloj donde estaba (canon)."""
+        """El kid murió: mismo nivel, reloj donde estaba (canon). La
+        espada conseguida no se pierde."""
         return replace(
             self,
             hp_max=max(self.hp_max, game.kid.hp_max),
             time=game.time,
             deaths=self.deaths + 1,
+            has_sword=self.has_sword or game.kid.has_sword,
         )
 
     @property

@@ -6,6 +6,34 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.12.0] — 2026-10-09
+
+### Jugabilidad humana verificada: espada persistente, guards que bloquean
+
+Revisión adversarial desde el punto de vista de una PERSONA con teclado
+(hasta ahora toda la verificación era con un bot sin guards ni
+chompers). Hallazgos y arreglos:
+
+- **La espada no persistía entre niveles**: del L2 en adelante el kid
+  afrontaba a los guards desarmado. Ahora `Char.has_sword` (canon
+  `have_sword`) viaja en `Session` y en el save; a partir de L2 el kid
+  siempre la lleva (envainada, ARRIBA+SHIFT la desenvaina).
+- **Cualquier kid podía "desenvainar"** una espada que no tenía
+  (ARRIBA+SHIFT sin haberla cogido). Ahora exige `has_sword`.
+- **Los guards no bloqueaban el paso**: se les atravesaba corriendo y el
+  combate era opcional. Ahora un guard vivo bloquea la aproximación
+  horizontal (canon) — hay que luchar. Las caídas desde arriba no se
+  congelan sobre un guard.
+- **L5**: un guard de skill 3 (bloquea el 78 % de los golpes) a 4 celdas
+  del spawn mataba al jugador antes de poder reaccionar. Trasladado a
+  la arena (sala 8).
+- **Test de jugabilidad humana** (`test_playability_human.py`): bot A*
+  con guards reales, chompers, 3 HP y macro de lucha — los 13 niveles
+  jugables se completan en estas condiciones (~45 s de suite).
+- Título: controles reales del juego (saltar, trepar, bloquear, pausa,
+  tiempo), sin glifos que la fuente no renderiza.
+- Save v3 (migración automática desde v1/v2). Suite en 804 verdes.
+
 ## [canon-0.11.0] — 2026-07-16
 
 ### Pulido "juego 2026": 60 fps suaves, continuar partida, juice

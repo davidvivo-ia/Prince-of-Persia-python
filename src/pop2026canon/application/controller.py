@@ -105,8 +105,8 @@ def _handle_stand(char: Char, cmd: Command) -> Char:
     if char.curr_seq_id == int(Seq.ENGARDE):
         return _handle_engarde(char, cmd)
 
-    # Up + SHIFT (sin sword): desenfundar espada
-    if cmd.up and cmd.shift and char.sword == SwordStatus.SHEATHED:
+    # Up + SHIFT con espada envainada: desenfundar (sólo si la posee)
+    if cmd.up and cmd.shift and char.sword == SwordStatus.SHEATHED and char.has_sword:
         return _start(replace(char, sword=SwordStatus.DRAWN), Seq.DRAW_SWORD)
 
     # Con sword DRAWN: SHIFT entra en stance ENGARDE.

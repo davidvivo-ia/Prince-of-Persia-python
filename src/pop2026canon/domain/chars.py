@@ -73,6 +73,12 @@ class Char:
     hp_max: int = 3
 
     sword: SwordStatus = SwordStatus.SHEATHED
+    """Estado de la espada (envainada / empuñada)."""
+
+    has_sword: bool = False
+    """``True`` si el char POSEE espada (canon `have_sword`). El kid la
+    consigue en L1 y la conserva el resto de la campaña; sin ella no
+    puede desenvainar ni hacer daño."""
 
     alive: int = -1
     """-1 vivo, 0 acaba de morir, +N frames muerto."""
