@@ -77,10 +77,19 @@ def advance(game: Game, cmd: Command) -> Game:
         for c in game.others
     )
 
+    # 2'''. Contador de muerte: un char muerto (alive >= 0) suma un frame
+    #       por tick; a los 30 el juego lo registra (LOST_DIED). Sin esto,
+    #       morir a espada o por caída dejaba la partida en PLAYING con un
+    #       kid congelado a 0 HP.
+    if new_kid.alive >= 0:
+        new_kid = replace(new_kid, alive=new_kid.alive + 1)
+    new_others = tuple(replace(c, alive=c.alive + 1) if c.alive >= 0 else c for c in new_others)
+
     # 2''. Los guards vivos bloquean el paso (canon: no se les atraviesa;
     #      hay que luchar). Sólo en aproximación horizontal — una caída
-    #      desde arriba no se congela en el aire.
-    new_kid = _block_kid_by_guards(game.kid, new_kid, new_others)
+    #      desde arriba no se congela en el aire — y nunca empujando al
+    #      kid de vuelta a un chomper (trampa mortal, no combate).
+    new_kid = _block_kid_by_guards(game.kid, new_kid, new_others, game.level)
 
     # 7. Avanzar trampas de la sala actual
     new_state = _tick_traps(game, new_kid)
@@ -242,12 +251,24 @@ def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
     return pressed
 
 
-def _block_kid_by_guards(prev_kid: Char, kid: Char, others: tuple[Char, ...]) -> Char:
+def _block_kid_by_guards(prev_kid: Char, kid: Char, others: tuple[Char, ...], level) -> Char:  # type: ignore[no-untyped-def]
     """Si el kid acabó en la celda de un guard vivo viniendo por su misma
     fila, revierte su posición a la del tick anterior (conserva la
-    secuencia/acción: el choque se resuelve en combate)."""
+    secuencia/acción: el choque se resuelve en combate).
+
+    Excepción: si la celda previa es un chomper, no se revierte — el
+    guard no puede usarse como pared para empujar al kid a las
+    cuchillas; comparten celda y el combate decide."""
     if kid.alive >= 0:
         return kid
+    if (
+        1 <= prev_kid.room <= len(level.rooms)
+        and 0 <= prev_kid.curr_col < 10
+        and 0 <= prev_kid.curr_row < 3
+    ):
+        prev_tile, _ = level.room(prev_kid.room).tile_at(prev_kid.curr_col, prev_kid.curr_row)
+        if prev_tile is Tile.CHOMPER:
+            return kid
     for other in others:
         if other.charid is not CharId.GUARD or other.alive >= 0:
             continue

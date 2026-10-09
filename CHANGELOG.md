@@ -6,6 +6,68 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.13.0] — 2026-10-09
+
+### Jugado de verdad: L1, L2, L10 por el loop real con teclas inyectadas
+
+Un arnés (`scratchpad/play_real.py`) resuelve el nivel en modo humano,
+reproduce la secuencia de teclas por el loop REAL del CLI (title → card
+→ playing, autosave, audio) y captura pantallazos. Mirándolos aparecieron
+fallos que ningún test veía:
+
+- **El kid caminaba por dentro del techo**: al subir por un hueco del
+  carver y moverse en horizontal dentro de una celda de suelo, el
+  aterrizaje lo dejaba "de pie" en row 0 y recorría el nivel embebido en
+  la losa superior, saltándose chompers, guards y gates. Fix: aterrizar
+  exige entrar en el sólido DESDE ARRIBA, y en el aire no se entra de
+  lado en suelo estructural (losa, muro, loose); los dinteles con suelo
+  (DOORTOP_WITH_FLOOR) y los items-suelo siguen siendo atravesables.
+- **Sprite fuera de la ventana** en los bordes de sala: el mapeo de `x`
+  sub-tile sumaba el centro de celda Y el offset. Ahora recorre el ancho
+  útil de la celda (15 %–85 %).
+- **Gate dibujada al revés**: los barrotes "salían del suelo" al abrir.
+  Ahora cuelgan del dintel y suben, con travesaños.
+- **Exit door** era una barra morada: ahora arco de piedra de dos celdas
+  con hueco oscuro y escalones.
+- **Antorcha**: `BLEND_ADD` ignora el alpha y pintaba un sol. Rediseño
+  (soporte, mango, llama con núcleo) y halo por intensidad RGB.
+- Sprite del kid definido desde el primer frame (frame 15).
+
+Y cerrando el exploit del techo afloraron bloqueos reales de nivel:
+
+- **L6 sala 8 / L3**: gates con la plate al otro lado (legado); plate
+  movida al lado de aproximación.
+- **L13 sala 3**: pit de 3 celdas flanqueado por spikes en ambos bordes —
+  el único salto aterrizaba en los pinchos. Spikes a una celda del borde.
+- **Chompers desfasados**: todos los de una sala arrancaban en fase 0 en
+  sincronía — dos chompers a 3 celdas eran un muro. Ahora cada uno lleva
+  su desfase (canon), es un puzzle de ritmo.
+- **Guards intocables**: bloqueaban incluso en su refractario tras
+  atacar; un skill 7 (98 % de bloqueo) era invencible. Ahora, como en el
+  canon, la ventana para herirles es justo después de su golpe.
+- **Morir no terminaba la partida**: nada incrementaba el contador
+  `alive` tras una muerte a espada o por caída, así que el juego se
+  quedaba en PLAYING con el kid congelado a 0 HP (sólo las trampas
+  cerraban la partida). Ahora todo char muerto cuenta frames y a los 30
+  se registra LOST_DIED. Tests de regresión para espada y caída.
+- **L1 sala 10**: chomper al entrar y guard al fondo — dos retos
+  separados en el primer nivel, no encadenados.
+- **Guards + chompers**: con bloqueo corporal, un guard plantado al otro
+  lado de un chomper obligaba a cruzar las cuchillas bajo su espada y
+  rebotar en ellas (L1 sala 10). Ahora el guard no se coloca pegado a un
+  chomper y nunca empuja al kid de vuelta a uno.
+- **Replays dorados** (`tests/canon/replays/L<n>.txt`): el bot humano
+  resuelve cada nivel una vez y guarda la secuencia de teclas; el test
+  la reproduce con el motor real (guards, chompers, HP de campaña) en
+  segundos, como los replays de SDLPoP. `POP_REGEN_REPLAYS=1` vuelve a
+  resolver con el A*. Un replay que no se puede regenerar = el nivel
+  dejó de ser completable por un humano.
+- Bot humano: macro de parada+contraataque, carreras largas, clave de
+  estado con micro-estado de combate, cuota de presupuesto por sala y
+  HP medio de campaña (3 + nivel/2, tope 10).
+- **L1 sala 9**: gate movida a col 6, fuera de la vertical del pit de la
+  sala 3 (caer encima de una reja dejaba al kid de pie en el techo).
+
 ## [canon-0.12.0] — 2026-10-09
 
 ### Jugabilidad humana verificada: espada persistente, guards que bloquean

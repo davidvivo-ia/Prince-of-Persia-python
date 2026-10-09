@@ -48,18 +48,28 @@ class TestGuardAttacksKid:
                 direction=0,
             ),
         )
-        for _ in range(60):
+        # Skill 0 canon: strikeprob 61/255 por tick + refractario 16 —
+        # un kid pasivo (3 HP) cae en ~15 s, no en 5.
+        for _ in range(400):
             g = advance(g, Command())
             if g.status is GameStatus.LOST_DIED:
                 break
         assert g.status is GameStatus.LOST_DIED, (
-            f"Guard no mató al kid en 60 ticks (kid hp={g.kid.hp_curr})"
+            f"Guard no mató al kid en 400 ticks (kid hp={g.kid.hp_curr})"
         )
 
     def test_guard_advances_toward_kid(self) -> None:
-        """Un guard distante avanza hacia el kid en pocos ticks."""
+        """Un guard distante avanza hacia el kid en pocos ticks.
+
+        Se usa un guard en sala SIN chomper: los guards no se plantan
+        pegados a las cuchillas (regla canon de no-trampa-mortal)."""
         g = new_game(LEVEL_1)
-        guard = next(c for c in g.others if c.charid is CharId.GUARD)
+        guard = next(
+            c
+            for c in g.others
+            if c.charid is CharId.GUARD
+            and not any((b & 0x1F) == int(Tile.CHOMPER) for b in g.level.room(c.room).fg)
+        )
         g = replace(
             g,
             kid=replace(g.kid, room=guard.room, curr_col=1, curr_row=guard.curr_row),
@@ -67,7 +77,7 @@ class TestGuardAttacksKid:
         initial_col = guard.curr_col
         for _ in range(40):
             g = advance(g, Command())
-        new_guard = next(c for c in g.others if c.charid is CharId.GUARD)
+        new_guard = next(c for c in g.others if c.charid is CharId.GUARD and c.room == guard.room)
         # El guard se acercó (movido al menos 1 col hacia el kid en col 1)
         assert new_guard.curr_col < initial_col, (
             f"Guard no avanzó: pasó de col {initial_col} a {new_guard.curr_col}"
@@ -237,3 +247,38 @@ class TestMouseOpensGate:
         # Una gate de la sala debe estar abierta
         opened_in_room = [c for c in g.state.open_gates if c[0] == ev.room]
         assert opened_in_room, f"Mouse no abrió ninguna gate en sala {ev.room}"
+
+
+class TestDeathEndsTheGame:
+    """Cualquier muerte (espada, caída) termina la partida en ≤ 30 ticks.
+
+    Regresión: nada incrementaba ``alive`` tras la muerte y el juego se
+    quedaba en PLAYING con un kid congelado a 0 HP."""
+
+    def test_stabbed_kid_ends_in_lost_died(self) -> None:
+        from pop2026canon.domain.combat import take_hp
+
+        g = new_game(LEVEL_1)
+        dead_kid = take_hp(replace(g.kid, hp_curr=1), 1).char
+        assert dead_kid.alive >= 0
+        g = replace(g, kid=dead_kid)
+        for _ in range(40):
+            g = advance(g, Command())
+            if g.status is GameStatus.LOST_DIED:
+                break
+        assert g.status is GameStatus.LOST_DIED
+
+    def test_fall_death_ends_in_lost_died(self) -> None:
+        from pop2026canon.domain.actions import Action
+
+        g = new_game(LEVEL_1)
+        # Sala 15 de L1: pit al abismo (cols 4-6, sin sala al sur)
+        g = replace(
+            g,
+            kid=replace(g.kid, room=15, curr_col=5, curr_row=1, action=Action.STAND),
+        )
+        for _ in range(120):
+            g = advance(g, Command())
+            if g.status is GameStatus.LOST_DIED:
+                break
+        assert g.status is GameStatus.LOST_DIED

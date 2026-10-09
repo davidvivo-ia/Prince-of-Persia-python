@@ -122,9 +122,15 @@ def _draw_room_tiles(surf: pygame.Surface, game: Game) -> None:
 
 def _char_px(char: Char) -> tuple[int, int]:
     """Convierte la posición tile-based del char a píxeles (pies)."""
-    # x sub-tile en [0, TILE_SIZE_X), col en [0, room_cols)
-    px_x = char.curr_col * LAYOUT.tile_w + (char.x * LAYOUT.tile_w) // TILE_SIZE_X
-    px_x += LAYOUT.tile_w // 2  # centra en la celda
+    # x sub-tile en [0, TILE_SIZE_X) recorre el ANCHO ÚTIL de la celda
+    # (del 15 % al 85 %): el sprite nunca se sale de su celda ni de la
+    # ventana en los bordes de la sala.
+    inner = LAYOUT.tile_w * 7 // 10
+    px_x = (
+        char.curr_col * LAYOUT.tile_w
+        + LAYOUT.tile_w * 3 // 20
+        + (char.x * inner) // (TILE_SIZE_X - 1)
+    )
     px_y = (
         LAYOUT.hud_top
         + (char.curr_row + 1) * LAYOUT.tile_h
@@ -242,11 +248,14 @@ def _draw_torch_flicker(surf: pygame.Surface, game: Game) -> None:
             if piece not in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
                 continue
             phase = (t // 70 + _room_hash(game.kid.room, c, r)) % 5
-            radius = 12 + phase * 2
+            radius = 18 + phase * 3
             cx = c * LAYOUT.tile_w + LAYOUT.tile_w // 2
-            cy = LAYOUT.hud_top + r * LAYOUT.tile_h + 12
-            halo = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(halo, (*PALETTE.warning, 22 + phase * 4), (radius, radius), radius)
+            cy = LAYOUT.hud_top + r * LAYOUT.tile_h + LAYOUT.tile_h // 2 - 18
+            # BLEND_ADD ignora el alpha: el parpadeo va en la intensidad RGB.
+            halo = pygame.Surface((radius * 2, radius * 2))
+            halo.fill((0, 0, 0))
+            glow = 6 + phase * 3
+            pygame.draw.circle(halo, (glow * 2, glow, glow // 3), (radius, radius), radius)
             surf.blit(halo, (cx - radius, cy - radius), special_flags=pygame.BLEND_ADD)
 
 

@@ -481,11 +481,15 @@ def _l1() -> Level:
         _spec(
             _platform_rows(platform_cols=(2, 3), extras={(2, 1): SW, (5, 1): T, (7, 1): P}),
         ),  # 8 SWORD + plate que abre la gate de 9
-        _spec(_floor_rows(extras={(5, 1): G})),  # 9 gate
+        # Gate en col 6: fuera de la vertical del pit de la sala 3 (cols
+        # 4-5), para que la caída aterrice en suelo y no encima de la reja.
+        _spec(_floor_rows(extras={(6, 1): G})),  # 9 gate
         _spec(
-            _floor_rows(extras={(4, 1): C}),
-            guards=(G_S(col=6, row=1, direction=-1, skill=0),),
-        ),  # 10 guard + chomper
+            # Canon: el L1 no tiene chompers (aparecen en L2). El primer
+            # duelo del juego se libra en sala limpia.
+            _floor_rows(extras={(2, 1): T}),
+            guards=(G_S(col=7, row=1, direction=-1, skill=0),),
+        ),  # 10 primer guard
         _spec(
             _pillar_rows(pillar_cols=(4,), extras={(2, 1): P, (7, 1): G}),
         ),  # 11 plate propia + gate
@@ -503,11 +507,11 @@ def _l1() -> Level:
     ]
     doorlinks = (
         # plate sala 8 col 7 (junto a la sword) → gate sala 9 col 5
-        DoorLink(plate_room=8, plate_col=7, plate_row=1, gate_room=9, gate_col=5, gate_row=1),
+        DoorLink(plate_room=8, plate_col=7, plate_row=1, gate_room=9, gate_col=6, gate_row=1),
         # plate sala 11 col 2 → gate sala 11 col 7 (misma sala)
         DoorLink(plate_room=11, plate_col=2, plate_row=1, gate_room=11, gate_col=7, gate_row=1),
         # plate sala 12 col 5 → gate sala 9 col 5 (reapertura desde el este)
-        DoorLink(plate_room=12, plate_col=5, plate_row=1, gate_room=9, gate_col=5, gate_row=1),
+        DoorLink(plate_room=12, plate_col=5, plate_row=1, gate_room=9, gate_col=6, gate_row=1),
         # plate sala 13 col 3 → gate sala 11 col 7
         DoorLink(plate_room=13, plate_col=3, plate_row=1, gate_room=11, gate_col=7, gate_row=1),
         # plate sala 17 col 2 → gate sala 11 col 7 (segunda activación)
@@ -816,7 +820,7 @@ def _l6() -> Level:
         _spec(_arena_rows(pillar_pair=(3, 7))),  # 5 arena combat
         _spec(_platform_rows(platform_cols=(4, 5, 6), extras={(5, 2): L})),  # 6 drop al 11
         _spec(_lattice_rows(lattice_cols=(3, 5, 7))),
-        _spec(_floor_rows(extras={(5, 1): G, (8, 1): P})),  # 8 gate + plate local
+        _spec(_floor_rows(extras={(2, 1): P, (5, 1): G})),  # 8 plate (lado oeste) + gate
         _spec(
             _split_rows(upper_cols=(0, 1, 2), lower_cols=(5, 6, 7, 8, 9), extras={(3, 1): C}),
         ),
@@ -837,7 +841,7 @@ def _l6() -> Level:
     doorlinks = (
         DoorLink(plate_room=2, plate_col=1, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
         DoorLink(plate_room=3, plate_col=7, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
-        DoorLink(plate_room=8, plate_col=8, plate_row=1, gate_room=8, gate_col=5, gate_row=1),
+        DoorLink(plate_room=8, plate_col=2, plate_row=1, gate_room=8, gate_col=5, gate_row=1),
         DoorLink(plate_room=15, plate_col=5, plate_row=1, gate_room=2, gate_col=3, gate_row=1),
     )
     events = (Event(EventKind.SHADOW_STEP, room=1, extra=43),)
@@ -1271,7 +1275,10 @@ def _l13() -> Level:
     specs = [
         _spec(_floor_rows(extras={(3, 1): C, (5, 1): C, (7, 1): C})),
         _spec(_floor_rows(extras={(2, 1): S, (4, 1): S, (5, 2): L, (6, 1): S, (8, 1): S})),
-        _spec(_floor_rows(pit_cols=(4, 5, 6), extras={(3, 1): S, (7, 1): S})),
+        # Pit de 3 con spikes a UNA celda de cada borde: el despegue (col 3)
+        # y el aterrizaje (col 7) quedan limpios; los spikes castigan al que
+        # se queda corto o se pasa.
+        _spec(_floor_rows(pit_cols=(4, 5, 6), extras={(2, 1): S, (8, 1): S})),
         _spec(_lattice_rows(lattice_cols=(3, 6))),
         _spec(_platform_rows(platform_cols=(3, 4, 5, 6), pit_cols=(4, 5))),  # 5 plataforma
         _spec(_floor_rows(extras={(5, 1): C})),

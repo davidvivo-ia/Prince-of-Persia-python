@@ -76,8 +76,13 @@ def _step_one_guard(guard: Char, game: Game, seed: int) -> Char:
     if abs(dx) == 1:
         # Adyacente: gira hacia el kid; si mira hacia él, ataca según skill.
         guard = _face_kid(guard, dx)
-        # Bloquea si el kid está atacando (blockprob canon).
-        if kid.curr_seq_id == int(Seq.STRIKE) and rng.random() < skill.prob_block:
+        # Bloquea si el kid está atacando (blockprob canon) — salvo en su
+        # refractario tras atacar: esa es la ventana canon para herirle.
+        if (
+            kid.curr_seq_id == int(Seq.STRIKE)
+            and guard.repeat == 0
+            and rng.random() < skill.prob_block
+        ):
             return _start_block(guard)
         # Ataca según strikeprob canon; garantizamos un mínimo para que
         # los guards de skill bajo sigan siendo una amenaza jugable.
@@ -106,6 +111,7 @@ def _step_toward(guard: Char, dx: int, game: Game) -> Char:
     se quedan al borde mirando al kid.
     """
     from pop2026canon.domain.physics import floor_below_solid, is_solid_at
+    from pop2026canon.domain.tiles import Tile
 
     step = 1 if dx > 0 else -1
     new_col = max(0, min(9, guard.curr_col + step))
@@ -116,6 +122,12 @@ def _step_toward(guard: Char, dx: int, game: Game) -> Char:
             return replace(guard, direction=new_dir)
         if not floor_below_solid(game.level, guard.room, new_col, guard.curr_row):
             return replace(guard, direction=new_dir)
+        # Respeta las cuchillas: ni pisa un chomper ni se planta pegado a
+        # él por el lado del kid — si no, el kid tendría que cruzar las
+        # cuchillas bajo su espada (trampa mortal, no combate).
+        for probe in (new_col, new_col + step):
+            if 0 <= probe < 10 and room.tile_at(probe, guard.curr_row)[0] is Tile.CHOMPER:
+                return replace(guard, direction=new_dir)
     return replace(guard, curr_col=new_col, direction=new_dir)
 
 

@@ -481,6 +481,26 @@ _GROUNDED_SEQS: frozenset[int] = frozenset(
 _CLIMB_ACTIONS: frozenset[Action] = frozenset({Action.HANG_STRAIGHT, Action.HANG_CLIMB})
 
 
+_STRUCTURAL_FLOOR: frozenset[Tile] = frozenset(
+    {Tile.FLOOR, Tile.WALL, Tile.DEBRIS, Tile.LOOSE, Tile.STUCK}
+)
+
+
+def _is_structural_floor(
+    room: Room, col: int, row: int, broken_floors: frozenset[tuple[int, int, int]]
+) -> bool:
+    """Suelo "de obra" (losa, muro): un cuerpo en el aire no puede entrar
+    en él de lado. Los items-suelo (antorcha, poción…) y el dintel con
+    suelo (DOORTOP_WITH_FLOOR, canon: se pasa por debajo) sí son
+    atravesables en vuelo."""
+    if not (0 <= col < SCREEN_TILECOUNT_X and 0 <= row < SCREEN_TILECOUNT_Y):
+        return False
+    tile, _ = room.tile_at(col, row)
+    if tile is Tile.LOOSE and (room.id, col, row) in broken_floors:
+        return False
+    return tile in _STRUCTURAL_FLOOR
+
+
 def floor_below_solid(
     level: Level,
     room_id: int,
@@ -655,19 +675,33 @@ def step_physics(
             frame=char.frame,
         )
 
-    # 7. Aterrizaje: cayendo y ENTRÓ este tick en un tile sólido →
-    #    aterriza encima. La condición de entrada evita falsos
-    #    aterrizajes cuando la caída empieza DENTRO de una celda-soporte
-    #    (p.ej. walk-off dentro de una plataforma o del hueco del techo).
+    # 6b. En el aire, entrar LATERALMENTE en suelo estructural (la losa
+    #     del piso de arriba, un muro...) está prohibido: se revierte la
+    #     componente horizontal. Sin esto, un salto que sube por un hueco
+    #     del techo podía seguir en horizontal por DENTRO de la losa.
+    if (
+        in_air
+        and char.alive < 0
+        and in_cell
+        and char.room == snapshot.room
+        and char.curr_col != snapshot.curr_col
+        and _is_structural_floor(room, char.curr_col, char.curr_row, broken_floors)
+    ):
+        char = replace(char, curr_col=snapshot.curr_col, x=snapshot.x, fall_x=0)
+
+    # 7. Aterrizaje: cayendo y ENTRÓ este tick DESDE ARRIBA en un tile
+    #    sólido → aterriza encima. Exigir entrada vertical evita falsos
+    #    aterrizajes cuando la caída empieza dentro de una celda-soporte
+    #    (walk-off dentro de una plataforma) o cuando se entra de lado.
     if char.action is Action.IN_FREEFALL and char.alive < 0:
-        entered_new_cell = (
+        came_from_above = (char.room == snapshot.room and char.curr_row > snapshot.curr_row) or (
             char.room != snapshot.room
-            or char.curr_row != snapshot.curr_row
-            or char.curr_col != snapshot.curr_col
+            and 1 <= snapshot.room <= len(level.rooms)
+            and level.room(snapshot.room).link_s == char.room
         )
         if (
             in_cell
-            and entered_new_cell
+            and came_from_above
             and is_solid_at(room, char.curr_col, char.curr_row, broken_floors)
         ):
             if char.curr_row == 0 and room.link_n:

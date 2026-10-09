@@ -101,9 +101,10 @@ def draw_gate(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
     pygame.draw.rect(surf, PALETTE.brick_dark, (x, y, 4, th))
     pygame.draw.rect(surf, PALETTE.brick_dark, (x + tw - 4, y, 4, th))
     pygame.draw.rect(surf, PALETTE.brick_dark, (x, y, tw, 6))
-    # Barrotes — bajan según open_amount (0 = totalmente bajado, 7 = arriba)
-    bars_top = y + (open_amount * th * 3) // 28
-    bars_bot = y + th - 4
+    # Rastrillo: cuelga del dintel y SUBE al abrirse (0 = bajado del todo
+    # hasta el suelo, 7 = recogido arriba, sólo asoman las puntas).
+    bars_top = y + 6
+    bars_bot = y + th - 4 - (open_amount * (th - 40)) // 7
     n = 5
     for i in range(n):
         bx = x + 5 + (tw - 10) * (i + 1) // (n + 1)
@@ -112,6 +113,10 @@ def draw_gate(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
         pygame.draw.polygon(
             surf, PALETTE.warning, [(bx - 2, bars_bot - 3), (bx, bars_bot), (bx + 2, bars_bot - 3)]
         )
+    # Travesaños horizontales (siguen a los barrotes)
+    for frac in (0.3, 0.65):
+        hy = bars_top + int((bars_bot - bars_top) * frac)
+        pygame.draw.line(surf, PALETTE.brick_dark, (x + 5, hy), (x + tw - 5, hy), 2)
 
 
 def draw_stuck(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
@@ -224,18 +229,41 @@ def draw_opener(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None
     pygame.draw.line(surf, PALETTE.accent, (x + tw // 3, top - 2), (x + tw * 2 // 3, top - 2), 1)
 
 
+def _draw_level_door_half(surf: pygame.Surface, x: int, y: int, *, left: bool) -> None:
+    """Media puerta de salida: arco de piedra de dos celdas de ancho con
+    hueco oscuro y escalones que suben hacia el interior."""
+    tw, th = LAYOUT.tile_w, LAYOUT.tile_h
+    stone = _mix(PALETTE.brick_dark, PALETTE.primary, 0.25)
+    dark = (10, 8, 16)
+    # Jamba exterior
+    jamb_x = x if left else x + tw - 10
+    pygame.draw.rect(surf, stone, (jamb_x, y + 16, 10, th - 16))
+    # Hueco de la puerta (interior oscuro)
+    inner_x = x + 10 if left else x
+    pygame.draw.rect(surf, dark, (inner_x, y + 26, tw - 10, th - 26))
+    # Dintel / arco (media bóveda por lado)
+    arc_rect = pygame.Rect(x if left else x - tw, y + 8, tw * 2, 44)
+    clip = surf.get_clip()
+    surf.set_clip(pygame.Rect(x, y, tw, th))
+    pygame.draw.ellipse(surf, stone, arc_rect)
+    pygame.draw.ellipse(surf, dark, arc_rect.inflate(-20, -16))
+    surf.set_clip(clip)
+    # Escalones que suben hacia dentro (3 peldaños)
+    for i in range(3):
+        step_y = y + th - 8 - i * 10
+        step_w = (tw - 12) - i * 8
+        sx = x + 10 + (i * 4 if left else 2)
+        pygame.draw.rect(surf, _mix(stone, PALETTE.primary, 0.3), (sx, step_y, step_w, 4))
+
+
 def draw_level_door_left(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
     """Mitad izquierda del exit door."""
-    tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    pygame.draw.rect(surf, PALETTE.brick_dark, (x + tw - 8, y, 8, th - 4))
-    pygame.draw.rect(surf, PALETTE.accent, (x + tw - 4, y + 4, 4, th - 12))
+    _draw_level_door_half(surf, x, y, left=True)
 
 
 def draw_level_door_right(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
     """Mitad derecha."""
-    _tw, th = LAYOUT.tile_w, LAYOUT.tile_h
-    pygame.draw.rect(surf, PALETTE.brick_dark, (x, y, 8, th - 4))
-    pygame.draw.rect(surf, PALETTE.accent, (x, y + 4, 4, th - 12))
+    _draw_level_door_half(surf, x, y, left=False)
 
 
 def draw_chomper(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
@@ -267,17 +295,31 @@ def draw_chomper(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> Non
 
 
 def draw_torch(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
-    """Antorcha en pared con llama."""
-    tw, _th = LAYOUT.tile_w, LAYOUT.tile_h
+    """Antorcha de pared: soporte de hierro, mango y llama a media altura
+    de la celda (altura de los ojos del kid), como en el original."""
+    tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     cx = x + tw // 2
-    cy = y + 12
-    pygame.draw.rect(surf, PALETTE.brick_dark, (cx - 2, cy + 4, 4, 8))
-    pygame.draw.polygon(surf, PALETTE.warning, [(cx - 4, cy + 4), (cx, cy - 8), (cx + 4, cy + 4)])
-    pygame.draw.polygon(surf, PALETTE.error, [(cx - 2, cy + 2), (cx, cy - 5), (cx + 2, cy + 2)])
-    # Halo
-    halo = pygame.Surface((24, 24), pygame.SRCALPHA)
-    pygame.draw.circle(halo, (*PALETTE.warning, 40), (12, 12), 10)
-    surf.blit(halo, (cx - 12, cy - 8), special_flags=pygame.BLEND_ADD)
+    cy = y + th // 2 - 10  # base de la llama
+    # Soporte en la pared (anillo + brazo)
+    pygame.draw.rect(surf, PALETTE.brick_dark, (cx - 7, cy + 14, 14, 4))
+    pygame.draw.rect(surf, PALETTE.brick_dark, (cx - 2, cy + 6, 4, 12))
+    # Mango de madera
+    pygame.draw.rect(surf, (96, 58, 28), (cx - 3, cy + 2, 6, 14))
+    # Llama: exterior naranja, interior rojo, núcleo claro
+    pygame.draw.polygon(
+        surf,
+        PALETTE.warning,
+        [(cx - 8, cy + 4), (cx - 3, cy - 14), (cx, cy - 22), (cx + 3, cy - 14), (cx + 8, cy + 4)],
+    )
+    pygame.draw.polygon(surf, PALETTE.error, [(cx - 4, cy + 3), (cx, cy - 12), (cx + 4, cy + 3)])
+    pygame.draw.polygon(surf, (255, 240, 180), [(cx - 2, cy + 2), (cx, cy - 5), (cx + 2, cy + 2)])
+    # Halo cálido suave. BLEND_ADD ignora el alpha: la intensidad va en
+    # el propio color (RGB bajo), si no sale un disco sólido.
+    halo = pygame.Surface((56, 56))
+    halo.fill((0, 0, 0))
+    pygame.draw.circle(halo, (26, 16, 4), (28, 28), 28)
+    pygame.draw.circle(halo, (40, 24, 6), (28, 28), 14)
+    surf.blit(halo, (cx - 28, cy - 32), special_flags=pygame.BLEND_ADD)
 
 
 def draw_wall(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
