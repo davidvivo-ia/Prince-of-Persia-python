@@ -32,6 +32,7 @@ from pop2026canon.domain.level import Level
 from pop2026canon.domain.physics import Terrain, step_physics
 from pop2026canon.domain.tiles import Tile
 from pop2026canon.domain.traps import (
+    LevelState,
     chomper_is_lethal,
     spike_kills_on_land,
     tick_chomper,
@@ -119,8 +120,10 @@ def advance(game: Game, cmd: Command) -> Game:
     if status_override is None:
         status_override = _check_princess_reunion(new_kid, new_others)
 
-    # 10. Trampas letales (chomper closed, spike landing)
+    # 10. Trampas letales (chomper closed, spike landing, gate que cierra)
     new_kid, killed_by_trap = _resolve_lethal_traps(game, new_kid, new_state)
+    new_kid, crushed = _resolve_gate_crush(game, new_kid, new_state)
+    killed_by_trap = killed_by_trap or crushed
 
     # 11. Decremento tiempo + comprobación timeout
     new_time = _tick_time(game.time)
@@ -220,6 +223,32 @@ def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
         new_state = tick_gate(new_state, gate_coord)
 
     return new_state
+
+
+def _resolve_gate_crush(game: Game, kid: Char, state: LevelState) -> tuple[Char, bool]:
+    """Canon: una gate que baja sobre el kid lo aplasta. Si el kid está
+    EN la celda de una gate que ha dejado de ser franqueable, muere."""
+    if kid.alive >= 0 or not (1 <= kid.room <= len(game.level.rooms)):
+        return kid, False
+    if not (0 <= kid.curr_col < 10 and 0 <= kid.curr_row < 3):
+        return kid, False
+    coord = (kid.room, kid.curr_col, kid.curr_row)
+    tile, modifier = game.level.room(kid.room).tile_at(kid.curr_col, kid.curr_row)
+    if tile is not Tile.GATE or modifier >= 7 or coord in state.open_gates:
+        return kid, False
+    return (
+        replace(
+            kid,
+            hp_curr=0,
+            alive=0,
+            action=Action.HURT,
+            curr_seq_id=int(Seq.CRUSHED),
+            curr_seq_idx=0,
+            fall_x=0,
+            fall_y=0,
+        ),
+        True,
+    )
 
 
 def _find_pressed_plates_global(game: Game) -> dict[tuple[int, int, int], Tile]:

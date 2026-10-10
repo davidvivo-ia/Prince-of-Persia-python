@@ -5,6 +5,7 @@ from __future__ import annotations
 from pop2026canon.domain.constants import CHOMPER_SPEED, LOOSE_FLOOR_DELAY
 from pop2026canon.domain.tiles import Tile
 from pop2026canon.domain.traps import (
+    GATE_PASSABLE_MIN,
     SPIKE_LETHAL_FALL_Y,
     ChomperPhase,
     GatePhase,
@@ -181,3 +182,31 @@ class TestGate:
         s = LevelState()
         s = tick_gate(s, CELL, plate_pressed=False)
         assert s.state_at(CELL) == 0
+
+
+class TestGateCrush:
+    def test_gate_closing_on_the_kid_kills_him(self) -> None:
+        """Canon: una gate que baja sobre el kid lo aplasta."""
+        from dataclasses import replace
+
+        from pop2026canon.application.controller import Command
+        from pop2026canon.application.tick import advance
+        from pop2026canon.domain.game import new_game
+        from pop2026canon.domain.level import Level
+        from pop2026canon.domain.room import Room
+        from pop2026canon.domain.tiles import encode_tile
+
+        empty = (encode_tile(Tile.EMPTY, 0),) * 30
+        cells = list(empty)
+        for c in range(10):
+            cells[2 * 10 + c] = encode_tile(Tile.FLOOR, 0)
+        cells[2 * 10 + 5] = encode_tile(Tile.GATE, 0)
+        room = Room(id=1, fg=tuple(cells), bg=empty)
+        lvl = Level(number=1, name="crush", rooms=(room,), start_room=1, start_col=5, start_row=2)
+        game = new_game(lvl)
+        # Gate abierta a punto de dejar de ser franqueable, con el kid dentro.
+        state = game.state.with_state((1, 5, 2), GATE_PASSABLE_MIN).with_gate_open((1, 5, 2))
+        game = replace(game, state=state)
+        for _ in range(3):
+            game = advance(game, Command())
+        assert game.kid.alive >= 0, "la gate cerrándose sobre el kid debe aplastarlo"

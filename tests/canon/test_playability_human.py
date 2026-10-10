@@ -38,8 +38,11 @@ from pop2026canon.domain.tiles import Tile
 from tests.canon.test_completability import (
     _MACROS,
     _NOOP,
+    ROOM_COST_TICKS,
     _exit_goal,
+    _link_gates,
     _room_distances_to_goal,
+    _room_distances_to_goal_rooms,
     _settle,
     make_priority,
 )
@@ -227,6 +230,35 @@ def _search_trace(
     return None, [], budget
 
 
+def _sword_coord(level: Level) -> tuple[int, int, int] | None:
+    for rm in level.rooms:
+        for i, b in enumerate(rm.fg):
+            if (b & 0x1F) == int(Tile.SWORD):
+                return rm.id, i % 10, i // 10
+    return None
+
+
+def _priority_to_cell(level: Level, cell: tuple[int, int, int]) -> Callable[[Game], int]:
+    """f = ticks + distancia (consciente de gates) a la sala de ``cell``,
+    con media sala extra si se está en esa sala pero en otra fila."""
+    link_gates = _link_gates(level)
+    cache: dict[frozenset[tuple[int, int, int]], dict[int, int]] = {}
+
+    def _f(game: Game) -> int:
+        gates = frozenset(game.state.open_gates)
+        d = cache.get(gates)
+        if d is None:
+            d = _room_distances_to_goal_rooms(level, {cell[0]}, gates, link_gates)
+            cache[gates] = d
+        k = game.kid
+        h = ROOM_COST_TICKS * d.get(k.room, 30)
+        if k.room == cell[0] and k.curr_row != cell[2]:
+            h += ROOM_COST_TICKS // 2
+        return game.tick_count + h
+
+    return _f
+
+
 def solve_level_human_trace(
     level: Level, *, has_sword: bool, max_macros: int = 60000
 ) -> list[Command] | None:
@@ -244,13 +276,31 @@ def solve_level_human_trace(
 
     budget = max_macros
     trace: list[Command] = []
+    # Fase 0: sin espada no se pasa a un guard — si el nivel tiene una,
+    # primero ir a por ella (L1 original: la espada está al otro lado del
+    # nivel respecto al guard y la salida).
+    sword = _sword_coord(level)
+    if not has_sword and sword is not None:
+        sword_priority = _priority_to_cell(level, sword)
+
+        def _armed(game: Game) -> bool:
+            return _won(game) or game.kid.has_sword
+
+        armed, trace, budget = _search_trace(
+            start, [], priority=sword_priority, goal=_armed, budget=budget
+        )
+        if armed is None:
+            return None
+        if _won(armed):
+            return trace
+        start = armed
     if exit_coord is not None and plate_coord is not None:
 
         def _door_open(game: Game) -> bool:
             return _won(game) or exit_coord in game.state.open_gates
 
         opened, trace, budget = _search_trace(
-            start, [], priority=priority, goal=_door_open, budget=budget
+            start, trace, priority=priority, goal=_door_open, budget=budget
         )
         if opened is None:
             return None

@@ -36,11 +36,14 @@ Verificado contra `seg005.c` / `seg006.c` / `seg007.c` de SDLPoP.
   baja 1/frame; franqueable mientras ≥ 24 (~18 s). Un CLOSER cierra de
   golpe. El modifier 1 del DAT = gate abierta de inicio
   (`load_alter_mod`). Los trobs animan en todas las salas.
+- Una gate que baja sobre el kid lo aplasta (canon).
 - Salto largo desde parado: exactamente 3 celdas (dx 42) y los pies
   vuelven a la superficie al terminar — fiable en plataformas de una
   celda (L3 original, sala 14).
 - Bots: dirección y cuenta atrás de las gates forman parte del estado;
-  A* por tiempo + distancia (las gates se cierran: hay que correr);
+  A* por tiempo + distancia (las gates se cierran: hay que correr), con
+  la distancia consciente de gates cerradas y por fases (espada si el
+  nivel la tiene y el kid no, plate de la salida, salida);
   macros canon (↑ agarra y trepa, ↓ descuelga, run-jump + SHIFT agarra
   la cornisa de enfrente, salto largo desde parado, carreras largas).
 - Hito: los **niveles 1, 2 y 3 originales** los completa el bot con el
