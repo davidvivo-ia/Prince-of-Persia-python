@@ -213,30 +213,26 @@ def make_priority(level: Level, dist: dict[int, int]) -> Callable[[Game], int]:
     return _f
 
 
-def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
-    """A* de macro-acciones. ``True`` si el bot cruza la exit door.
+def _search(
+    start: Game,
+    *,
+    priority: Callable[[Game], int],
+    goal: Callable[[Game], bool],
+    budget: int,
+) -> tuple[Game | None, int]:
+    """A* de macro-acciones desde ``start`` hasta un estado que cumpla
+    ``goal``. Devuelve ``(estado, presupuesto restante)``.
 
-    f = ticks transcurridos + distancia en salas por ROOM_COST_TICKS. El
-    tiempo cuenta de verdad: las gates se cierran solas (~18 s canon),
-    así que entre dos formas de llegar a la misma celda se expande antes
-    la más rápida, y un estado ya visto sólo se descarta si no mejora el
-    tiempo con que se alcanzó (dedup al sacar de la cola, no al meter).
-    """
+    f = ticks transcurridos + heurística. El tiempo cuenta de verdad: las
+    gates se cierran solas (~18 s canon), así que entre dos formas de
+    llegar a la misma celda se expande antes la más rápida, y un estado
+    ya visto sólo se descarta si no mejora el tiempo con que se alcanzó
+    (dedup al sacar de la cola, no al meter)."""
     import heapq
 
-    stripped = _strip_hazards(level)
-    dist = _room_distances_to_goal(stripped, Tile.LEVEL_DOOR_LEFT)
-    start = new_game(stripped, starting_hp=10)
-    settled = _settle(start)
-    if settled is None:
-        return False
-
-    _f = make_priority(stripped, dist)
-
-    best: dict[tuple, int] = {_state_key(settled): settled.tick_count}  # type: ignore[type-arg]
+    best: dict[tuple, int] = {_state_key(start): start.tick_count}  # type: ignore[type-arg]
     counter = 0
-    heap: list[tuple[int, int, Game]] = [(_f(settled), counter, settled)]
-    budget = max_macros
+    heap: list[tuple[int, int, Game]] = [(priority(start), counter, start)]
     while heap and budget > 0:
         _, _, game = heapq.heappop(heap)
         if game.tick_count > best.get(_state_key(game), game.tick_count):
@@ -246,15 +242,49 @@ def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
             result = _run_macro(game, macro)
             if result is None:
                 continue
-            if result.status is GameStatus.WON_LEVEL:
-                return True
+            if goal(result):
+                return result, budget
             key = _state_key(result)
             if result.tick_count >= best.get(key, 10**9):
                 continue
             best[key] = result.tick_count
             counter += 1
-            heapq.heappush(heap, (_f(result), counter, result))
-    return False
+            heapq.heappush(heap, (priority(result), counter, result))
+    return None, budget
+
+
+def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
+    """``True`` si el bot cruza la exit door jugando ticks reales.
+
+    Dos fases cuando la exit door tiene plate: primero llegar a abrirla
+    (objetivo: la plate), después, desde ese estado, llegar a la puerta.
+    Así el recorrido de vuelta no compite con todo lo explorado antes.
+    """
+    stripped = _strip_hazards(level)
+    dist = _room_distances_to_goal(stripped, Tile.LEVEL_DOOR_LEFT)
+    settled = _settle(new_game(stripped, starting_hp=10))
+    if settled is None:
+        return False
+    priority = make_priority(stripped, dist)
+    exit_coord, plate_coord = _exit_goal(stripped)
+
+    def _won(game: Game) -> bool:
+        return game.status is GameStatus.WON_LEVEL
+
+    budget = max_macros
+    if exit_coord is not None and plate_coord is not None:
+
+        def _door_open(game: Game) -> bool:
+            return _won(game) or exit_coord in game.state.open_gates
+
+        opened, budget = _search(settled, priority=priority, goal=_door_open, budget=budget)
+        if opened is None:
+            return False
+        if _won(opened):
+            return True
+        settled = opened
+    final, _ = _search(settled, priority=priority, goal=_won, budget=budget)
+    return final is not None
 
 
 @pytest.mark.parametrize("level", CANON_LEVELS[:13], ids=lambda lv: f"L{lv.number}")

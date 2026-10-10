@@ -43,9 +43,11 @@ Verificado contra `seg005.c` / `seg006.c` / `seg007.c` de SDLPoP.
   A* por tiempo + distancia (las gates se cierran: hay que correr);
   macros canon (↑ agarra y trepa, ↓ descuelga, run-jump + SHIFT agarra
   la cornisa de enfrente, salto largo desde parado, carreras largas).
-- Hito: los **niveles 1 y 2 originales** los completa el bot con el
-  motor tal cual; en el 3 llega a la plate de la salida y a la puerta
-  abierta (la vuelta es la carrera contrarreloj canon de la gate).
+- Hito: los **niveles 1, 2 y 3 originales** los completa el bot con el
+  motor tal cual (el 3 incluye la carrera contrarreloj canon de la gate
+  y el salto con agarre desde la losa suelta). El solver de topología
+  busca en dos fases: abrir la exit door (objetivo: su plate) y, desde
+  ahí, llegar a ella.
 - Pantalla de título: controles actualizados.
 
 ## [canon-0.15.0] — 2026-10-10
