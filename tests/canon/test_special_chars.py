@@ -84,7 +84,7 @@ class TestShadow:
         # Mueve shadow a la celda del kid
         shadow = game.find_char(CharId.SHADOW)
         assert shadow is not None
-        new_shadow = replace(shadow, curr_col=5, curr_row=1)
+        new_shadow = replace(shadow, curr_col=5, curr_row=game.kid.curr_row)
         new_others = tuple(new_shadow if c.charid is CharId.SHADOW else c for c in game.others)
         game = replace(game, others=new_others)
         # Segunda llamada: fusión

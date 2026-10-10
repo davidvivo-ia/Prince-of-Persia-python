@@ -6,6 +6,37 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.15.0] — 2026-10-10
+
+### Geometría del original
+
+El motor adopta la geometría del POP1 tal cual: **el char ocupa la celda
+del suelo que pisa**; ``y`` es la altura de los pies dentro de la fila
+(``FEET_Y`` = de pie en la superficie, el borde inferior de la fila). Se
+acabaron los parches de "celda de debajo": items, plates, trampas, gates
+y muros viven en la fila del suelo, como en LEVELS.DAT.
+
+- Física: soporte en la celda propia; aterrizaje EN la celda de suelo;
+  un char en el aire no baja de la superficie si su celda es suelo (el
+  salto se desliza a ras; la caída aterriza); head-bump al subir contra
+  el piso de arriba; muros y gates bloquean en la celda propia.
+- Agarre canon: las manos alcanzan la cornisa en diagonal
+  (col+fwd, row-1); cuerpo en el aire; vale subiendo y cayendo. Trepar
+  deja al char EN la cornisa. Descolgarse por el borde: cuerpo en la
+  celda de delante, una fila más abajo. Sin "shimmy" (POP1 no lo tiene).
+- Niveles fan: `_canonize_rows` baja los items de la fila 1 a la fila
+  del suelo (fila 2) y sube spawn, guards y doorlinks a esa fila. El
+  carver de huecos verticales se mantiene.
+- Render: la losa de suelo va en el borde INFERIOR de la celda (canon) y
+  se pinta bajo todo tile-suelo con item; pies del char en ``y``.
+- Importador: filas del DAT tal cual (sin desplazamientos).
+- Saltos retunados a la nueva base (run-jump desciende sin hundirse en
+  el suelo; salto largo 45 unidades).
+- Replays dorados regenerados; suite de topología 14/14.
+- Hito: el **nivel 1 original** (LEVELS.DAT, cargado localmente — los
+  datos de Ubisoft no se incluyen) lo completa el bot de topología con
+  el motor tal cual.
+
 ## [canon-0.14.0] — 2026-10-10
 
 ### Los verbos del original

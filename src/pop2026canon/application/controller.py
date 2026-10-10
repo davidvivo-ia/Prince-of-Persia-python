@@ -110,43 +110,44 @@ def _floor_ahead(char: Char, level: object | None) -> bool | None:
     """¿Hay suelo bajo la celda de delante? ``None`` si no hay nivel."""
     if level is None:
         return None
-    from pop2026canon.domain.physics import floor_below_solid
+    from pop2026canon.domain.physics import has_floor_at
 
-    lvl = level
     col = char.curr_col + _forward_sign(char)
     if not (0 <= col < 10):
         return True  # cambio de sala: lo resuelve la física
-    return floor_below_solid(lvl, char.room, col, char.curr_row)  # type: ignore[arg-type]
+    return has_floor_at(level, char.room, col, char.curr_row)  # type: ignore[arg-type]
 
 
 def _climb_down(char: Char, level: object | None) -> Char | None:
     """↓+SHIFT en un borde: el kid se descuelga y queda colgado de la
-    cornisa que pisaba, una fila más abajo (canon: bajar un piso sin
-    daño). ``None`` si no hay borde delante."""
+    cornisa que pisaba (geometría canon: cuerpo en la celda de delante,
+    una fila más abajo, mirando hacia la cornisa). ``None`` si no hay
+    borde delante."""
     from dataclasses import replace
 
     from pop2026canon.domain.physics import is_solid_at
 
     if level is None:
         return None
-    lvl = level
     fwd = _forward_sign(char)
-    hang_col = char.curr_col + fwd
-    hang_row = char.curr_row + 1
-    if not (0 <= hang_col < 10 and hang_row < 3):
+    body_col = char.curr_col + fwd
+    body_row = char.curr_row + 1
+    if not (0 <= body_col < 10 and body_row < 3):
         return None
-    room = lvl.room(char.room)  # type: ignore[attr-defined]
-    # Borde: nada delante ni bajo-delante; la celda que pisaba es la cornisa.
-    if is_solid_at(room, hang_col, char.curr_row) or is_solid_at(room, hang_col, hang_row):
+    room = level.room(char.room)  # type: ignore[attr-defined]
+    # Borde: la celda de delante es aire y la que pisa es suelo (la
+    # cornisa). La celda del cuerpo puede ser suelo (el piso de abajo):
+    # al soltarse aterriza en él de inmediato (canon).
+    if is_solid_at(room, body_col, char.curr_row):
         return None
-    if not is_solid_at(room, char.curr_col, hang_row):
+    if not is_solid_at(room, char.curr_col, char.curr_row):
         return None
     return replace(
         char,
-        curr_col=hang_col,
-        curr_row=hang_row,
-        x=4 if fwd > 0 else 9,
-        y=0,
+        curr_col=body_col,
+        curr_row=body_row,
+        x=2 if fwd > 0 else 11,
+        y=4,
         direction=int(Direction.LEFT) if fwd > 0 else int(Direction.RIGHT),
         action=Action.HANG_STRAIGHT,
         curr_seq_id=int(Seq.GRAB_LEDGE_MIDAIR),

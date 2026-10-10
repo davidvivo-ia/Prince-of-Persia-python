@@ -39,7 +39,7 @@ def _corridor_level(*, pit_cols: tuple[int, ...] = (), wall_col: int | None = No
     if wall_col is not None:
         mid[wall_col] = W
     room = _room([top, mid, bot])
-    return Level(number=1, name="test", rooms=(room,), start_room=1, start_col=1, start_row=1)
+    return Level(number=1, name="test", rooms=(room,), start_room=1, start_col=1, start_row=2)
 
 
 def _stacked_level(stories: int) -> Level:
@@ -65,7 +65,7 @@ def _kid(level: Level, **kw: object) -> Char:
         "charid": CharId.KID,
         "room": 1,
         "curr_col": 1,
-        "curr_row": 1,
+        "curr_row": 2,  # geometría canon: de pie EN la celda del suelo
         "hp_curr": 3,
         "hp_max": 3,
         "curr_seq_id": int(Seq.STAND),
@@ -90,7 +90,7 @@ class TestWalkOff:
 
 def _drop_kid(level: Level, *, float_ticks: int = 0) -> Char:
     """Suelta al kid sobre el pit de la sala 1 y simula hasta aterrizar."""
-    kid = _kid(level, curr_col=4, curr_row=1, float_ticks=float_ticks)
+    kid = _kid(level, curr_col=4, curr_row=2, float_ticks=float_ticks)
     for _ in range(200):
         kid = step_physics(kid, level, has_feather=kid.float_ticks > 0)
         if kid.action is not Action.IN_FREEFALL:
@@ -108,7 +108,7 @@ class TestLanding:
                 break
         assert kid.action is Action.STAND
         assert kid.hp_curr == 3, "Una caída dentro de la sala no debería hacer daño"
-        assert kid.curr_row == 1, "Debería quedar de pie sobre el suelo de row 2"
+        assert kid.curr_row == 2, "Debería quedar de pie EN la celda de suelo de row 2"
 
     def test_one_story_fall_is_safe(self) -> None:
         kid = _drop_kid(_stacked_level(2))
@@ -150,8 +150,7 @@ class TestAbyss:
 
 class TestHorizontalCollision:
     def test_wall_blocks_body(self) -> None:
-        """Un muro en la fila del suelo (canon: donde "está" el kid)
-        bloquea la columna; el kid corre a la fila de encima."""
+        """Un muro en la fila del suelo bloquea al kid que corre por ella."""
         level = _corridor_level()
         room = level.room(1)
         fg = list(room.fg)
@@ -164,10 +163,10 @@ class TestHorizontalCollision:
             rooms=(Room(id=1, fg=tuple(fg), bg=room.bg),),
             start_room=1,
             start_col=1,
-            start_row=1,
+            start_row=2,
         )
         room = level.room(1)
-        assert blocks_body_at(room, 4, 1)
+        assert blocks_body_at(room, 4, 2)
         kid = _kid(level, curr_col=3, curr_seq_id=int(Seq.RUN), action=Action.RUN_JUMP)
         for _ in range(20):
             kid = step_physics(kid, level)
@@ -179,18 +178,18 @@ class TestHorizontalCollision:
         top = [E] * 10
         mid = [E] * 10
         bot = [F] * 10
-        mid[4] = Tile.BIGPILLAR_TOP
+        bot[4] = Tile.BIGPILLAR_BOTTOM
         room = _room([top, mid, bot])
-        assert not blocks_body_at(room, 4, 1), "Los pilares son decorado — no bloquean"
+        assert not blocks_body_at(room, 4, 2), "Los pilares son decorado — no bloquean"
 
     def test_closed_gate_blocks_open_gate_does_not(self) -> None:
         level = _corridor_level()
         room = level.room(1)
         fg = list(room.fg)
-        fg[1 * 10 + 4] = encode_tile(G, 0)
+        fg[2 * 10 + 4] = encode_tile(G, 0)
         room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
-        assert blocks_body_at(room2, 4, 1)
-        assert not blocks_body_at(room2, 4, 1, frozenset({(1, 4, 1)}))
+        assert blocks_body_at(room2, 4, 2)
+        assert not blocks_body_at(room2, 4, 2, frozenset({(1, 4, 2)}))
 
 
 class TestFeatherFall:
@@ -274,23 +273,32 @@ class TestPrincessReunionWins:
 
 
 class TestCanonRowBlocking:
-    """Semántica de fila canon: una gate cerrada o un muro en la celda de
-    DEBAJO del kid bloquean la columna (los niveles originales ponen
-    gates y muros en la fila del suelo, donde el kid canon "está")."""
+    """Geometría canon: muros y gates cerradas bloquean en la celda del
+    suelo donde el kid ESTÁ (los niveles originales los ponen ahí)."""
 
-    def test_closed_gate_below_blocks(self) -> None:
+    def test_closed_gate_in_floor_row_blocks(self) -> None:
         level = _corridor_level()
         room = level.room(1)
         fg = list(room.fg)
-        fg[2 * 10 + 5] = encode_tile(G, 0)  # gate en la fila del suelo
+        fg[2 * 10 + 5] = encode_tile(G, 0)
         room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
-        assert blocks_body_at(room2, 5, 1)
-        assert not blocks_body_at(room2, 5, 1, frozenset({(1, 5, 2)}))
+        assert blocks_body_at(room2, 5, 2)
+        assert not blocks_body_at(room2, 5, 2, frozenset({(1, 5, 2)}))
 
-    def test_wall_below_blocks(self) -> None:
+    def test_wall_in_floor_row_blocks(self) -> None:
         level = _corridor_level()
         room = level.room(1)
         fg = list(room.fg)
         fg[2 * 10 + 5] = encode_tile(W, 0)
         room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
-        assert blocks_body_at(room2, 5, 1)
+        assert blocks_body_at(room2, 5, 2)
+
+    def test_wall_of_the_story_above_does_not_block(self) -> None:
+        """Un muro en la fila 1 es del piso de arriba: el kid de la fila
+        2 pasa por debajo."""
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[1 * 10 + 5] = encode_tile(W, 0)
+        room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
+        assert not blocks_body_at(room2, 5, 2)

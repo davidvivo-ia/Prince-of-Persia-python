@@ -50,15 +50,6 @@ def advance(game: Game, cmd: Command) -> Game:
     #     un guard (misma sala y fila, a ≤ 3 celdas).
     new_kid = _auto_engarde(new_kid, game.others)
 
-    # 1b. Hang-shuffle: lateral colgado de cornisa
-    if new_kid.action is Action.HANG_STRAIGHT and (cmd.left or cmd.right):
-        from pop2026canon.domain.physics import hang_shuffle
-
-        if 1 <= new_kid.room <= len(game.level.rooms):
-            room_obj = game.level.room(new_kid.room)
-            direction = 1 if cmd.right else -1
-            new_kid = hang_shuffle(new_kid, room_obj, direction=direction)
-
     # 2-6. Física del kid (play_seq + gravity + collision + grab)
     open_gates = game.state.open_gates
     broken_floors = game.state.fallen_floors
@@ -174,12 +165,12 @@ def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
 
     room = game.level.room(kid.room)
 
-    # Loose floor: el kid está pisando si su celda + row+1 contiene loose
-    kid_below = (kid.room, kid.curr_col, kid.curr_row + 1)
-    if 0 <= kid.curr_row + 1 < 3 and 0 <= kid.curr_col < 10:
-        tile_below, _ = room.tile_at(kid.curr_col, kid.curr_row + 1)
-        if tile_below is Tile.LOOSE:
-            new_state, _ = tick_loose(new_state, kid_below, kid_pressing=True)
+    # Loose floor: el kid pisa el loose si ESTÁ en su celda (geometría canon)
+    kid_cell = (kid.room, kid.curr_col, kid.curr_row)
+    if 0 <= kid.curr_row < 3 and 0 <= kid.curr_col < 10:
+        tile_here, _ = room.tile_at(kid.curr_col, kid.curr_row)
+        if tile_here is Tile.LOOSE:
+            new_state, _ = tick_loose(new_state, kid_cell, kid_pressing=True)
 
     # Chompers: avanzan automáticamente cada tick (sólo sala visible — canon).
     for c in range(10):
@@ -246,12 +237,6 @@ def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
         tile, _ = room.tile_at(actor.curr_col, actor.curr_row)
         if tile is Tile.OPENER:
             pressed.add((actor.room, actor.curr_col, actor.curr_row))
-        elif actor.curr_row + 1 < 3:
-            # Semántica canon: la plate es un tile-suelo — el actor
-            # está una fila por encima de ella.
-            below, _ = room.tile_at(actor.curr_col, actor.curr_row + 1)
-            if below is Tile.OPENER:
-                pressed.add((actor.room, actor.curr_col, actor.curr_row + 1))
     return pressed
 
 
@@ -471,12 +456,6 @@ def _resolve_lethal_traps(game: Game, kid: Char, state) -> tuple[Char, bool]:  #
 
     tile, _ = room.tile_at(kid.curr_col, kid.curr_row)
     coord = (kid.room, kid.curr_col, kid.curr_row)
-    # Semántica canon: trampas como tiles-suelo (kid una fila encima).
-    if tile not in (Tile.CHOMPER, Tile.SPIKE) and kid.curr_row + 1 < 3:
-        below_tile, _ = room.tile_at(kid.curr_col, kid.curr_row + 1)
-        if below_tile in (Tile.CHOMPER, Tile.SPIKE):
-            tile = below_tile
-            coord = (kid.room, kid.curr_col, kid.curr_row + 1)
 
     if tile is Tile.CHOMPER and chomper_is_lethal(state, coord):
         kid = replace(

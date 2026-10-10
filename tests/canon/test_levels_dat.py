@@ -92,9 +92,7 @@ class TestParseLevelBlob:
         lvl = parse_level_blob(bytes(_make_level_blob()), number=1)
         assert lvl.start_room == 1
         assert lvl.start_col == 1
-        # tile 21 = fila 2 canon; el kid nuestro vive una fila POR ENCIMA
-        # del suelo que pisa (semántica de fila canon → nuestra)
-        assert lvl.start_row == 1
+        assert lvl.start_row == 2  # tile 21 = fila 2 (geometría canon)
         # 0xFF guardado = mirar a la DERECHA (el motor invierte)
         assert lvl.start_direction == 0
 
@@ -102,8 +100,7 @@ class TestParseLevelBlob:
         lvl = parse_level_blob(bytes(_make_level_blob()), number=1)
         guards = lvl.room(2).guards
         assert len(guards) == 1
-        # tile 15 = fila 1 canon → fila 0 nuestra (una por encima)
-        assert (guards[0].col, guards[0].row) == (5, 0)
+        assert (guards[0].col, guards[0].row) == (5, 1)  # tile 15 = fila 1
         assert guards[0].direction == -1
         assert guards[0].skill == 3
 

@@ -21,11 +21,9 @@ from pop2026canon.domain.physics import (
     cross_border,
     fall_accel,
     fall_speed,
-    hang_shuffle,
     is_solid_at,
     normalize_to_cell,
     play_seq,
-    release_hang,
     snap_to_hang,
     start_seq,
     step_physics,
@@ -222,12 +220,12 @@ class TestCanGrab:
         - row 2 (col 5+): FLOOR — cuerpo de la plataforma
         """
         fg = [int(Tile.EMPTY)] * 30
-        # Ledge a la derecha del kid: row 1 cols 5-9
+        # Geometría canon: la cornisa está en DIAGONAL (col+1, row-1):
+        # suelo en row 0 cols 5-9; el cuerpo cae por (4,1) en el aire.
+        for c in range(5, 10):
+            fg[0 + c] = int(Tile.FLOOR)
         for c in range(5, 10):
             fg[10 + c] = int(Tile.FLOOR)
-        # Cuerpo de la plataforma: row 2 cols 5-9
-        for c in range(5, 10):
-            fg[20 + c] = int(Tile.FLOOR)
         room = Room(id=1, fg=tuple(fg), bg=(0,) * 30)
         kid = replace(
             _kid(room=1, col=4, row=1),
@@ -256,65 +254,15 @@ class TestCanGrab:
     def test_grab_returns_ledge_position(self) -> None:
         kid, room = self._falling_kid_at_ledge()
         ledge = can_grab(kid, room, shift_held=True)
-        assert ledge == (5, 1)  # col 5, row 1
+        assert ledge == (5, 0)  # cornisa en diagonal: col 5, row 0
 
     def test_snap_to_hang(self) -> None:
         kid, _ = self._falling_kid_at_ledge()
-        new_kid = snap_to_hang(kid, ledge_col=5, ledge_row=1)
+        new_kid = snap_to_hang(kid, ledge_col=5, ledge_row=0)
         assert new_kid.action is Action.HANG_STRAIGHT
         assert new_kid.fall_x == 0
         assert new_kid.fall_y == 0
         assert new_kid.curr_seq_id == int(Seq.GRAB_LEDGE_MIDAIR)
-
-
-class TestHangShuffle:
-    """Movimiento lateral colgado de cornisa (canon shimmy)."""
-
-    def _hanging_kid(self) -> tuple[Char, Room]:
-        # Char colgado de cornisa: sala con suelo arriba a la derecha del kid.
-        floor = int(Tile.FLOOR)
-        empty = int(Tile.EMPTY)
-        fg = [floor] * 10 + [empty] * 10 + [empty] * 10
-        room = Room(id=1, fg=tuple(fg), bg=(0,) * 30)
-        kid = Char(
-            charid=CharId.KID,
-            room=1,
-            curr_col=3,
-            curr_row=1,
-            action=Action.HANG_STRAIGHT,
-            curr_seq_id=int(Seq.JUMP_UP_GRAB_STRAIGHT),
-            direction=int(Direction.RIGHT),
-        )
-        return kid, room
-
-    def test_shuffle_right_moves_one_col(self) -> None:
-        kid, room = self._hanging_kid()
-        new_kid = hang_shuffle(kid, room, direction=1)
-        assert new_kid.curr_col == kid.curr_col + 1
-
-    def test_shuffle_left_moves_one_col(self) -> None:
-        kid, room = self._hanging_kid()
-        new_kid = hang_shuffle(kid, room, direction=-1)
-        # Necesita que haya cornisa también a la izquierda (sí, fila 0 toda FLOOR)
-        assert new_kid.curr_col == kid.curr_col - 1
-
-    def test_shuffle_only_when_hanging(self) -> None:
-        kid, room = self._hanging_kid()
-        kid = replace(kid, action=Action.STAND)
-        new_kid = hang_shuffle(kid, room, direction=1)
-        assert new_kid is kid  # sin cambio
-
-    def test_shuffle_stops_at_room_edge(self) -> None:
-        kid, room = self._hanging_kid()
-        kid = replace(kid, curr_col=9)
-        new_kid = hang_shuffle(kid, room, direction=1)
-        assert new_kid.curr_col == 9  # no se mueve fuera
-
-    def test_release_hang_drops_to_freefall(self) -> None:
-        kid, _ = self._hanging_kid()
-        new_kid = release_hang(kid)
-        assert new_kid.action is Action.IN_FREEFALL
-        assert new_kid.fall_y == 0
 
 
 class TestStepPhysicsIntegration:

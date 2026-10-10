@@ -131,12 +131,9 @@ def _char_px(char: Char) -> tuple[int, int]:
         + LAYOUT.tile_w * 3 // 20
         + (char.x * inner) // (TILE_SIZE_X - 1)
     )
-    px_y = (
-        LAYOUT.hud_top
-        + (char.curr_row + 1) * LAYOUT.tile_h
-        - (LAYOUT.tile_h * char.y) // TILE_SIZE_Y
-        - 2
-    )
+    # Geometría canon: el char ocupa la celda del suelo; ``y`` es la
+    # altura de los pies dentro de la fila (0 arriba, 62 en el suelo).
+    px_y = LAYOUT.hud_top + char.curr_row * LAYOUT.tile_h + (LAYOUT.tile_h * char.y) // TILE_SIZE_Y
     return px_x, px_y
 
 

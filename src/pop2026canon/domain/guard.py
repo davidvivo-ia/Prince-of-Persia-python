@@ -110,7 +110,7 @@ def _step_toward(guard: Char, dx: int, game: Game) -> Char:
     Canon: los guards no atraviesan sólidos ni se tiran a los pits —
     se quedan al borde mirando al kid.
     """
-    from pop2026canon.domain.physics import floor_below_solid, is_solid_at
+    from pop2026canon.domain.physics import blocks_body_at, has_floor_at
     from pop2026canon.domain.tiles import Tile
 
     step = 1 if dx > 0 else -1
@@ -118,9 +118,9 @@ def _step_toward(guard: Char, dx: int, game: Game) -> Char:
     new_dir = int(Direction.RIGHT) if dx > 0 else int(Direction.LEFT)
     if 1 <= guard.room <= len(game.level.rooms):
         room = game.level.room(guard.room)
-        if is_solid_at(room, new_col, guard.curr_row):
+        if blocks_body_at(room, new_col, guard.curr_row, game.state.open_gates):
             return replace(guard, direction=new_dir)
-        if not floor_below_solid(game.level, guard.room, new_col, guard.curr_row):
+        if not has_floor_at(game.level, guard.room, new_col, guard.curr_row):
             return replace(guard, direction=new_dir)
         # Respeta las cuchillas: ni pisa un chomper ni se planta pegado a
         # él por el lado del kid — si no, el kid tendría que cruzar las

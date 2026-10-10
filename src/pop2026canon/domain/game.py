@@ -10,7 +10,12 @@ from dataclasses import dataclass, replace
 from enum import IntEnum
 
 from pop2026canon.domain.chars import Char, CharId
-from pop2026canon.domain.constants import START_HITP, START_MINUTES_LEFT, START_TICKS_LEFT
+from pop2026canon.domain.constants import (
+    START_HITP,
+    START_MINUTES_LEFT,
+    START_TICKS_LEFT,
+    TILE_SIZE_Y,
+)
 from pop2026canon.domain.level import Level
 from pop2026canon.domain.traps import LevelState
 
@@ -130,6 +135,7 @@ def new_game(level: Level, *, starting_hp: int = START_HITP, has_sword: bool = F
         room=level.start_room,
         curr_col=level.start_col,
         curr_row=level.start_row,
+        y=TILE_SIZE_Y - 1,  # de pie: pies en el borde inferior de la celda
         direction=level.start_direction,
         hp_curr=starting_hp,
         hp_max=starting_hp,
@@ -159,6 +165,7 @@ def new_game(level: Level, *, starting_hp: int = START_HITP, has_sword: bool = F
                     room=room.id,
                     curr_col=spawn.col,
                     curr_row=spawn.row,
+                    y=TILE_SIZE_Y - 1,
                     direction=spawn.direction,
                     hp_curr=hp,
                     hp_max=hp,

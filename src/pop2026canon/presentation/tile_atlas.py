@@ -35,31 +35,29 @@ def draw_empty(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
 
 
 def draw_floor(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
-    """Losa de suelo estilo POP1: superficie iluminada + cara de ladrillo
-    en el tercio superior del tile; el resto queda abierto (se ve la
-    pared trasera), como las plataformas del original."""
+    """Losa de suelo estilo POP1 en el borde INFERIOR de la celda (geometría
+    canon: la superficie del suelo es el borde inferior de la fila y el
+    char está de pie dentro de la celda). Encima queda el aire de la fila,
+    donde se ve la pared trasera."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     slab_h = max(18, th // 3)
-    pygame.draw.rect(surf, PALETTE.brick, (x, y, tw, slab_h))
+    top = y + th - slab_h
+    pygame.draw.rect(surf, PALETTE.brick, (x, top, tw, slab_h))
     # Superficie superior iluminada (donde pisa el kid)
-    pygame.draw.rect(surf, PALETTE.brick_top, (x, y, tw, 6))
+    pygame.draw.rect(surf, PALETTE.brick_top, (x, top, tw, 6))
     pygame.draw.line(
-        surf, _mix(PALETTE.brick_top, PALETTE.primary, 0.5), (x, y), (x + tw - 1, y), 1
+        surf, _mix(PALETTE.brick_top, PALETTE.primary, 0.5), (x, top), (x + tw - 1, top), 1
     )
-    pygame.draw.line(surf, PALETTE.brick_dark, (x, y + 6), (x + tw - 1, y + 6), 1)
+    pygame.draw.line(surf, PALETTE.brick_dark, (x, top + 6), (x + tw - 1, top + 6), 1)
     # Cara de ladrillo: 2 cursos con junta alternada
     course_h = (slab_h - 6) // 2
     col_idx = x // tw
     for i in range(2):
-        cy0 = y + 6 + i * course_h
+        cy0 = top + 6 + i * course_h
         pygame.draw.line(surf, PALETTE.mortar, (x, cy0 + course_h), (x + tw, cy0 + course_h), 1)
         jx = x + tw // 2 if (i + col_idx) % 2 == 0 else x + tw // 4
         pygame.draw.line(surf, PALETTE.mortar, (jx, cy0), (jx, cy0 + course_h), 1)
-    # Borde inferior de la losa + sombra colgante
-    pygame.draw.line(surf, PALETTE.brick_dark, (x, y + slab_h - 1), (x + tw - 1, y + slab_h - 1), 2)
-    shadow = pygame.Surface((tw, 8), pygame.SRCALPHA)
-    shadow.fill((0, 0, 0, 60))
-    surf.blit(shadow, (x, y + slab_h))
+    pygame.draw.line(surf, PALETTE.brick_dark, (x, y + th - 1), (x + tw - 1, y + th - 1), 2)
 
 
 def draw_spike(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
@@ -188,9 +186,9 @@ def draw_loose(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
     draw_floor(surf, x, y, 0)
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     slab_h = max(18, th // 3)
-    # Grietas visibles dentro de la losa
-    pygame.draw.line(surf, PALETTE.bg, (x + tw // 4, y + 4), (x + tw * 3 // 4, y + slab_h - 3), 2)
-    pygame.draw.line(surf, PALETTE.brick_dark, (x + tw // 5, y + 3), (x + tw // 3, y + 10), 1)
+    top = y + th - slab_h
+    pygame.draw.line(surf, PALETTE.bg, (x + tw // 4, top + 4), (x + tw * 3 // 4, y + th - 3), 2)
+    pygame.draw.line(surf, PALETTE.brick_dark, (x + tw // 5, top + 3), (x + tw // 3, top + 10), 1)
 
 
 def draw_doortop(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
@@ -443,7 +441,14 @@ _DRAW_TABLE = {
 }
 
 
+# Tiles-suelo con item encima (canon tile_is_floor): se pinta la losa y
+# luego el item.
+_FLOORED_ITEMS: frozenset[int] = frozenset({2, 6, 10, 13, 15, 16, 17, 18, 19, 21, 22, 23, 24, 30})
+
+
 def draw_tile(surf: pygame.Surface, tile_value: int, x: int, y: int, modifier: int = 0) -> None:
     """Pinta el tile correspondiente."""
+    if tile_value in _FLOORED_ITEMS:
+        draw_floor(surf, x, y, 0)
     draw_fn = _DRAW_TABLE.get(tile_value, draw_empty)
     draw_fn(surf, x, y, modifier)

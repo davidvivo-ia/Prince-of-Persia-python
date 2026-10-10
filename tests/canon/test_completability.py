@@ -41,7 +41,7 @@ def _strip_hazards(level: Level) -> Level:
         fg = list(room.fg)
         for i, byte in enumerate(fg):
             if (byte & 0x1F) == int(Tile.CHOMPER):
-                fg[i] = encode_tile(Tile.EMPTY, 0)
+                fg[i] = encode_tile(Tile.FLOOR, 0)  # geometría canon: es suelo
         new_rooms.append(
             Room(
                 id=room.id,
@@ -89,6 +89,8 @@ _LU = Command(left=True, up=True)
 _U = Command(up=True)
 _US = Command(up=True, shift=True)
 _S = Command(shift=True)
+_D = Command(down=True)
+_DS = Command(down=True, shift=True)
 
 _MACROS: list[list[tuple[Command, int]]] = [
     [(_R, 4)],  # paso corto derecha
@@ -100,6 +102,7 @@ _MACROS: list[list[tuple[Command, int]]] = [
     [(_R, 2), (_RU, 3), (_R, 12)],  # salto corto derecha
     [(_L, 2), (_LU, 3), (_L, 12)],  # salto corto izquierda
     [(_US, 8), (_S, 8), (_U, 20)],  # salto vertical + grab + climb
+    [(_DS, 2), (_D, 2), (_NOOP, 12)],  # descolgarse del borde y soltarse
     [(_NOOP, 16)],  # esperar (loose floors, gates)
 ]
 
@@ -112,6 +115,10 @@ def _state_key(game: Game) -> tuple:  # type: ignore[type-arg]
 def _room_distances_to_goal(level: Level, goal_tile: Tile) -> dict[int, int]:
     """Distancia (en salas) de cada sala a la sala objetivo."""
     goal_rooms = {rm.id for rm in level.rooms for byte in rm.fg if (byte & 0x1F) == int(goal_tile)}
+    # Niveles originales: la puerta de la sala de spawn es la ENTRADA, no
+    # un objetivo (si hay otra puerta en otra sala).
+    if len(goal_rooms) > 1:
+        goal_rooms.discard(level.start_room)
     dist = dict.fromkeys(goal_rooms, 0)
     frontier = deque(goal_rooms)
     while frontier:

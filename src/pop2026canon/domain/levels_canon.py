@@ -413,6 +413,82 @@ def _carve_vertical_openings(rooms: tuple[Room, ...]) -> tuple[Room, ...]:
     return tuple(new_rooms)
 
 
+_ROW1_ITEMS: frozenset[Tile] = frozenset(
+    {
+        Tile.POTION,
+        Tile.SWORD,
+        Tile.OPENER,
+        Tile.CLOSER,
+        Tile.TORCH,
+        Tile.SPIKE,
+        Tile.CHOMPER,
+        Tile.SKELETON,
+        Tile.MIRROR,
+        Tile.GATE,
+        Tile.LEVEL_DOOR_LEFT,
+        Tile.LEVEL_DOOR_RIGHT,
+    }
+)
+
+
+def _canonize_rows(
+    rooms: tuple[Room, ...], doorlinks: tuple[DoorLink, ...]
+) -> tuple[tuple[Room, ...], tuple[DoorLink, ...], dict[tuple[int, int, int], int]]:
+    """Geometría canon POP1: el char OCUPA la celda del suelo que pisa.
+
+    Los specs fan colocan los items "en el aire" de la fila 1 sobre un
+    suelo en la fila 2; en el original esos items SON tiles-suelo de la
+    fila 2 (potion, plate, gate, chomper... todos `tile_is_floor`). Esta
+    pasada baja cada item de la fila 1 a la fila 2 cuando debajo hay
+    FLOOR liso, y devuelve el mapa de coordenadas movidas para
+    recolocar doorlinks, eventos y pociones.
+    """
+    moved: dict[tuple[int, int, int], int] = {}
+    new_rooms = []
+    for room in rooms:
+        fg = list(room.fg)
+        for c in range(SCREEN_TILECOUNT_X):
+            up, down = fg[1 * SCREEN_TILECOUNT_X + c], fg[2 * SCREEN_TILECOUNT_X + c]
+            if Tile(up & 0x1F) in _ROW1_ITEMS and Tile(down & 0x1F) is Tile.FLOOR:
+                fg[2 * SCREEN_TILECOUNT_X + c] = up
+                fg[1 * SCREEN_TILECOUNT_X + c] = encode_tile(Tile.EMPTY, 0)
+                moved[(room.id, c, 1)] = 2
+        new_rooms.append(
+            Room(
+                id=room.id,
+                fg=tuple(fg),
+                bg=room.bg,
+                link_n=room.link_n,
+                link_s=room.link_s,
+                link_e=room.link_e,
+                link_w=room.link_w,
+                # Los guards pisan la fila del suelo (canon)
+                guards=tuple(
+                    GuardSpawn(
+                        col=g.col,
+                        row=min(2, g.row + 1),
+                        direction=g.direction,
+                        skill=g.skill,
+                        color=g.color,
+                    )
+                    for g in room.guards
+                ),
+            )
+        )
+    new_links = tuple(
+        DoorLink(
+            plate_room=d.plate_room,
+            plate_col=d.plate_col,
+            plate_row=moved.get((d.plate_room, d.plate_col, d.plate_row), d.plate_row),
+            gate_room=d.gate_room,
+            gate_col=d.gate_col,
+            gate_row=moved.get((d.gate_room, d.gate_col, d.gate_row), d.gate_row),
+        )
+        for d in doorlinks
+    )
+    return tuple(new_rooms), new_links, moved
+
+
 def _build_level(
     *,
     number: int,
@@ -441,13 +517,15 @@ def _build_level(
         for i, spec in enumerate(specs)
     )
     rooms = _carve_vertical_openings(rooms)
+    rooms, doorlinks, _moved = _canonize_rows(rooms, doorlinks)
     return Level(
         number=number,
         name=name,
         rooms=rooms,
         start_room=start_room,
         start_col=start_col,
-        start_row=start_row,
+        # El kid pisa la fila del suelo (canon): spawn una fila más abajo
+        start_row=min(2, start_row + 1),
         start_direction=start_direction,
         events=events,
         doorlinks=doorlinks,
@@ -1374,10 +1452,15 @@ def _with_potion_types(level: Level, types: Mapping[tuple[int, int, int], Potion
         for (room_id, col, row), ptype in types.items():
             if room_id != room.id:
                 continue
-            idx = row * SCREEN_TILECOUNT_X + col
-            piece = fg_list[idx] & 0x1F
-            if piece == int(Tile.POTION):
-                fg_list[idx] = encode_tile(Tile.POTION, int(ptype))
+            # Geometría canon: los items de la fila 1 de los specs viven
+            # ahora en la fila 2 — busca la potion en la fila dada o abajo.
+            for r in (row, row + 1):
+                if r >= 3:
+                    continue
+                idx = r * SCREEN_TILECOUNT_X + col
+                if (fg_list[idx] & 0x1F) == int(Tile.POTION):
+                    fg_list[idx] = encode_tile(Tile.POTION, int(ptype))
+                    break
         new_rooms.append(
             Room(
                 id=room.id,
