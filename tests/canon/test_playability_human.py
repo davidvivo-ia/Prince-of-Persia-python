@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import heapq
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -37,8 +38,10 @@ from pop2026canon.domain.tiles import Tile
 from tests.canon.test_completability import (
     _MACROS,
     _NOOP,
+    _exit_goal,
     _room_distances_to_goal,
     _settle,
+    make_priority,
 )
 
 REPLAY_DIR = Path(__file__).parent / "replays"
@@ -147,7 +150,7 @@ def _key(game: Game) -> tuple:  # type: ignore[type-arg]
         k.hp_curr,
         k.has_sword,
         phase,
-        game.state.open_gates,
+        tuple(sorted((coord, game.state.state_at(coord) // 24) for coord in game.state.open_gates)),
         game.state.fallen_floors,
         guards,
         combat,
@@ -179,30 +182,33 @@ def _run_macro_trace(
     return None, cmds
 
 
-def solve_level_human_trace(
-    level: Level, *, has_sword: bool, max_macros: int = 60000
-) -> list[Command] | None:
-    """A* en modo humano. Devuelve la secuencia de comandos ganadora."""
-    dist = _room_distances_to_goal(level, Tile.LEVEL_DOOR_LEFT)
-    start = _settle(new_game(level, starting_hp=campaign_hp(level.number), has_sword=has_sword))
-    if start is None:
-        return None
-    seen = {_key(start)}
+def _search_trace(
+    start: Game,
+    start_trace: list[Command],
+    *,
+    priority: Callable[[Game], int],
+    goal: Callable[[Game], bool],
+    budget: int,
+) -> tuple[Game | None, list[Command], int]:
+    """A* con traza (como ``_search`` de topología, con macros humanas y
+    cuota por sala). Devuelve ``(estado, comandos, presupuesto)``."""
+    best: dict[tuple, int] = {_key(start): start.tick_count}  # type: ignore[type-arg]
     counter = 0
     heap: list[tuple[int, int, Game, list[Command]]] = [
-        (dist.get(start.kid.room, 99), counter, start, [])
+        (priority(start), counter, start, start_trace)
     ]
-    budget = max_macros
     # Cuota por sala: una sala cercana al exit pero sin salida (un duelo
     # que se pierde de mil formas) no puede devorar todo el presupuesto.
-    room_quota = max(3000, max_macros // 6)
+    room_quota = max(3000, budget // 6)
     room_spent: dict[int, int] = {}
     while heap and budget > 0:
         prio, _, game, trace = heapq.heappop(heap)
+        if game.tick_count > best.get(_key(game), game.tick_count):
+            continue
         room = game.kid.room
-        if room_spent.get(room, 0) > room_quota and prio < 50:
+        if room_spent.get(room, 0) > room_quota and prio < 10**6:
             counter += 1
-            heapq.heappush(heap, (prio + 50, counter, game, trace))
+            heapq.heappush(heap, (prio + 10**6, counter, game, trace))
             continue
         for macro in _HUMAN_MACROS:
             room_spent[room] = room_spent.get(room, 0) + 1
@@ -210,15 +216,49 @@ def solve_level_human_trace(
             result, cmds = _run_macro_trace(game, macro)
             if result is None:
                 continue
-            if result.status is GameStatus.WON_LEVEL:
-                return trace + cmds
+            if goal(result):
+                return result, trace + cmds, budget
             key = _key(result)
-            if key in seen:
+            if result.tick_count >= best.get(key, 10**9):
                 continue
-            seen.add(key)
+            best[key] = result.tick_count
             counter += 1
-            heapq.heappush(heap, (dist.get(result.kid.room, 99), counter, result, trace + cmds))
-    return None
+            heapq.heappush(heap, (priority(result), counter, result, trace + cmds))
+    return None, [], budget
+
+
+def solve_level_human_trace(
+    level: Level, *, has_sword: bool, max_macros: int = 60000
+) -> list[Command] | None:
+    """A* en modo humano (dos fases: abrir la exit door, llegar a ella).
+    Devuelve la secuencia de comandos ganadora."""
+    dist = _room_distances_to_goal(level, Tile.LEVEL_DOOR_LEFT)
+    start = _settle(new_game(level, starting_hp=campaign_hp(level.number), has_sword=has_sword))
+    if start is None:
+        return None
+    priority = make_priority(level, dist)
+    exit_coord, plate_coord = _exit_goal(level)
+
+    def _won(game: Game) -> bool:
+        return game.status is GameStatus.WON_LEVEL
+
+    budget = max_macros
+    trace: list[Command] = []
+    if exit_coord is not None and plate_coord is not None:
+
+        def _door_open(game: Game) -> bool:
+            return _won(game) or exit_coord in game.state.open_gates
+
+        opened, trace, budget = _search_trace(
+            start, [], priority=priority, goal=_door_open, budget=budget
+        )
+        if opened is None:
+            return None
+        if _won(opened):
+            return trace
+        start = opened
+    final, trace, _ = _search_trace(start, trace, priority=priority, goal=_won, budget=budget)
+    return trace if final is not None else None
 
 
 def solve_level_human(level: Level, *, has_sword: bool, max_macros: int = 60000) -> bool:
