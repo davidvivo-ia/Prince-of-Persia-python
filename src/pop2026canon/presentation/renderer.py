@@ -97,17 +97,24 @@ def _draw_room_tiles(surf: pygame.Surface, game: Game) -> None:
             byte = room.fg[r * LAYOUT.room_cols + c]
             tile_val = byte & 0x1F
             modifier = (byte >> 5) & 0x07
-            # Override modifier para gates / chompers / loose con su state actual
+            coord = (game.kid.room, c, r)
+            # Override modifier para gates / trampas con su state canon
             if Tile(tile_val) is Tile.GATE:
                 from pop2026canon.domain.traps import gate_phase
 
-                modifier = gate_phase(game.state, (game.kid.room, c, r))
-            elif Tile(tile_val) in (Tile.CHOMPER, Tile.LOOSE):
-                modifier = game.state.state_at((game.kid.room, c, r))
+                modifier = gate_phase(game.state, coord)
+            elif Tile(tile_val) in (Tile.CHOMPER, Tile.LOOSE, Tile.SPIKE):
+                modifier = game.state.state_at(coord)
             # Loose caído: la losa ya no está — agujero real (la física
             # tampoco soporta peso ahí).
-            if (game.kid.room, c, r) in game.state.fallen_floors:
+            if coord in game.state.fallen_floors:
                 tile_val = int(Tile.EMPTY)
+            # Escombros de una losa estrellada: tapan pinchos, pociones...
+            if coord in game.state.debris_cells:
+                if Tile(tile_val) in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
+                    tile_val = int(Tile.TORCH_WITH_DEBRIS)
+                else:
+                    tile_val = int(Tile.DEBRIS)
             x = c * LAYOUT.tile_w
             y = LAYOUT.hud_top + r * LAYOUT.tile_h
             draw_tile(surf, tile_val, x, y, modifier)
@@ -118,6 +125,20 @@ def _draw_room_tiles(surf: pygame.Surface, game: Game) -> None:
                 tint = pygame.Surface((LAYOUT.tile_w, slab_h - 8), pygame.SRCALPHA)
                 tint.fill((0, 0, 0, 22))
                 surf.blit(tint, (x, y + 7))
+    _draw_falling_tiles(surf, game)
+
+
+def _draw_falling_tiles(surf: pygame.Surface, game: Game) -> None:
+    """Losas sueltas en caída (canon mobs): una losa que baja por su columna."""
+    from pop2026canon.domain.constants import TILE_SIZE_Y
+    from pop2026canon.presentation.tile_atlas import draw_falling_slab
+
+    for mob in game.state.falling_tiles:
+        if mob.room != game.kid.room:
+            continue
+        x = mob.col * LAYOUT.tile_w
+        top = LAYOUT.hud_top + mob.row * LAYOUT.tile_h + (LAYOUT.tile_h * mob.y) // TILE_SIZE_Y
+        draw_falling_slab(surf, x, top)
 
 
 def _char_px(char: Char) -> tuple[int, int]:

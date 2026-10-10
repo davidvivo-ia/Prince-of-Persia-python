@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from pop2026canon.domain.actions import Action, Direction, Seq
+from pop2026canon.domain.actions import Action, Direction, Seq, SwordStatus
 from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.constants import TBL_GUARD_HP
 from pop2026canon.domain.game import Game
@@ -33,8 +33,11 @@ def trigger_vizier_spawn(game: Game) -> Game:
             curr_col=6,
             curr_row=game.kid.curr_row,
             direction=int(Direction.LEFT),
-            curr_seq_id=int(Seq.STAND),
+            curr_seq_id=int(Seq.ENGARDE),
+            frame=158,
             action=Action.STAND,
+            sword=SwordStatus.DRAWN,
+            skill=11,
             hp_curr=hp,
             hp_max=hp,
         )

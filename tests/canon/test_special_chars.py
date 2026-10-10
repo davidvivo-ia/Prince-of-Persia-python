@@ -16,7 +16,7 @@ from pop2026canon.domain.levels_canon import (
 )
 from pop2026canon.domain.princess import trigger_mouse_appear, trigger_princess_reunion
 from pop2026canon.domain.shadow import trigger_shadow_encounters
-from pop2026canon.domain.skeleton import step_skeleton_ai, trigger_skeleton_wake
+from pop2026canon.domain.skeleton import trigger_skeleton_wake
 from pop2026canon.domain.vizier import trigger_vizier_spawn
 
 
@@ -46,12 +46,18 @@ class TestSkeleton:
         game = trigger_skeleton_wake(game)
         skel = game.find_char(CharId.SKELETON)
         assert skel is not None
-        original_col = skel.curr_col
-        game = step_skeleton_ai(game)
+        from pop2026canon.application.controller import Command
+        from pop2026canon.application.tick import advance
+        from pop2026canon.domain.combat import abs_x
+
+        original_x = abs_x(skel)
+        # El esqueleto combate con la IA canon de guards: avanza hacia el
+        # kid en la misma fila (jugando ticks reales).
+        for _ in range(12):
+            game = advance(game, Command())
         new_skel = game.find_char(CharId.SKELETON)
         assert new_skel is not None
-        # Se movió hacia el kid (kid en col 2, skel spawn col 4 → debe ir a col 3)
-        assert new_skel.curr_col < original_col
+        assert abs_x(new_skel) < original_x
 
 
 class TestShadow:
@@ -128,3 +134,28 @@ class TestPrincessAndMouse:
         game = trigger_mouse_appear(game)
         assert game.flags.mouse_appeared is True
         assert game.find_char(CharId.MOUSE) is not None
+
+
+class TestShadowFusionOnce:
+    def test_fusion_grants_one_hp_only_once(self) -> None:
+        """L12: fundirse con la sombra da +1 HP máximo UNA vez (los flags
+        de los eventos scripted deben sobrevivir al tick)."""
+        from pop2026canon.application.controller import Command
+        from pop2026canon.application.tick import advance
+        from pop2026canon.domain.level import EventKind
+        from pop2026canon.domain.levels_canon import LEVEL_12
+
+        event = next(e for e in LEVEL_12.events if e.kind is EventKind.SHADOW_FUSION)
+        game = new_game(LEVEL_12, starting_hp=5, has_sword=True)
+        game = replace(game, kid=replace(game.kid, room=event.room))
+        hp_max0 = game.kid.hp_max
+        for _ in range(120):
+            game = advance(game, Command())
+            shadow = game.find_char(CharId.SHADOW)
+            if shadow is not None:
+                game = replace(
+                    game,
+                    kid=replace(game.kid, curr_col=shadow.curr_col, curr_row=shadow.curr_row),
+                )
+        assert game.flags.shadow_fused
+        assert game.kid.hp_max == hp_max0 + 1

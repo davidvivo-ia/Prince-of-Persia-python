@@ -403,30 +403,76 @@ def _draw_kid_frame_raw(
         )
         return
 
-    if 150 <= frame_id <= 167:
-        # Sword combat: engarde / strike
+    if 150 <= frame_id <= 175:
+        # Combate a espada con los frames canon (seqtbl.c):
+        #   150 / 161 parada (hoja vertical delante)
+        #   151-154 estocada (la hoja se extiende; 154 = punta fuera)
+        #   155-157 / 165 recoger la espada y andar en guardia
+        #   158 / 170 / 171 en guardia (hoja a media altura)
+        #   159 / 160 / 163 / 164 pasos en guardia
+        #   162 parada → estocada   166 reposo (sin apuntar)
+        #   167 estocada parada (recoil)   168 atrás   169 empieza la parada
+        #   172-174 herido: tambaleo hacia atrás
+        sign = fsign
+        lean = 0
+        if 172 <= frame_id <= 175:
+            lean = -6  # tambaleo hacia atrás
+        elif frame_id == 167:
+            lean = -3
+        elif frame_id in (152, 153, 154):
+            lean = 3
         head_cx, _, hip_y = _draw_body(
-            surf, px_x, px_y, fsign, colors, leg_spread=10, arm_angle=0.4
+            surf,
+            px_x + lean * sign,
+            px_y,
+            sign,
+            colors,
+            leg_spread=12 if frame_id in (151, 152, 153, 154, 163, 164) else 10,
+            arm_angle=0.4,
         )
-        if colors.weapon is not None:
-            hand_y = hip_y - 12
-            if 165 <= frame_id <= 167:
-                _draw_sword(surf, head_cx + fsign * 14, hand_y, fsign, colors.weapon)
-            else:
-                _draw_sword(surf, head_cx + fsign * 8, hand_y, fsign, colors.weapon)
-        return
-
-    if 161 <= frame_id <= 164:
-        # Block — sable vertical delante
-        head_cx, _, hip_y = _draw_body(surf, px_x, px_y, fsign, colors)
-        if colors.weapon is not None:
+        if colors.weapon is None:
+            return
+        hand_y = hip_y - 12
+        if frame_id in (150, 161, 169, 162):
+            # Parada: hoja vertical delante del cuerpo
             pygame.draw.line(
                 surf,
                 colors.weapon,
-                (head_cx + fsign * 8, hip_y - 30),
-                (head_cx + fsign * 8, hip_y + 4),
+                (head_cx + sign * 9, hip_y - 32),
+                (head_cx + sign * 9, hip_y + 2),
                 3,
             )
+        elif frame_id in (151, 152):
+            _draw_sword(surf, head_cx + sign * 6, hand_y - 4, sign, colors.weapon)
+        elif frame_id in (153, 154):
+            # Estocada: brazo y hoja extendidos
+            pygame.draw.line(
+                surf,
+                colors.tunic,
+                (head_cx + sign * 5, hand_y - 2),
+                (head_cx + sign * 16, hand_y),
+                4,
+            )
+            _draw_sword(surf, head_cx + sign * 16, hand_y, sign, colors.weapon)
+        elif frame_id == 166:
+            # Reposo: la hoja apunta al suelo
+            pygame.draw.line(
+                surf,
+                colors.weapon,
+                (head_cx + sign * 6, hip_y - 4),
+                (head_cx + sign * 12, hip_y + 12),
+                3,
+            )
+        elif 172 <= frame_id <= 175:
+            pygame.draw.line(
+                surf,
+                colors.weapon,
+                (head_cx + sign * 4, hip_y - 6),
+                (head_cx - sign * 8, hip_y - 26),
+                3,
+            )
+        else:
+            _draw_sword(surf, head_cx + sign * 8, hand_y, sign, colors.weapon)
         return
 
     if frame_id == 177:

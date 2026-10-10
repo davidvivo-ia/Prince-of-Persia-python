@@ -29,8 +29,9 @@ import pytest
 
 from pop2026canon.application.controller import Command
 from pop2026canon.application.tick import advance
-from pop2026canon.domain.actions import Action
-from pop2026canon.domain.chars import CharId
+from pop2026canon.domain.actions import Action, Seq, SwordStatus
+from pop2026canon.domain.chars import Char, CharId
+from pop2026canon.domain.combat import PARRY_FRAMES, READY_FRAMES, char_opp_dist, is_hostile
 from pop2026canon.domain.game import Game, GameStatus, new_game
 from pop2026canon.domain.level import Level
 from pop2026canon.domain.levels_canon import CANON_LEVELS
@@ -70,15 +71,6 @@ _PARRY = [
     (_NOOP, 4),
 ]
 # Carrera larga: cruzar un pasillo de chompers sin frenar dentro de uno.
-_HUMAN_MACROS = [
-    *_MACROS,
-    [(_R, 22)],
-    [(_L, 22)],
-    _FIGHT,
-    _PARRY,
-    [(_NOOP, 5)],
-    [(_NOOP, 9)],
-]
 
 
 def campaign_hp(level_number: int) -> int:
@@ -139,12 +131,14 @@ def _key(game: Game) -> tuple:  # type: ignore[type-arg]
     )
     combat: tuple = ()  # type: ignore[type-arg]
     if in_combat:
+        # En combate la posición en píxeles decide si la hoja alcanza
+        # (canon: 12..28 px), así que forma parte del estado.
         guard_micro = [
-            (c.repeat, c.curr_seq_id)
+            (c.x, c.frame, c.refrac)
             for c in game.others
             if c.charid is CharId.GUARD and c.room == k.room
         ]
-        combat = (*guard_micro, k.curr_seq_id, game.tick_count % 16)
+        combat = (*guard_micro, k.x, k.frame, game.tick_count % 16)
     return (
         k.room,
         k.curr_col,
@@ -160,13 +154,106 @@ def _key(game: Game) -> tuple:  # type: ignore[type-arg]
     )
 
 
+Policy = Callable[[Game], Command | None]
+"""Macro reactiva: decide el comando tick a tick (``None`` = terminar)."""
+
+
+def _nearest_enemy(game: Game) -> Char | None:
+    k = game.kid
+    best = None
+    for c in game.others:
+        if not is_hostile(c) or c.alive >= 0 or c.room != k.room or c.curr_row != k.curr_row:
+            continue
+        if best is None or abs(char_opp_dist(k, c)) < abs(char_opp_dist(k, best)):
+            best = c
+    return best
+
+
+def _duel_policy(game: Game) -> Command | None:
+    """Lo que hace un jugador en un duelo: para cuando el guard lanza la
+    estocada (frames 152/153), pincha cuando está a distancia de hoja
+    (12..28 px) y en guardia, se acerca si está lejos y retrocede si lo
+    tiene encima. Termina cuando no queda rival en la fila."""
+    k = game.kid
+    enemy = _nearest_enemy(game)
+    if enemy is None:
+        return None
+    if k.sword != SwordStatus.DRAWN:
+        return _NOOP  # control_standing desenvaina solo al verle
+    d = char_opp_dist(k, enemy)
+    # Acaba de parar: réplica inmediata (canon blocktostrike) — es la
+    # única forma de alcanzar a un rival que bloquea siempre (el visir).
+    if k.frame in PARRY_FRAMES and 8 <= d < 29:
+        return _STRIKE
+    if k.curr_seq_id != int(Seq.ENGARDE) or k.frame not in READY_FRAMES:
+        return _NOOP
+    if enemy.frame in (152, 153):
+        return _UP
+    if enemy.frame in (168, 151):
+        return _NOOP
+    if d < 0:
+        return _L if k.direction == 0 else _R  # el rival a la espalda: girarse
+    forward = _R if k.direction == 0 else _L
+    backward = _L if k.direction == 0 else _R
+    if 12 <= d < 29:
+        return _STRIKE
+    if d >= 29:
+        return forward
+    return backward
+
+
+_DUEL: list[tuple[Policy, int]] = [(_duel_policy, 48)]
+
+_COMBAT_MACROS: list[list[tuple[Command | Policy, int]]] = [_DUEL, *_MACROS]
+"""Con un enemigo armado a la vista: batirse, o moverse (huir, saltar,
+pasar de largo — imprescindible ante el esqueleto, que no muere)."""
+
+
+def _in_combat(game: Game) -> bool:
+    enemy = _nearest_enemy(game)
+    return enemy is not None and abs(char_opp_dist(game.kid, enemy)) < 90
+
+
+HP_COST_TICKS = 150
+"""Un punto de vida perdido "cuesta" como 150 ticks de camino: el bot
+prefiere la ruta que llega entero (un kid a 1 HP muere de cualquier
+estocada)."""
+
+
+def _with_hp_cost(priority: Callable[[Game], int]) -> Callable[[Game], int]:
+    def _f(game: Game) -> int:
+        return priority(game) + HP_COST_TICKS * (game.kid.hp_max - game.kid.hp_curr)
+
+    return _f
+
+
+_HUMAN_MACROS: list[list[tuple[Command | Policy, int]]] = [
+    *_MACROS,
+    _DUEL,
+    [(_R, 22)],
+    [(_L, 22)],
+    _FIGHT,
+    _PARRY,
+    [(_NOOP, 5)],
+    [(_NOOP, 9)],
+]
+
+
 def _run_macro_trace(
-    game: Game, holds: list[tuple[Command, int]]
+    game: Game, holds: list[tuple[Command | Policy, int]]
 ) -> tuple[Game | None, list[Command]]:
-    """Como ``_run_macro`` pero devuelve también los comandos emitidos."""
+    """Como ``_run_macro`` pero devuelve también los comandos emitidos.
+    Un elemento puede ser una política (callable) que decide cada tick."""
     cmds: list[Command] = []
-    for cmd, ticks in holds:
+    for item, ticks in holds:
         for _ in range(ticks):
+            if callable(item):
+                decided = item(game)
+                if decided is None:
+                    break
+                cmd = decided
+            else:
+                cmd = item
             game = advance(game, cmd)
             cmds.append(cmd)
             if game.status is GameStatus.WON_LEVEL:
@@ -213,7 +300,7 @@ def _search_trace(
             counter += 1
             heapq.heappush(heap, (prio + 10**6, counter, game, trace))
             continue
-        for macro in _HUMAN_MACROS:
+        for macro in _COMBAT_MACROS if _in_combat(game) else _HUMAN_MACROS:
             room_spent[room] = room_spent.get(room, 0) + 1
             budget -= 1
             result, cmds = _run_macro_trace(game, macro)
@@ -268,7 +355,7 @@ def solve_level_human_trace(
     start = _settle(new_game(level, starting_hp=campaign_hp(level.number), has_sword=has_sword))
     if start is None:
         return None
-    priority = make_priority(level, dist)
+    priority = _with_hp_cost(make_priority(level, dist))
     exit_coord, plate_coord = _exit_goal(level)
 
     def _won(game: Game) -> bool:
@@ -281,7 +368,7 @@ def solve_level_human_trace(
     # nivel respecto al guard y la salida).
     sword = _sword_coord(level)
     if not has_sword and sword is not None:
-        sword_priority = _priority_to_cell(level, sword)
+        sword_priority = _with_hp_cost(_priority_to_cell(level, sword))
 
         def _armed(game: Game) -> bool:
             return _won(game) or game.kid.has_sword

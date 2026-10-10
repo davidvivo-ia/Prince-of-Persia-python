@@ -51,6 +51,9 @@ class ActKind(IntEnum):
     NOP = 7
     """No-op (placeholder)."""
 
+    FLIP = 8
+    """Canon ``SEQ_FLIP``: el char da media vuelta (cambia ``direction``)."""
+
 
 @dataclass(frozen=True, slots=True)
 class SeqAct:
@@ -96,6 +99,10 @@ def jmp(to: Seq | int) -> SeqAct:
 
 def setup(action: Action | int) -> SeqAct:
     return SeqAct(ActKind.SETUP, int(action))
+
+
+def flip() -> SeqAct:
+    return SeqAct(ActKind.FLIP, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -493,22 +500,77 @@ _SEQ_STAND_UP_FROM_CROUCH: Sequence = (
 # ===========================================================================
 
 _SEQ_DRAW_SWORD: Sequence = (
+    setup(Action.STAND),
+    snd(SND_STRIKE),
+    dx(2),
     frame(207),
     frame(208),
+    dx(2),
     frame(209),
+    dx(2),
     frame(210),
-    jmp(Seq.STAND),  # debería ir a engarde — placeholder
+    dx(3),
+    jmp(Seq.ENGARDE),
 )
 
+# Estocada del kid (canon seq 75 ``faststrike``): la punta llega en el
+# frame 154 ("poking"); 155 es el retroceso (acción bumped: sin control).
 _SEQ_STRIKE: Sequence = (
+    setup(Action.STAND),
     snd(SND_STRIKE),
-    frame(165),  # ventana de impacto comienza
-    frame(166),
-    frame(167),  # ventana de impacto termina
+    frame(151),
+    frame(152),
+    frame(153),
+    frame(154),
+    frame(155),
+    frame(156),
+    frame(157),
+    jmp(Seq.ENGARDE),
+)
+
+# Estocada del guard (canon seq 58 ``strike``): un frame de preparación
+# (168) delante — por eso el kid tiene un instante para parar.
+_SEQ_GUARD_STRIKE: Sequence = (
+    setup(Action.STAND),
+    snd(SND_STRIKE),
     frame(168),
-    frame(169),
-    frame(170),
-    jmp(Seq.STAND),
+    frame(151),
+    frame(152),
+    frame(153),
+    frame(154),
+    frame(155),
+    frame(156),
+    frame(157),
+    jmp(Seq.ENGARDE),
+)
+
+# La estocada fue parada (canon seq 69 ``blockedstrike``): recoil.
+_SEQ_ATTACK_PARRIED: Sequence = (
+    setup(Action.STAND),
+    snd(SND_BUMP),
+    frame(167),
+    frame(155),
+    frame(156),
+    frame(157),
+    jmp(Seq.ENGARDE),
+)
+
+# Herido por la espada (canon seq 74 ``stabbed``): tambaleo hacia atrás
+# (dx total -10) y vuelta a la guardia.
+_SEQ_HIT_BY_SWORD: Sequence = (
+    setup(Action.STAND),
+    snd(SND_BUMP),
+    frame(172),
+    dx(-1),
+    frame(173),
+    dx(-1),
+    frame(174),
+    dx(-1),
+    dx(-2),
+    dx(-5),
+    frame(156),
+    frame(157),
+    jmp(Seq.ENGARDE),
 )
 
 
@@ -528,14 +590,60 @@ _SEQ_DYING: Sequence = (
     jmp(Seq.DYING),  # frame final permanente
 )
 
+# Muerte a espada (canon seq 85 ``stabkill`` → ``dropdead``): se desploma.
 _SEQ_STABBED_TO_DEATH: Sequence = (
+    setup(Action.HURT),
     snd(SND_DEATH),
-    frame(171),
-    frame(172),
-    frame(173),
-    frame(174),
-    frame(175),
+    frame(179),
+    frame(180),
+    frame(181),
+    frame(182),
+    dx(1),
+    frame(183),
+    dx(-4),
+    frame(185),
     jmp(Seq.DYING),
+)
+
+# Muerto a espada junto a un borde: cae de espaldas al vacío (canon seq
+# 81 ``fightfall`` / 82 ``efightfall``).
+_SEQ_KID_PUSHED_OFF_LEDGE: Sequence = (
+    setup(Action.IN_MIDAIR),
+    dy(-1),
+    frame(102),
+    dx(-2),
+    dy(6),
+    frame(103),
+    dx(-2),
+    dy(9),
+    frame(104),
+    dx(-1),
+    dy(12),
+    frame(105),
+    dx(-3),
+    set_fall(0, 15),
+    setup(Action.IN_FREEFALL),
+    jmp(Seq.FALL),
+)
+
+_SEQ_GUARD_PUSHED_OFF_LEDGE: Sequence = (
+    setup(Action.IN_MIDAIR),
+    dy(-1),
+    dx(-2),
+    frame(102),
+    dx(-3),
+    dy(6),
+    frame(103),
+    dx(-3),
+    dy(9),
+    frame(104),
+    dx(-2),
+    dy(12),
+    frame(105),
+    dx(-3),
+    set_fall(0, 15),
+    setup(Action.IN_FREEFALL),
+    jmp(Seq.FALL),
 )
 
 _SEQ_SPIKED: Sequence = (
@@ -597,49 +705,89 @@ _SEQ_DRINK: Sequence = (
 # advance, arriba → block, espacio → strike.
 
 
+# En guardia (canon ``ready``): 158, 170 y bucle en 171.
 _SEQ_ENGARDE: Sequence = (
     setup(Action.STAND),
-    frame(FrameID.SWORD_READY),
-    jmp(Seq.ENGARDE),  # idle empuñando
-)
-
-_SEQ_ADVANCE: Sequence = (
-    setup(Action.RUN_JUMP),
-    frame(152),
-    dx(2),
-    frame(153),
-    dx(3),
-    frame(154),
-    dx(2),
-    jmp(Seq.ENGARDE),
-)
-
-_SEQ_RETREAT: Sequence = (
-    setup(Action.RUN_JUMP),
-    frame(157),
-    dx(-2),
     frame(158),
-    dx(-3),
-    frame(159),
-    dx(-1),
+    frame(170),
+    frame(171),
     jmp(Seq.ENGARDE),
 )
 
+# Guard en reposo (canon ``alertstand``): no ha visto al kid.
+_SEQ_GUARD_STAND_INACTIVE: Sequence = (
+    setup(Action.STAND),
+    frame(166),
+    jmp(Seq.GUARD_STAND_INACTIVE),
+)
+
+# Avance del kid en guardia (canon seq 86 ``advance``): 6 px.
+_SEQ_ADVANCE: Sequence = (
+    setup(Action.STAND),
+    dx(2),
+    frame(163),
+    dx(4),
+    frame(164),
+    frame(165),
+    jmp(Seq.ENGARDE),
+)
+
+# Avance del guard (canon seq 56 ``fastadvance``): 6 px en dos frames.
+_SEQ_GUARD_ADVANCE: Sequence = (
+    setup(Action.STAND),
+    dx(6),
+    frame(164),
+    frame(165),
+    jmp(Seq.ENGARDE),
+)
+
+# Retroceso en guardia (canon seq 57 ``retreat``): -5 px.
+_SEQ_RETREAT: Sequence = (
+    setup(Action.STAND),
+    dx(-3),
+    frame(160),
+    dx(-2),
+    frame(157),
+    jmp(Seq.ENGARDE),
+)
+
+# Giro en guardia (canon seq 60 ``turnengarde``): media vuelta y paso atrás.
+_SEQ_TURN_WITH_SWORD: Sequence = (
+    setup(Action.STAND),
+    flip(),
+    dx(5),
+    jmp(Seq.RETREAT),
+)
+
+# Parada (canon seq 62 ``readyblock``): 169 → 150 (frame de parada).
 _SEQ_BLOCK_STRIKE: Sequence = (
     setup(Action.STAND),
-    frame(161),  # ventana de block 161..164
-    frame(162),
-    frame(163),
-    frame(164),
+    frame(169),
+    frame(150),
     jmp(Seq.ENGARDE),
 )
 
+# Parada justo tras atacar (canon seq 61 ``striketoblock``).
+_SEQ_PARRY_AFTER_STRIKE: Sequence = (
+    setup(Action.STAND),
+    frame(159),
+    frame(160),
+    frame(150),
+    jmp(Seq.ENGARDE),
+)
+
+# Parada → estocada (canon seq 66 ``blocktostrike``): 162 y la estocada.
 _SEQ_BLOCK_TO_STRIKE: Sequence = (
     setup(Action.STAND),
-    frame(161),
+    snd(SND_STRIKE),
     frame(162),
-    frame(163),
-    jmp(Seq.STRIKE),  # encadena con strike
+    frame(152),
+    frame(153),
+    frame(154),
+    frame(155),
+    frame(156),
+    frame(157),
+    jmp(Seq.ENGARDE),
 )
 
 
@@ -696,12 +844,24 @@ _SEQ_MED_LAND: Sequence = (
 # ===========================================================================
 
 
+# Guard que cae hacia delante (canon seq 83 ``efightfallfwd``).
 _SEQ_GUARD_FALL: Sequence = (
-    setup(Action.IN_FREEFALL),
-    set_fall(0, 1),
+    setup(Action.IN_MIDAIR),
+    dx(1),
+    dy(-1),
     frame(102),
+    dx(2),
+    dy(6),
     frame(103),
-    jmp(Seq.GUARD_FALL),
+    dx(-1),
+    dy(9),
+    frame(104),
+    dy(12),
+    frame(105),
+    dx(-2),
+    set_fall(1, 15),
+    setup(Action.IN_FREEFALL),
+    jmp(Seq.FALL),
 )
 
 _SEQ_BUMPED_FALL: Sequence = (
@@ -813,6 +973,15 @@ TABLE: dict[int, Sequence] = {
     int(Seq.BLOCK_STRIKE): _SEQ_BLOCK_STRIKE,
     int(Seq.BLOCK_TO_STRIKE): _SEQ_BLOCK_TO_STRIKE,
     int(Seq.STRIKE): _SEQ_STRIKE,
+    int(Seq.GUARD_STRIKE): _SEQ_GUARD_STRIKE,
+    int(Seq.GUARD_ADVANCE): _SEQ_GUARD_ADVANCE,
+    int(Seq.TURN_WITH_SWORD): _SEQ_TURN_WITH_SWORD,
+    int(Seq.PARRY_AFTER_STRIKE): _SEQ_PARRY_AFTER_STRIKE,
+    int(Seq.ATTACK_PARRIED): _SEQ_ATTACK_PARRIED,
+    int(Seq.HIT_BY_SWORD): _SEQ_HIT_BY_SWORD,
+    int(Seq.GUARD_STAND_INACTIVE): _SEQ_GUARD_STAND_INACTIVE,
+    int(Seq.KID_PUSHED_OFF_LEDGE): _SEQ_KID_PUSHED_OFF_LEDGE,
+    int(Seq.GUARD_PUSHED_OFF_LEDGE): _SEQ_GUARD_PUSHED_OFF_LEDGE,
     int(Seq.GUARD_FALL): _SEQ_GUARD_FALL,
     int(Seq.EXIT_LEVEL): _SEQ_EXIT_LEVEL,
     int(Seq.DYING): _SEQ_DYING,
@@ -839,8 +1008,10 @@ def get(seq_id: int | Seq) -> Sequence:
 
 # Hit / block windows canónicas (frames donde el strike/parry resuelve)
 
-STRIKE_WINDOW: frozenset[int] = frozenset({165, 166, 167})
-"""Frames del kid en los que un strike conecta."""
+STRIKE_WINDOW: frozenset[int] = frozenset({153, 154})
+"""Canon ``check_hurting``: el atacante sólo puede herir (o ser parado)
+en los frames 153 y 154; la punta alcanza al rival en el 154."""
 
-BLOCK_WINDOW: frozenset[int] = frozenset({161, 162, 163, 164})
-"""Frames del kid en los que un block neutraliza un strike entrante."""
+BLOCK_WINDOW: frozenset[int] = frozenset({150, 161})
+"""Canon: con la espada en los frames de parada (150 / 161) la estocada
+rival rebota."""

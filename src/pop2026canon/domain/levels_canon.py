@@ -1286,10 +1286,9 @@ def _l12() -> Level:
         ),
         _spec(_floor_rows(extras={(5, 1): M, (8, 1): PO})),  # 5 MIRROR fusion
         _spec(_split_rows(upper_cols=(6, 7, 8, 9), extras={(5, 2): L})),
-        _spec(
-            _arena_rows(pillar_pair=(1, 8), extras={(2, 1): S, (8, 1): S}),
-            guards=(G_S(col=5, row=1, direction=-1, skill=11),),
-        ),  # 7 ARENA VIZIER
+        # 7 ARENA VIZIER — al visir lo pone el evento VIZIER_INIT (canon: en
+        # L12 sólo hay un Jaffar); un guard extra aquí lo doblaba.
+        _spec(_arena_rows(pillar_pair=(1, 8), extras={(2, 1): S, (8, 1): S})),
         _spec(_floor_rows(extras={(7, 1): DL, (8, 1): DR})),  # 8 exit + drop a galería
         # Galería sub
         _spec(_lattice_rows(lattice_cols=(3, 6), extras={(5, 1): T})),

@@ -191,33 +191,49 @@ def _handle_stand(char: Char, cmd: Command, terrain: Terrain | None = None) -> C
 
 
 def _handle_engarde(char: Char, cmd: Command) -> Char:
-    """Stance de combate (sword DRAWN, idle en frame 150)."""
+    """Control en guardia (canon ``swordfight``): cada verbo sólo arranca
+    desde los frames que el original permite.
+
+    - ATAQUE desde la guardia (157/158/165/170/171) → estocada; desde la
+      parada (150/161) → estocada tras parar.
+    - ARRIBA desde la guardia → parada (si el rival está lanzando la
+      estocada, el tick la adelanta para llegar a tiempo).
+    - ABAJO desde la guardia → envainar.
+    - Adelante / atrás desde la guardia → avanzar / retroceder.
+    """
     from dataclasses import replace
 
-    sword_drawn = char.sword == SwordStatus.DRAWN
-    if not sword_drawn:
-        # Si por algún motivo el char pierde la espada, vuelve a STAND
+    from pop2026canon.domain.combat import PARRY_FRAMES, READY_FRAMES
+
+    if char.sword != SwordStatus.DRAWN:
         return _start(char, Seq.STAND)
+    frame = char.frame
+    stand_frames = (158, 170, 171)
 
-    # Strike
     if cmd.strike:
-        return _start(char, Seq.STRIKE)
+        if frame in READY_FRAMES:
+            return _start(char, Seq.STRIKE)
+        if frame in PARRY_FRAMES:
+            return _start(char, Seq.BLOCK_TO_STRIKE)
+        return char
 
-    # Block / up — frames 161-164
-    if cmd.up:
-        return _start(char, Seq.BLOCK_STRIKE)
-
-    # Down — envainar
-    if cmd.down:
+    if cmd.down and frame in stand_frames:
         return _start(replace(char, sword=SwordStatus.SHEATHED), Seq.PUT_SWORD_AWAY)
 
-    # Forward/backward → advance/retreat según facing
-    forward_is_right = _facing_right(char)
-    if cmd.right:
-        return _start(char, Seq.ADVANCE if forward_is_right else Seq.RETREAT)
-    if cmd.left:
-        return _start(char, Seq.RETREAT if forward_is_right else Seq.ADVANCE)
+    if cmd.up:
+        if frame in READY_FRAMES or frame == 168:
+            return _start(char, Seq.BLOCK_STRIKE)
+        if frame == 167:
+            return _start(char, Seq.PARRY_AFTER_STRIKE)
+        return char
 
+    forward_is_right = _facing_right(char)
+    wants_forward = cmd.right if forward_is_right else cmd.left
+    wants_back = cmd.left if forward_is_right else cmd.right
+    if wants_forward and frame in stand_frames:
+        return _start(char, Seq.ADVANCE)
+    if wants_back and frame in stand_frames:
+        return _start(char, Seq.RETREAT)
     return char
 
 

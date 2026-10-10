@@ -100,6 +100,22 @@ class Char:
     """Distancia acumulada de la caída libre en curso (sub-tile px).
     Decide el daño al aterrizar (soft / med / mortal)."""
 
+    refrac: int = 0
+    """Canon ``guard_refrac``: ticks que el guard espera tras ser herido
+    antes de volver a atacar (``refractimer[skill]``)."""
+
+    justblocked: int = 0
+    """Canon ``justblocked``: ticks tras parar una estocada en los que el
+    guard bloquea con ``impblockprob`` en vez de ``blockprob``."""
+
+    strike_timer: int = 0
+    """Canon ``kid_sword_strike``: ticks tras una estocada del kid en los
+    que los guards de skill > 0 no avanzan."""
+
+    droppedout: bool = False
+    """Canon ``droppedout``: el guard vio al kid caer de su fila y le
+    seguirá por el borde si es seguro."""
+
 
 @dataclass(frozen=True, slots=True)
 class GuardSkill:

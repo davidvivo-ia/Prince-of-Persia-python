@@ -61,17 +61,29 @@ def draw_floor(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
 
 
 def draw_spike(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
-    """Pinchos como hojas alargadas de hierro emergiendo del suelo.
-
-    Nacen del borde inferior de la celda (la superficie de la losa de
-    la fila de abajo, donde pisa el char)."""
+    """Pinchos de hierro que salen del suelo según su modifier canon
+    (``animate_spike``): 0 recogidos (ranura), 1..4 saliendo, 0x8F..0x80
+    fuera, 6..8 recogiéndose, 0xFF fuera con un cuerpo clavado."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     base_y = y + th - 2
+    if modifier == 0:
+        extent = 0.0
+    elif modifier == 0xFF or modifier & 0x80:
+        extent = 1.0
+    elif modifier < 5:
+        extent = modifier / 4.0
+    else:
+        extent = max(0.0, (9 - modifier) / 4.0)
+    # Ranura en el suelo (siempre visible)
+    pygame.draw.rect(surf, PALETTE.bg, (x + 3, base_y - 3, tw - 6, 3))
+    if extent <= 0.0:
+        return
     n = 4
     sw = (tw - 4) // n
+    height = int(30 * extent)
     for i in range(n):
         sx = x + 2 + i * sw
-        tip = (sx + sw // 2, base_y - 30)
+        tip = (sx + sw // 2, base_y - height)
         pygame.draw.polygon(
             surf,
             PALETTE.blade,
@@ -79,6 +91,8 @@ def draw_spike(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
         )
         pygame.draw.line(surf, _mix(PALETTE.blade, PALETTE.primary, 0.5), (sx, base_y), tip, 1)
         pygame.draw.line(surf, PALETTE.guard_armor, tip, (sx + sw, base_y), 1)
+    if modifier == 0xFF:
+        pygame.draw.ellipse(surf, PALETTE.error, (x + 4, base_y - 10, tw - 8, 8))
 
 
 def draw_pillar(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
@@ -182,13 +196,26 @@ def draw_potion(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None
 
 
 def draw_loose(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
-    """Suelo suelto. Modifier indica shake state."""
-    draw_floor(surf, x, y, 0)
+    """Losa suelta. ``modifier`` es su estado canon: 0 quieta; 1..10 a punto
+    de caer (vibra cada vez más); 0x80.. temblando sin caer."""
+    jitter = 0
+    if modifier:
+        phase = modifier & 0x7F
+        jitter = (1 if phase % 2 else -1) * (2 if phase > 5 else 1)
+    draw_floor(surf, x + jitter, y, 0)
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
     slab_h = max(18, th // 3)
     top = y + th - slab_h
-    pygame.draw.line(surf, PALETTE.bg, (x + tw // 4, top + 4), (x + tw * 3 // 4, y + th - 3), 2)
-    pygame.draw.line(surf, PALETTE.brick_dark, (x + tw // 5, top + 3), (x + tw // 3, top + 10), 1)
+    pygame.draw.line(
+        surf, PALETTE.bg, (x + jitter + tw // 4, top + 4), (x + jitter + tw * 3 // 4, y + th - 3), 2
+    )
+    pygame.draw.line(
+        surf,
+        PALETTE.brick_dark,
+        (x + jitter + tw // 5, top + 3),
+        (x + jitter + tw // 3, top + 10),
+        1,
+    )
 
 
 def draw_doortop(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
@@ -206,6 +233,17 @@ def draw_mirror(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None
         surf, _mix(PALETTE.muted, PALETTE.primary, 0.4), (x + 4, y + 6, tw - 8, th - 20)
     )
     pygame.draw.rect(surf, PALETTE.warning, (x + 2, y + 4, tw - 4, th - 16), 2)
+
+
+def draw_falling_slab(surf: pygame.Surface, x: int, top: int) -> None:
+    """Losa suelta cayendo: la losa sola, a la altura ``top`` (píxeles)."""
+    tw, th = LAYOUT.tile_w, LAYOUT.tile_h
+    slab_h = max(18, th // 3)
+    pygame.draw.rect(surf, PALETTE.brick, (x, top, tw, slab_h))
+    pygame.draw.rect(surf, PALETTE.brick_dark, (x, top, tw, slab_h), 2)
+    pygame.draw.line(
+        surf, PALETTE.bg, (x + tw // 4, top + 4), (x + tw * 3 // 4, top + slab_h - 3), 2
+    )
 
 
 def draw_debris(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
@@ -265,31 +303,34 @@ def draw_level_door_right(surf: pygame.Surface, x: int, y: int, modifier: int = 
 
 
 def draw_chomper(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
-    """Mandíbula vertical. Modifier indica state del ciclo (0..14)."""
+    """Cuchillas verticales. ``modifier`` es el frame canon 1..15 (0 =
+    paradas, abiertas); muerden en el 2; 0x80 = sangre."""
     tw, th = LAYOUT.tile_w, LAYOUT.tile_h
+    frame = modifier & 0x7F
+    blood = bool(modifier & 0x80)
+    # Separación de las hojas: cerradas en el 2, cerrándose en el 1,
+    # abriéndose en 3-5, abiertas el resto.
+    if frame == 2:
+        sep = 1
+    elif frame == 1:
+        sep = 5
+    elif 3 <= frame <= 5:
+        sep = 3 + (frame - 2) * 3
+    else:
+        sep = 12
     # Marco metálico
     pygame.draw.rect(surf, PALETTE.guard_armor, (x + tw // 2 - 3, y, 6, th))
-    # Hojas — separación según state (close en CLOSED, open en OPEN)
-    closed = 9 <= modifier <= 11  # CLOSED phase
-    sep = 4 if closed else 12
+    cx = x + tw // 2
     pygame.draw.polygon(
-        surf,
-        PALETTE.blade,
-        [
-            (x + tw // 2 - sep, y + th // 3),
-            (x + tw // 2, y + th // 2),
-            (x + tw // 2 + sep, y + th // 3),
-        ],
+        surf, PALETTE.blade, [(cx - sep, y + th // 3), (cx, y + th // 2), (cx + sep, y + th // 3)]
     )
     pygame.draw.polygon(
         surf,
         PALETTE.blade,
-        [
-            (x + tw // 2 - sep, y + 2 * th // 3),
-            (x + tw // 2, y + th // 2),
-            (x + tw // 2 + sep, y + 2 * th // 3),
-        ],
+        [(cx - sep, y + 2 * th // 3), (cx, y + th // 2), (cx + sep, y + 2 * th // 3)],
     )
+    if blood:
+        pygame.draw.ellipse(surf, PALETTE.error, (cx - 8, y + th - 10, 16, 8))
 
 
 def draw_torch(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:

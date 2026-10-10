@@ -263,8 +263,11 @@ class TestAutoEngarde:
         g = replace(g, kid=replace(g.kid, curr_col=3, sword=SwordStatus.SHEATHED))
         g = advance(g, Command())
         assert g.kid.sword == SwordStatus.DRAWN
-        assert g.kid.curr_seq_id == int(Seq.ENGARDE)
+        assert g.kid.curr_seq_id == int(Seq.DRAW_SWORD), "canon: desenvaina (seq 55)"
         assert g.kid.direction == 0, "mira hacia el guard"
+        for _ in range(6):
+            g = advance(g, Command())
+        assert g.kid.curr_seq_id == int(Seq.ENGARDE)
 
     def test_no_auto_draw_without_sword(self) -> None:
         guards = (GuardSpawn(col=6, row=2, direction=-1, skill=0),)

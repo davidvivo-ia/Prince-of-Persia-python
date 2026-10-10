@@ -6,6 +6,91 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.17.0] — 2026-10-10
+
+### Trampas y enemigos rehechos sobre el código del original
+
+Todas las trampas y toda la IA de los enemigos se han tirado y vuelto
+a escribir siguiendo ``seg007.c``, ``seg002.c``, ``seg003.c`` y
+``seqtbl.c`` de SDLPoP. Lo que había era una aproximación por celdas
+con números inventados; esto son las mismas máquinas de estado.
+
+**Trampas** (``traps.py`` / ``tick.py``):
+
+- Losa suelta: al pisarla (o al golpearla desde abajo saltando) el
+  modifier cuenta 1..11 y CAE aunque el kid ya no esté encima; una losa
+  que se estrella en su fila sólo la hace temblar (0x80). La losa que
+  cae es un *mob* con gravedad (+3 hasta 29): arrastra las losas
+  sueltas que atraviesa, baja de sala en sala, al estrellarse deja
+  escombros (los pinchos de esa celda quedan inutilizados, una poción
+  se destruye, una antorcha pasa a "antorcha con escombros"), sacude
+  las losas de la fila, acciona el botón sobre el que cae (un OPENER
+  queda abierto para siempre) y quita 1 HP al kid si le cae en la cabeza.
+- Pinchos: recogidos hasta que el kid se acerca por encima
+  (``check_spike_below``, también desde el aire); salen (1..4), se
+  quedan 15 ticks fuera (0x8F..0x80), se recogen (6..8). Corriendo
+  mueres sólo mientras salen; aterrizar de un salto o una caída con
+  ellos fuera o saliendo mata; andar con cuidado entre ellos es seguro.
+  Un cuerpo clavado los deja fijos (0xFF).
+- Cuchillas: paradas (abiertas) hasta que el kid llega a su fila
+  (aterrizar, empezar a caer, cambiar de sala o fila): arrancan con los
+  desfases canon 15, 12, 9, 6, 13, 10... y ciclan 1..15; muerden en el
+  frame 2; se paran al irse el kid de la fila; sangre tras un mordisco.
+- Botones: un OPENER pisado por una losa o por un muerto queda
+  accionado para siempre (``died_on_button`` / escombros).
+- Los guards también mueren en cuchillas y pinchos; una caída que no
+  sea suave los mata (canon ``land``).
+
+**Enemigos** (``guard.py`` / ``combat.py`` / ``seqtbl.py``):
+
+- Frames y secuencias canon: en guardia 158/170/171, estocada del kid
+  151→154 (la punta hiere en el 154) y del guard con preparación 168,
+  parada 169→150 (y 161), estocada tras parar, estocada parada (167),
+  herido (172-174 con retroceso), desplome 179-185, avance 6 px,
+  retroceso 5 px, giro en guardia.
+- Impacto por píxeles (``char_opp_dist``): se hiere entre 12 (8 si el
+  rival va desarmado) y 28 px; la estocada se para si el rival tiene la
+  hoja en 150/161 a menos de 29 px. **Un kid desarmado muere de una
+  estocada.** Si ambos conectan a la vez sólo cuenta la del kid.
+- IA ``autocontrol_guard_active``: línea de visión con la regla de
+  "ve pero no viene" (losa suelta, cuchillas, gate cerrada o hueco por
+  medio), se aparta a menos de 12 px, bloquea con ``blockprob`` /
+  ``impblockprob``, ataca con ``strikeprob`` / ``restrikeprob`` a 12-28
+  px y avanza con ``advprob`` fuera de ese rango (nunca mientras el kid
+  está en plena estocada si su skill > 0), estocada preventiva al kid
+  que llega corriendo o saltando, refractario tras ser herido, se gira
+  si el kid le pasa por detrás, persigue al kid a la sala vecina y le
+  sigue por un borde si abajo es seguro. Empieza en reposo (frame 166)
+  y se pone en guardia al ver al kid. El esqueleto y el visir usan la
+  misma IA.
+- El kid sólo ataca, para, avanza o retrocede desde los frames de
+  guardia (canon ``swordfight``); su parada se adelanta un frame si el
+  rival ya está pinchando. Desenvaina solo cuando un enemigo le ve a
+  menos de 90 px, o se gira si lo tiene a la espalda.
+- Render: poses por frame canon (parada, estocada, herido, reposo),
+  pinchos que salen y se recogen, cuchillas por frame, losas que
+  tiemblan y caen, escombros.
+- Bug: los flags de los eventos scripted (sombra fusionada, esqueleto
+  despierto, visir, ratón) se perdían cada tick porque la recogida de
+  items los leía del juego anterior; la fusión con la sombra en L12
+  daba +1 HP máximo en cada tick de contacto. Ahora ocurre una vez.
+- Regla canon ``justblocked``: al guard cuya estocada acaba de ser
+  parada le cuesta bloquear la réplica durante 4 ticks
+  (``impblockprob``). Es como se vence al visir, que bloquea siempre:
+  parar y contraatacar desde la parada (``blocktostrike``).
+- Bot humano: en vez de una ristra fija de estocadas, una política
+  reactiva de duelo (para cuando el rival lanza la estocada, replica
+  desde la parada, pincha a distancia de hoja, se acerca o retrocede)
+  — lo que hace un jugador;
+  en combate sólo considera batirse o moverse; prefiere llegar entero
+  (cada HP perdido cuesta como 150 ticks de camino) y la posición en
+  píxeles forma parte del estado de combate. Replays dorados
+  regenerados. Con el combate canon el bot humano completa los
+  **niveles 1 y 3 originales** (en el 1: espada al otro lado del nivel,
+  CLOSER saltado, duelo con el guard y plate de salida); en el 2 la
+  política de duelo vence al primer guard pero la búsqueda agota el
+  presupuesto en las salas siguientes.
+
 ## [canon-0.16.0] — 2026-10-10
 
 ### Cornisas, caídas y gates como en el original

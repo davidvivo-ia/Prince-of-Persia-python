@@ -113,9 +113,13 @@ class TestNewSequenceShapes:
         seq = get(Seq.BLOCK_STRIKE)
         assert seq[-1].arg == int(Seq.ENGARDE)
 
-    def test_block_to_strike_chains_to_strike(self) -> None:
+    def test_block_to_strike_pokes_and_returns_to_engarde(self) -> None:
+        """Canon blocktostrike: 162 y la estocada completa (hasta el 154)."""
         seq = get(Seq.BLOCK_TO_STRIKE)
-        assert seq[-1].arg == int(Seq.STRIKE)
+        frames = [a.arg for a in seq if a.kind is ActKind.FRAME]
+        assert frames[:2] == [162, 152]
+        assert 154 in frames
+        assert seq[-1].arg == int(Seq.ENGARDE)
 
     def test_exit_level_uses_canonical_frames(self) -> None:
         seq = get(Seq.EXIT_LEVEL)
@@ -188,17 +192,17 @@ class TestRunJumpHasFrame43:
 class TestCombatWindows:
     def test_strike_window_canonical(self) -> None:
         # Frames 165-167 son la ventana de impacto del strike
-        assert 165 in STRIKE_WINDOW
-        assert 167 in STRIKE_WINDOW
+        assert 153 in STRIKE_WINDOW
+        assert 154 in STRIKE_WINDOW
         # 168 ya es recover
-        assert 168 not in STRIKE_WINDOW
+        assert 155 not in STRIKE_WINDOW
 
     def test_block_window_canonical(self) -> None:
         # Frames 161-164 son la ventana de bloqueo
+        assert 150 in BLOCK_WINDOW
         assert 161 in BLOCK_WINDOW
-        assert 164 in BLOCK_WINDOW
         # 165 ya es strike windup, no bloqueo
-        assert 165 not in BLOCK_WINDOW
+        assert 158 not in BLOCK_WINDOW
 
 
 class TestFrames:

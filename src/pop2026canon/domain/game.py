@@ -169,30 +169,20 @@ def new_game(level: Level, *, starting_hp: int = START_HITP, has_sword: bool = F
                     direction=spawn.direction,
                     hp_curr=hp,
                     hp_max=hp,
-                    curr_seq_id=int(Seq.STAND),
+                    # Canon: el guard espera en reposo (frame 166) y se
+                    # pone en guardia al ver al kid.
+                    curr_seq_id=int(Seq.GUARD_STAND_INACTIVE),
+                    frame=166,
                     sword=SwordStatus.DRAWN,
                     skill=spawn.skill,
                 )
             )
 
-    # Chompers desfasados entre sí (canon: cada uno arranca en su propia
-    # fase). En sincronía perfecta, dos chompers a 3 celdas forman un
-    # muro casi infranqueable; desfasados son un puzzle de ritmo.
-    from pop2026canon.domain.constants import CHOMPER_SPEED
-    from pop2026canon.domain.tiles import Tile
-
-    state = LevelState()
-    for room in level.rooms:
-        for idx, byte in enumerate(room.fg):
-            if (byte & 0x1F) == int(Tile.CHOMPER):
-                col, row = idx % 10, idx // 10
-                phase = (col * 4 + row * 7 + room.id * 3) % CHOMPER_SPEED
-                if phase:
-                    state = state.with_state((room.id, col, row), phase)
-
+    # Canon: las cuchillas están paradas (abiertas) hasta que el kid
+    # llega a su fila (``start_chompers``).
     return Game(
         level=level,
         kid=kid,
         others=tuple(guard_list),
-        state=state,
+        state=LevelState(),
     )

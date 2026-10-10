@@ -161,12 +161,13 @@ class TestLevelGuardSkillProgression:
                 assert g.skill <= 2
 
     def test_l12_has_vizier_skill_11(self) -> None:
-        found_high = False
-        for room in LEVEL_12.rooms:
-            for g in room.guards:
-                if g.skill >= 11:
-                    found_high = True
-        assert found_high, "L12 sin vizier de skill 11+"
+        """El visir (skill 11) lo pone el evento VIZIER_INIT, no un spawn."""
+        from pop2026canon.domain.level import EventKind
+
+        assert any(e.kind is EventKind.VIZIER_INIT for e in LEVEL_12.events), "L12 sin visir"
+        assert not any(g.skill >= 11 for room in LEVEL_12.rooms for g in room.guards), (
+            "L12 no debe duplicar al visir con un guard de skill 11"
+        )
 
 
 class TestRoomLinksConsistency:

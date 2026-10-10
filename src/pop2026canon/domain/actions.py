@@ -81,22 +81,41 @@ class Seq(IntEnum):
     JUMP_HANG_MIDAIR = 38
     """Salto + agarrarse a cornisa estando en el aire (canon: seq 38)."""
     ENGARDE = 41
-    """En guardia, sword drawn — listo para combate."""
+    """En guardia, sword drawn — listo para combate (canon ``ready``:
+    frames 158, 170, 171)."""
     ADVANCE = 43
-    """Paso adelante con espada empuñada."""
+    """Paso adelante con espada empuñada (canon seq 86 ``advance``)."""
     RETREAT = 44
-    """Paso atrás con espada empuñada."""
+    """Paso atrás con espada empuñada (canon seq 57 ``retreat``)."""
     BLOCK_TO_STRIKE = 45
-    """Bloqueo (parry) que prepara un strike inmediato."""
+    """Parada seguida de estocada (canon seq 66 ``blocktostrike``)."""
     BLOCK_STRIKE = 46
-    """Bloqueo que neutraliza un strike entrante (frames 161-164)."""
+    """Parada (canon seq 62 ``readyblock``: frames 169 → 150)."""
+    GUARD_ADVANCE = 56
+    """Avance rápido del guard (canon ``fastadvance``)."""
+    GUARD_STRIKE = 58
+    """Estocada del guard (canon ``strike``: 168 → 151..157)."""
+    TURN_WITH_SWORD = 60
+    """Giro en guardia tras cruzarse con el rival."""
+    PARRY_AFTER_STRIKE = 61
+    """Parada justo después de atacar (canon ``striketoblock``)."""
+    ATTACK_PARRIED = 69
+    """La estocada fue parada: retroceso (canon ``blockedstrike``)."""
+    HIT_BY_SWORD = 74
+    """Herido por la espada: tambaleo hacia atrás (canon ``stabbed``)."""
+    GUARD_STAND_INACTIVE = 77
+    """Guard en reposo, sin ver al kid (frame 166)."""
+    KID_PUSHED_OFF_LEDGE = 81
+    """Muerto a espada al borde: cae de espaldas (canon ``fightfall``)."""
+    GUARD_PUSHED_OFF_LEDGE = 82
+    """Guard muerto al borde: cae de espaldas (canon ``efightfall``)."""
     STAND_UP_FROM_CROUCH = 49
     CROUCH = 50
     SPIKED = 51
     LOOSE_FLOOR_FELL_ON_KID = 52
     CHOMPED = 54
     DRAW_SWORD = 55
-    PUT_SWORD_AWAY = 56
+    PUT_SWORD_AWAY = 92
     """Guardar espada (de DRAWN a SHEATHED)."""
     EXIT_LEVEL = 64
     """El kid entra por la puerta y sube las escaleras al siguiente nivel."""

@@ -1,5 +1,12 @@
 # `docs/design/05-traps.md` — Trampas
 
+> **canon-0.17.0**: las trampas se reescribieron calcando `seg007.c` de
+> SDLPoP; el modelo vigente es el de los docstrings de
+> `src/pop2026canon/domain/traps.py` (losa suelta con cuenta atrás y
+> *mob* que cae, pinchos con modifier 0/1..4/0x8F..0x80/6..8/0xFF,
+> cuchillas con frame 1..15 y mordisco en el 2, gates con 238/188/24).
+> Lo que sigue es el diseño original, conservado como historia.
+
 Estado por tile dinámico vive en `LevelState.tile_states: dict[(room,col,row), int]`.
 
 ## Loose floor (`tiles_11_loose`)

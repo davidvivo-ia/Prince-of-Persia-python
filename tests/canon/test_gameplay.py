@@ -161,6 +161,8 @@ class TestKidAttacksGuard:
 
 class TestTrapsLethal:
     def test_chomper_kills_kid_when_closed(self) -> None:
+        """Canon: al entrar el kid en la fila las cuchillas arrancan; de
+        pie entre ellas muere en el mordisco (frame 2 del ciclo)."""
         coord = _find_first_tile(LEVEL_2, Tile.CHOMPER)
         assert coord is not None, "L2 sin chompers"
         g = new_game(LEVEL_2)
@@ -168,14 +170,16 @@ class TestTrapsLethal:
             g,
             kid=replace(g.kid, room=coord[0], curr_col=coord[1], curr_row=coord[2]),
         )
-        for _ in range(30):
+        for _ in range(40):
             g = advance(g, Command())
             if g.status is GameStatus.LOST_DIED:
                 break
         assert g.status is GameStatus.LOST_DIED, "Kid no muere pisando chomper"
 
     def test_spike_kills_kid_on_fall(self) -> None:
-        from pop2026canon.domain.actions import Action
+        """Canon: al caer sobre pinchos, salen (check_spike_below) y
+        aterrizar sobre ellos mata."""
+        from pop2026canon.domain.actions import Action, Seq
 
         coord = _find_first_tile(LEVEL_4, Tile.SPIKE)
         assert coord is not None, "L4 sin spikes"
@@ -187,25 +191,30 @@ class TestTrapsLethal:
                 room=coord[0],
                 curr_col=coord[1],
                 curr_row=coord[2],
+                y=0,
                 action=Action.IN_FREEFALL,
+                curr_seq_id=int(Seq.FALL),
                 fall_y=20,
             ),
         )
-        g = advance(g, Command())
+        for _ in range(10):
+            g = advance(g, Command())
+            if g.status is GameStatus.LOST_DIED:
+                break
         assert g.status is GameStatus.LOST_DIED, "Kid no muere aterrizando sobre spike"
 
     def test_loose_floor_eventually_falls(self) -> None:
-        from pop2026canon.domain.traps import LOOSE_FLOOR_DELAY, LevelState, tick_loose
+        from pop2026canon.domain.traps import LOOSE_FLOOR_DELAY, LevelState, loose_press, tick_loose
 
-        state = LevelState()
         coord = (1, 5, 2)
+        state = loose_press(LevelState(), coord)
         fell = False
         for _ in range(LOOSE_FLOOR_DELAY + 2):
-            state, fell_now = tick_loose(state, coord, kid_pressing=True)
+            state, fell_now = tick_loose(state, coord)
             if fell_now:
                 fell = True
                 break
-        assert fell, f"Loose floor no cayó tras {LOOSE_FLOOR_DELAY} ticks de presión"
+        assert fell, f"Loose floor no cayó tras {LOOSE_FLOOR_DELAY} ticks"
         assert coord in state.fallen_floors
 
 

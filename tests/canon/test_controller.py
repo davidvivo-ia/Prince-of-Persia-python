@@ -153,12 +153,25 @@ class TestDeadCharNoInput:
 
 class TestEngardeStance:
     def _drawn_kid(self) -> Char:
-        return replace(_kid_standing(), sword=SwordStatus.DRAWN)
+        # Canon: los verbos en guardia sólo arrancan desde los frames de
+        # guardia (158/170/171).
+        return replace(_kid_standing(), sword=SwordStatus.DRAWN, frame=158)
 
     def test_stand_with_sword_shift_enters_engarde(self) -> None:
         kid = self._drawn_kid()
         new_kid = apply_input(kid, Command(shift=True))
         assert new_kid.curr_seq_id == int(Seq.ENGARDE)
+
+    def test_engarde_verbs_wait_for_a_ready_frame(self) -> None:
+        """A mitad de una estocada (frame 152) ni se ataca ni se avanza."""
+        kid = replace(self._drawn_kid(), curr_seq_id=int(Seq.ENGARDE), frame=152)
+        assert apply_input(kid, Command(strike=True)) is kid
+        assert apply_input(kid, Command(right=True)) is kid
+
+    def test_engarde_strike_from_parry_chains(self) -> None:
+        """Desde la parada (frame 150) el ataque es la estocada tras parar."""
+        kid = replace(self._drawn_kid(), curr_seq_id=int(Seq.ENGARDE), frame=150)
+        assert apply_input(kid, Command(strike=True)).curr_seq_id == int(Seq.BLOCK_TO_STRIKE)
 
     def test_engarde_strike_starts_strike(self) -> None:
         kid = replace(self._drawn_kid(), curr_seq_id=int(Seq.ENGARDE))

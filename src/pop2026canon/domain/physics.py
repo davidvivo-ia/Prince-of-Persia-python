@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from pop2026canon.domain.actions import Action, Direction, Seq
-from pop2026canon.domain.chars import Char
+from pop2026canon.domain.actions import Action, Direction, Seq, SwordStatus
+from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.constants import (
     FALLING_SPEED_ACCEL,
     FALLING_SPEED_ACCEL_FEATHER,
@@ -77,6 +77,7 @@ def play_seq(char: Char) -> Char:
     new_fall_x = char.fall_x
     new_fall_y = char.fall_y
     new_seq_id = seq_id
+    new_direction = char.direction
 
     # Tope de iteraciones — protege contra bucles JMP sin FRAME.
     max_iters = 256
@@ -101,10 +102,17 @@ def play_seq(char: Char) -> Char:
                 fall_y=new_fall_y,
                 curr_seq_id=new_seq_id,
                 curr_seq_idx=idx + 1,
+                direction=new_direction,
             )
 
         if act.kind is ActKind.DX:
-            new_x += act.arg * _forward_sign(char.direction)
+            new_x += act.arg * _forward_sign(new_direction)
+        elif act.kind is ActKind.FLIP:
+            new_direction = (
+                int(Direction.LEFT)
+                if new_direction == int(Direction.RIGHT)
+                else int(Direction.RIGHT)
+            )
         elif act.kind is ActKind.DY:
             new_y += act.arg
         elif act.kind is ActKind.SND:
@@ -643,13 +651,25 @@ def _land(char: Char) -> Char:
         fall_dist=0,
         landed_fall_y=char.fall_y,
     )
+    is_enemy = char.charid is not CharId.KID and char.charid is not CharId.PRINCESS
     if char.float_ticks > 0 or dist < LAND_MED_FALL_DIST:
+        if is_enemy and char.sword == SwordStatus.DRAWN:
+            # Canon seq 63: el guard aterriza y sigue en guardia.
+            return replace(
+                landed,
+                action=Action.STAND,
+                curr_seq_id=int(Seq.ENGARDE),
+                curr_seq_idx=0,
+            )
         return replace(
             landed,
             action=Action.STAND,
             curr_seq_id=int(Seq.SOFT_LAND),
             curr_seq_idx=0,
         )
+    if is_enemy and char.charid is not CharId.SHADOW:
+        # Canon land(): un guard muere en cualquier caída que no sea suave.
+        dist = LAND_DEAD_FALL_DIST
     if dist >= LAND_DEAD_FALL_DIST:
         return replace(
             landed,
