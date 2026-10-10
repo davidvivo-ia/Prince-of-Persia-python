@@ -54,7 +54,11 @@ class Seq(IntEnum):
     STANDING_JUMP = 3
     RUN_JUMP = 4
     TURN = 5
+    STANDING_JUMP_FORWARD = 6
+    """Salto largo desde parado (ARRIBA+dirección): libra 2 celdas."""
     FALL = 7
+    STEP = 9
+    """Paso cuidadoso (SHIFT+dirección): una celda, nunca cae por el borde."""
     JUMP_UP_GRAB_STRAIGHT = 8
     CLIMB_UP = 10
     RELEASE_LEDGE_LAND = 11

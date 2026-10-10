@@ -124,10 +124,12 @@ def parse_level_blob(data: bytes, *, number: int, name: str = "") -> Level:
         guards: tuple[GuardSpawn, ...] = ()
         if guards_tile[r] < ROOM_TILES:
             gt = guards_tile[r]
+            # Semántica de fila: el char canon OCUPA la celda del suelo que
+            # pisa; el nuestro está una fila por encima de su soporte.
             guards = (
                 GuardSpawn(
                     col=gt % 10,
-                    row=gt // 10,
+                    row=max(0, gt // 10 - 1),
                     direction=-1 if guards_dir[r] == 0xFF else 0,
                     skill=guards_skill[r] & 0x0F,
                     color=guards_color[r],
@@ -152,7 +154,8 @@ def parse_level_blob(data: bytes, *, number: int, name: str = "") -> Level:
         rooms=tuple(rooms),
         start_room=start_room if 1 <= start_room <= ROOMS else 1,
         start_col=start_pos % 10,
-        start_row=start_pos // 10,
+        # Misma semántica de fila que los guards (ver arriba).
+        start_row=max(0, start_pos // 10 - 1),
         start_direction=start_dir,
         events=(),
         doorlinks=tuple(doorlink_pairs),

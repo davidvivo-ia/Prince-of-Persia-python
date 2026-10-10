@@ -50,11 +50,15 @@ class Command:
         return self.left or self.right or self.up or self.down
 
 
-def apply_input(char: Char, cmd: Command) -> Char:
+def apply_input(char: Char, cmd: Command, level: object | None = None) -> Char:
     """Decide si el char cambia de secuencia según el input.
 
     Si no aplica ninguna transición, devuelve el char tal cual (la
     secuencia actual seguirá ejecutándose normalmente).
+
+    ``level`` (opcional) habilita los verbos que miran el terreno: el
+    paso cuidadoso (no cae por el borde) y colgarse de un borde para
+    bajar un piso.
     """
     if char.alive >= 0:
         return char  # muerto, no responde a input
@@ -62,6 +66,8 @@ def apply_input(char: Char, cmd: Command) -> Char:
     handler = _DISPATCH.get(char.action)
     if handler is None:
         return char
+    if handler is _handle_stand:
+        return _handle_stand(char, cmd, level)
     return handler(char, cmd)
 
 
@@ -96,7 +102,62 @@ def _flip(char: Char) -> Char:
 # ---------------------------------------------------------------------------
 
 
-def _handle_stand(char: Char, cmd: Command) -> Char:
+def _forward_sign(char: Char) -> int:
+    return 1 if _facing_right(char) else -1
+
+
+def _floor_ahead(char: Char, level: object | None) -> bool | None:
+    """¿Hay suelo bajo la celda de delante? ``None`` si no hay nivel."""
+    if level is None:
+        return None
+    from pop2026canon.domain.physics import floor_below_solid
+
+    lvl = level
+    col = char.curr_col + _forward_sign(char)
+    if not (0 <= col < 10):
+        return True  # cambio de sala: lo resuelve la física
+    return floor_below_solid(lvl, char.room, col, char.curr_row)  # type: ignore[arg-type]
+
+
+def _climb_down(char: Char, level: object | None) -> Char | None:
+    """↓+SHIFT en un borde: el kid se descuelga y queda colgado de la
+    cornisa que pisaba, una fila más abajo (canon: bajar un piso sin
+    daño). ``None`` si no hay borde delante."""
+    from dataclasses import replace
+
+    from pop2026canon.domain.physics import is_solid_at
+
+    if level is None:
+        return None
+    lvl = level
+    fwd = _forward_sign(char)
+    hang_col = char.curr_col + fwd
+    hang_row = char.curr_row + 1
+    if not (0 <= hang_col < 10 and hang_row < 3):
+        return None
+    room = lvl.room(char.room)  # type: ignore[attr-defined]
+    # Borde: nada delante ni bajo-delante; la celda que pisaba es la cornisa.
+    if is_solid_at(room, hang_col, char.curr_row) or is_solid_at(room, hang_col, hang_row):
+        return None
+    if not is_solid_at(room, char.curr_col, hang_row):
+        return None
+    return replace(
+        char,
+        curr_col=hang_col,
+        curr_row=hang_row,
+        x=4 if fwd > 0 else 9,
+        y=0,
+        direction=int(Direction.LEFT) if fwd > 0 else int(Direction.RIGHT),
+        action=Action.HANG_STRAIGHT,
+        curr_seq_id=int(Seq.GRAB_LEDGE_MIDAIR),
+        curr_seq_idx=0,
+        fall_x=0,
+        fall_y=0,
+        fall_dist=0,
+    )
+
+
+def _handle_stand(char: Char, cmd: Command, level: object | None = None) -> Char:
     from dataclasses import replace
 
     sword_drawn = char.sword == SwordStatus.DRAWN
@@ -110,29 +171,46 @@ def _handle_stand(char: Char, cmd: Command) -> Char:
         return _start(replace(char, sword=SwordStatus.DRAWN), Seq.DRAW_SWORD)
 
     # Con sword DRAWN: SHIFT entra en stance ENGARDE.
-    if sword_drawn and cmd.shift and not cmd.up:
+    if sword_drawn and cmd.shift and not cmd.up and not (cmd.left or cmd.right or cmd.down):
         return _start(char, Seq.ENGARDE)
 
     # Con sword DRAWN: down → envainar.
-    if sword_drawn and cmd.down:
+    if sword_drawn and cmd.down and not cmd.shift:
         return _start(replace(char, sword=SwordStatus.SHEATHED), Seq.PUT_SWORD_AWAY)
 
     # Strike key con espada desenvainada
     if cmd.strike and sword_drawn:
         return _start(char, Seq.STRIKE)
 
+    # ↓ + SHIFT: descolgarse del borde (bajar un piso sin daño)
+    if cmd.down and cmd.shift:
+        hung = _climb_down(char, level)
+        if hung is not None:
+            return hung
+        return char
+
+    horizontal = cmd.right or cmd.left
+    wants_right = cmd.right
+    facing_ok = (wants_right and _facing_right(char)) or (cmd.left and _facing_left(char))
+
+    if horizontal and not facing_ok:
+        return _start(_flip(char), Seq.TURN)
+
+    # ↑ + dirección: salto largo desde parado (canon: libra 2 celdas)
+    if horizontal and cmd.up:
+        return _start(char, Seq.STANDING_JUMP_FORWARD)
+
+    # SHIFT + dirección: paso cuidadoso — nunca cae por el borde
+    if horizontal and cmd.shift:
+        if _floor_ahead(char, level) is False:
+            return char  # canon: te detienes en el borde
+        return _start(char, Seq.STEP)
+
     # Movimiento horizontal
-    if cmd.right:
-        if _facing_right(char):
-            return _start(char, Seq.START_RUN)
-        return _start(_flip(char), Seq.TURN)
+    if horizontal:
+        return _start(char, Seq.START_RUN)
 
-    if cmd.left:
-        if _facing_left(char):
-            return _start(char, Seq.START_RUN)
-        return _start(_flip(char), Seq.TURN)
-
-    # Salto vertical
+    # Salto vertical (trepar / agarrar cornisa de arriba)
     if cmd.up:
         return _start(char, Seq.STANDING_JUMP)
 

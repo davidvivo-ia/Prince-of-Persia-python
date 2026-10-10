@@ -319,14 +319,27 @@ def blocks_body_at(
     """
     if not (0 <= col < SCREEN_TILECOUNT_X and 0 <= row < SCREEN_TILECOUNT_Y):
         return True
-    tile, modifier = room.tile_at(col, row)
-    if tile is Tile.WALL:
+    # Gate en la propia celda (niveles fan: la reja está en la fila del kid).
+    if _gate_closed(room, col, row, open_gates):
         return True
-    if tile is Tile.GATE:
-        if modifier >= 7:
-            return False
-        return (room.id, col, row) not in open_gates
-    return False
+    # Semántica de fila canon: el char original OCUPA la celda del suelo
+    # que pisa; el nuestro vive una fila por encima. Un muro o una gate
+    # cerrada en la celda de DEBAJO es, en el nivel original, la que
+    # corta el paso en esa columna. Un WALL en la celda propia es, en
+    # cambio, el muro del piso de ARRIBA: no bloquea.
+    if row + 1 >= SCREEN_TILECOUNT_Y:
+        return False
+    below, _ = room.tile_at(col, row + 1)
+    return below is Tile.WALL or _gate_closed(room, col, row + 1, open_gates)
+
+
+def _gate_closed(
+    room: Room, col: int, row: int, open_gates: frozenset[tuple[int, int, int]]
+) -> bool:
+    tile, modifier = room.tile_at(col, row)
+    if tile is not Tile.GATE or modifier >= 7:
+        return False
+    return (room.id, col, row) not in open_gates
 
 
 def check_floor_below(room: Room, col: int, row: int) -> bool:
@@ -457,6 +470,7 @@ _GROUNDED_SEQS: frozenset[int] = frozenset(
         int(Seq.START_RUN),
         int(Seq.RUN),
         int(Seq.STOP_RUN),
+        int(Seq.STEP),
         int(Seq.RUNTURN),
         int(Seq.TURN),
         int(Seq.BUMP),

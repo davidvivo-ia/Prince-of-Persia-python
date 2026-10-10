@@ -44,7 +44,11 @@ def advance(game: Game, cmd: Command) -> Game:
         return game
 
     # 1. Input del jugador → posible cambio de seq del kid
-    new_kid = apply_input(game.kid, cmd)
+    new_kid = apply_input(game.kid, cmd, game.level)
+
+    # 1a. Canon: con espada, el kid se pone en guardia solo al acercarse
+    #     un guard (misma sala y fila, a ≤ 3 celdas).
+    new_kid = _auto_engarde(new_kid, game.others)
 
     # 1b. Hang-shuffle: lateral colgado de cornisa
     if new_kid.action is Action.HANG_STRAIGHT and (cmd.left or cmd.right):
@@ -249,6 +253,37 @@ def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
             if below is Tile.OPENER:
                 pressed.add((actor.room, actor.curr_col, actor.curr_row + 1))
     return pressed
+
+
+def _auto_engarde(kid: Char, others: tuple[Char, ...]) -> Char:
+    """Desenvaina y se pone en guardia automáticamente ante un guard
+    cercano (canon POP1). Sólo desde STAND parado y con espada."""
+    from pop2026canon.domain.actions import SwordStatus
+
+    if (
+        not kid.has_sword
+        or kid.alive >= 0
+        or kid.action is not Action.STAND
+        or kid.curr_seq_id not in (int(Seq.STAND), int(Seq.STOP_RUN))
+    ):
+        return kid
+    for c in others:
+        if c.charid is not CharId.GUARD or c.alive >= 0:
+            continue
+        if (
+            c.room == kid.room
+            and c.curr_row == kid.curr_row
+            and abs(c.curr_col - kid.curr_col) <= 3
+        ):
+            new_dir = 0 if c.curr_col > kid.curr_col else -1
+            return replace(
+                kid,
+                sword=SwordStatus.DRAWN,
+                direction=new_dir,
+                curr_seq_id=int(Seq.ENGARDE),
+                curr_seq_idx=0,
+            )
+    return kid
 
 
 def _block_kid_by_guards(prev_kid: Char, kid: Char, others: tuple[Char, ...], level) -> Char:  # type: ignore[no-untyped-def]

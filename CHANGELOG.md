@@ -6,6 +6,32 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.14.0] — 2026-10-10
+
+### Los verbos del original
+
+- **Salto largo desde parado** (ARRIBA+dirección): libra 2 celdas y
+  aterriza en la tercera, como el POP1. ARRIBA a secas sigue siendo el
+  salto vertical (trepar / agarrar la cornisa de arriba).
+- **Paso cuidadoso** (SHIFT+dirección): avanza una celda y NUNCA cae
+  por el borde — el controller mira el suelo de delante y te detiene
+  en el filo (canon).
+- **Descolgarse de un borde** (ABAJO+SHIFT en un filo): el kid se
+  descuelga y queda colgado de la cornisa que pisaba; ARRIBA vuelve a
+  subir, ABAJO suelta y cae un piso sin daño — el movimiento esencial
+  del original para bajar sin perder vida.
+- **En guardia automática**: con espada, el kid desenvaina y se pone en
+  guardia solo al tener un guard a ≤ 3 celdas en su fila (canon).
+- **Semántica de fila canon** para los niveles importados: una gate
+  cerrada o un muro en la celda de DEBAJO bloquean la columna (en el
+  original el kid ocupa la fila del suelo); spawn y guards del DAT se
+  colocan una fila por encima de su tile. Los originales siguen siendo
+  sólo parcialmente jugables (faltan trepar entre pisos y la geometría
+  exacta de cornisas); la campaña fan-recreation es la jugable.
+- Tests nuevos de los cuatro verbos (8) y del bloqueo por fila (2);
+  replay dorado de L6 regenerado (la guardia automática cambia el
+  timing del combate). Suite en 816 verdes.
+
 ## [canon-0.13.0] — 2026-10-09
 
 ### Jugado de verdad: L1, L2, L10 por el loop real con teclas inyectadas

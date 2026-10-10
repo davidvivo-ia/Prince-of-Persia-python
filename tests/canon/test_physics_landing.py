@@ -150,7 +150,22 @@ class TestAbyss:
 
 class TestHorizontalCollision:
     def test_wall_blocks_body(self) -> None:
-        level = _corridor_level(wall_col=4)
+        """Un muro en la fila del suelo (canon: donde "está" el kid)
+        bloquea la columna; el kid corre a la fila de encima."""
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[2 * 10 + 4] = encode_tile(W, 0)
+        from pop2026canon.domain.level import Level as _Level
+
+        level = _Level(
+            number=1,
+            name="test",
+            rooms=(Room(id=1, fg=tuple(fg), bg=room.bg),),
+            start_room=1,
+            start_col=1,
+            start_row=1,
+        )
         room = level.room(1)
         assert blocks_body_at(room, 4, 1)
         kid = _kid(level, curr_col=3, curr_seq_id=int(Seq.RUN), action=Action.RUN_JUMP)
@@ -256,3 +271,26 @@ class TestPrincessReunionWins:
         )
         g = advance(g, Command())
         assert g.status is GameStatus.WON_GAME, "Alcanzar a la princesa debe ganar el juego"
+
+
+class TestCanonRowBlocking:
+    """Semántica de fila canon: una gate cerrada o un muro en la celda de
+    DEBAJO del kid bloquean la columna (los niveles originales ponen
+    gates y muros en la fila del suelo, donde el kid canon "está")."""
+
+    def test_closed_gate_below_blocks(self) -> None:
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[2 * 10 + 5] = encode_tile(G, 0)  # gate en la fila del suelo
+        room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
+        assert blocks_body_at(room2, 5, 1)
+        assert not blocks_body_at(room2, 5, 1, frozenset({(1, 5, 2)}))
+
+    def test_wall_below_blocks(self) -> None:
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[2 * 10 + 5] = encode_tile(W, 0)
+        room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
+        assert blocks_body_at(room2, 5, 1)

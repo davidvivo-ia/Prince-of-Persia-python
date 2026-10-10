@@ -239,6 +239,57 @@ _SEQ_STANDING_JUMP: Sequence = (
     jmp(Seq.FALL_AFTER_STANDING_JUMP),
 )
 
+# Standing jump forward: salto largo desde parado (ARRIBA+dirección).
+# Canon POP1: libra 2 celdas de vacío y aterriza en la tercera
+# (~28 unidades de vuelo + inercia de caída).
+_SEQ_STANDING_JUMP_FORWARD: Sequence = (
+    setup(Action.IN_MIDAIR),
+    snd(SND_JUMP),
+    frame(16),
+    dx(3),
+    dy(-3),
+    frame(17),
+    dx(5),
+    dy(-5),
+    frame(18),
+    dx(7),
+    dy(-6),
+    frame(19),
+    dx(7),
+    dy(-4),  # peak
+    frame(20),
+    dx(7),
+    dy(0),
+    frame(21),
+    dx(7),
+    dy(4),
+    frame(22),
+    dx(5),
+    dy(8),
+    set_fall(2, 8),
+    setup(Action.IN_FREEFALL),
+    jmp(Seq.FALL),
+)
+
+# Step: paso cuidadoso (SHIFT+dirección) — una celda en 6 frames; el
+# controller sólo lo arranca si hay suelo delante (canon: te detienes
+# en el borde).
+_SEQ_STEP: Sequence = (
+    setup(Action.STAND),
+    frame(121),
+    dx(2),
+    frame(122),
+    dx(3),
+    frame(123),
+    dx(3),
+    frame(124),
+    dx(3),
+    snd(SND_FOOTSTEP),
+    frame(15),
+    dx(3),
+    jmp(Seq.STAND),
+)
+
 # Run jump: salto con carrerilla — vuelo de ~56 unidades (4 tiles):
 # despega, LIBRA 3 celdas de vacío y aterriza en la cuarta (canon POP1).
 _SEQ_RUN_JUMP: Sequence = (
@@ -737,6 +788,8 @@ TABLE: dict[int, Sequence] = {
     int(Seq.START_RUN): _SEQ_START_RUN,
     int(Seq.RUN): _SEQ_RUN,
     int(Seq.STOP_RUN): _SEQ_STOP_RUN,
+    int(Seq.STANDING_JUMP_FORWARD): _SEQ_STANDING_JUMP_FORWARD,
+    int(Seq.STEP): _SEQ_STEP,
     int(Seq.TURN): _SEQ_TURN,
     int(Seq.RUNTURN): _SEQ_RUNTURN,
     int(Seq.STANDING_JUMP): _SEQ_STANDING_JUMP,
