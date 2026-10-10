@@ -6,6 +6,48 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.16.0] — 2026-10-10
+
+### Cornisas, caídas y gates como en el original
+
+Verificado contra `seg005.c` / `seg006.c` / `seg007.c` de SDLPoP.
+
+- **↑ de pie** (`check_jump_up`): si hay cornisa delante-arriba, salta y
+  se agarra; si el suelo está justo encima y detrás-arriba hay hueco,
+  se agarra a su borde trasero con el cuerpo sobre el vacío (así se
+  trepa un pozo de cornisas de espaldas al hueco — L2 original). Si no,
+  salto vertical.
+- **↓ de pie de espaldas a un borde** (`down_pressed`): descolgarse por
+  él (seq 68 CLIMB_DOWN); si no hay borde detrás, agacharse. Se elimina
+  el ↓+SHIFT mirando al hueco (no existe en el original).
+- **Colgado** (`control_hanging`): ↑ trepa, SHIFT mantiene el agarre,
+  sin SHIFT se suelta. Los pies cuelgan a ras del suelo de la fila del
+  cuerpo (`y_land[row+1]`): por eso descolgarse "resta un piso".
+- Las cornisas, el hueco para las manos y la celda del cuerpo se
+  resuelven a través de salas vecinas (norte / sur / este / oeste),
+  como `get_tile`. Un muro no es cornisa (`tile_is_floor(WALL)` = 0);
+  una gate cerrada tampoco. `BIGPILLAR_TOP` deja de ser suelo.
+- **Caídas**: un piso es una FILA (63 px), no una sala. 1 fila segura,
+  2 filas 1 HP, 3 filas mortal; el aterrizaje ocurre con los pies en la
+  superficie (antes se aterrizaba al entrar en la banda, acortando la
+  caída). Antes una caída de 3 filas no hacía daño.
+- **Gates** (`animate_door` / `trigger_gate`): pisar la plate dispara
+  una apertura que continúa sola (+4/frame hasta 188 → 238) y luego
+  baja 1/frame; franqueable mientras ≥ 24 (~18 s). Un CLOSER cierra de
+  golpe. El modifier 1 del DAT = gate abierta de inicio
+  (`load_alter_mod`). Los trobs animan en todas las salas.
+- Salto largo desde parado: exactamente 3 celdas (dx 42) y los pies
+  vuelven a la superficie al terminar — fiable en plataformas de una
+  celda (L3 original, sala 14).
+- Bots: dirección y cuenta atrás de las gates forman parte del estado;
+  A* por tiempo + distancia (las gates se cierran: hay que correr);
+  macros canon (↑ agarra y trepa, ↓ descuelga, run-jump + SHIFT agarra
+  la cornisa de enfrente, salto largo desde parado, carreras largas).
+- Hito: los **niveles 1 y 2 originales** los completa el bot con el
+  motor tal cual; en el 3 llega a la plate de la salida y a la puerta
+  abierta (la vuelta es la carrera contrarreloj canon de la gate).
+- Pantalla de título: controles actualizados.
+
 ## [canon-0.15.0] — 2026-10-10
 
 ### Geometría del original

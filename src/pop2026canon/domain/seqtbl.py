@@ -261,12 +261,16 @@ _SEQ_STANDING_JUMP_FORWARD: Sequence = (
     dx(8),
     dy(0),
     frame(21),
-    dx(7),
-    dy(4),
+    dx(6),
+    dy(6),
     frame(22),
-    dx(7),
-    dy(8),
-    set_fall(2, 8),
+    dx(5),
+    dy(12),
+    # Total: dx 42 = exactamente 3 celdas (aterriza en la celda +3 con
+    # el mismo offset con que despegó — fiable en plataformas de una
+    # celda) y dy 0 (los pies vuelven a la superficie). Sin deriva
+    # horizontal en la caída posterior.
+    set_fall(0, 8),
     setup(Action.IN_FREEFALL),
     jmp(Seq.FALL),
 )
@@ -376,15 +380,15 @@ _SEQ_SOFT_LAND: Sequence = (
 # ===========================================================================
 
 # Grab ledge midair: el grab automático tras check_grab exitoso
+# Agarre en el aire (cayendo / saltando): la física coloca al char en
+# la celda colgado; la secuencia sólo anima (sin dx/dy) y, mientras
+# dura (HANG_CLIMB), no se acepta input — como el ``grab_timer`` canon.
 _SEQ_GRAB_LEDGE_MIDAIR: Sequence = (
-    setup(Action.HANG_STRAIGHT),
+    setup(Action.HANG_CLIMB),
     snd(SND_GRAB),
     frame(67),
-    dy(-4),
     frame(68),
-    dy(-2),
     frame(69),
-    dy(0),
     set_fall(0, 0),
     frame(70),
     jmp(Seq.JUMP_UP_GRAB_STRAIGHT),
@@ -397,17 +401,36 @@ _SEQ_JUMP_UP_GRAB_STRAIGHT: Sequence = (
     jmp(Seq.JUMP_UP_GRAB_STRAIGHT),  # idle hanging
 )
 
-# Jump up grab: salto vertical → agarrar cornisa arriba
+# Jump up grab (canon jumpbackhang / jump_up_and_grab): ↑ de pie bajo
+# una cornisa → salta y se agarra.
 _SEQ_JUMP_UP_GRAB: Sequence = (
-    setup(Action.IN_MIDAIR),
+    setup(Action.HANG_CLIMB),
+    snd(SND_JUMP),
     frame(67),
-    dy(-8),
     frame(68),
-    dy(-6),
     frame(69),
-    dy(-4),
     frame(70),
-    dy(-2),
+    frame(77),
+    snd(SND_GRAB),
+    frame(78),
+    jmp(Seq.JUMP_UP_GRAB_STRAIGHT),
+)
+
+# Climb down (canon seq 68): de pie de espaldas al borde, ↓ → el kid se
+# descuelga por el borde y queda colgado. La física ya lo ha puesto en
+# la celda de abajo; la secuencia anima la bajada (frames de trepar al
+# revés) y entra en el idle colgado.
+_SEQ_CLIMB_DOWN: Sequence = (
+    setup(Action.HANG_CLIMB),
+    frame(148),
+    frame(145),
+    frame(144),
+    frame(143),
+    frame(142),
+    frame(141),
+    frame(140),
+    frame(138),
+    frame(136),
     jmp(Seq.JUMP_UP_GRAB_STRAIGHT),
 )
 
@@ -778,6 +801,7 @@ TABLE: dict[int, Sequence] = {
     int(Seq.JUMP_UP_GRAB): _SEQ_JUMP_UP_GRAB,
     int(Seq.JUMP_HANG_MIDAIR): _SEQ_JUMP_HANG_MIDAIR,
     int(Seq.CLIMB_UP): _SEQ_CLIMB_UP,
+    int(Seq.CLIMB_DOWN): _SEQ_CLIMB_DOWN,
     int(Seq.RELEASE_LEDGE_LAND): _SEQ_RELEASE_LEDGE_LAND,
     int(Seq.CROUCH): _SEQ_CROUCH,
     int(Seq.STAND_UP_FROM_CROUCH): _SEQ_STAND_UP_FROM_CROUCH,

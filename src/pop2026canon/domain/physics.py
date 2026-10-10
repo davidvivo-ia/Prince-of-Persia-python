@@ -17,7 +17,7 @@ Ver `docs/design/03-tile-physics.md` para el modelo completo.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from pop2026canon.domain.actions import Action, Direction, Seq
 from pop2026canon.domain.chars import Char
@@ -343,20 +343,119 @@ def has_floor_at(
 
 
 # ---------------------------------------------------------------------------
+# Celdas vecinas a través de salas (canon ``get_tile``: col fuera de rango
+# → sala este/oeste; luego fila fuera de rango → sala norte/sur)
+# ---------------------------------------------------------------------------
+
+
+def resolve_cell(level: Level, room_id: int, col: int, row: int) -> tuple[int, int, int] | None:
+    """Resuelve ``(col, row)`` relativos a ``room_id`` (pueden salirse de
+    la sala en una celda) a ``(room, col, row)`` dentro de una sala real.
+    ``None`` si no hay sala en esa dirección."""
+    if not (1 <= room_id <= len(level.rooms)):
+        return None
+    room = level.room(room_id)
+    if col < 0:
+        room_id, col = room.link_w, col + SCREEN_TILECOUNT_X
+    elif col >= SCREEN_TILECOUNT_X:
+        room_id, col = room.link_e, col - SCREEN_TILECOUNT_X
+    if not (1 <= room_id <= len(level.rooms)) or not (0 <= col < SCREEN_TILECOUNT_X):
+        return None
+    room = level.room(room_id)
+    if row < 0:
+        room_id, row = room.link_n, row + SCREEN_TILECOUNT_Y
+    elif row >= SCREEN_TILECOUNT_Y:
+        room_id, row = room.link_s, row - SCREEN_TILECOUNT_Y
+    if not (1 <= room_id <= len(level.rooms)) or not (0 <= row < SCREEN_TILECOUNT_Y):
+        return None
+    return room_id, col, row
+
+
+@dataclass(frozen=True, slots=True)
+class Terrain:
+    """Nivel + estado dinámico que determina qué celdas son suelo, aire o
+    cornisa: gates abiertas (``LevelState.open_gates``) y losas sueltas
+    ya caídas (``LevelState.fallen_floors``)."""
+
+    level: Level
+    open_gates: frozenset[tuple[int, int, int]] = frozenset()
+    broken_floors: frozenset[tuple[int, int, int]] = frozenset()
+
+    def cell(self, room_id: int, col: int, row: int) -> tuple[int, Tile, int] | None:
+        """``(room, tile, modifier)`` de la celda resuelta, o ``None``."""
+        cell = resolve_cell(self.level, room_id, col, row)
+        if cell is None:
+            return None
+        rid, c, r = cell
+        tile, modifier = self.level.room(rid).tile_at(c, r)
+        return rid, tile, modifier
+
+    def is_floor(self, room_id: int, col: int, row: int) -> bool:
+        """Canon ``tile_is_floor`` con estado: una gate (abierta o
+        cerrada) es suelo; una losa suelta caída no; un muro NO."""
+        cell = resolve_cell(self.level, room_id, col, row)
+        if cell is None:
+            return False
+        rid, c, r = cell
+        room = self.level.room(rid)
+        if room.tile_at(c, r)[0] is Tile.WALL:
+            return False
+        return is_solid_at(room, c, r, self.broken_floors)
+
+    def is_closed_gate(self, room_id: int, col: int, row: int) -> bool:
+        cell = resolve_cell(self.level, room_id, col, row)
+        if cell is None:
+            return False
+        rid, c, r = cell
+        return blocks_body_at(self.level.room(rid), c, r, self.open_gates) and (
+            self.level.room(rid).tile_at(c, r)[0] is Tile.GATE
+        )
+
+
+def is_ledge_at(terrain: Terrain, room_id: int, col: int, row: int) -> bool:
+    """¿La celda es una cornisa agarrable? Canon ``can_grab``: un tile de
+    suelo (``tile_is_floor``) — un muro NO lo es. Una gate cerrada
+    tampoco (canon: se trepa "hasta la gate cerrada" y se vuelve a bajar;
+    aquí simplemente no se agarra). Puede estar en la sala vecina."""
+    if terrain.is_closed_gate(room_id, col, row):
+        return False
+    return terrain.is_floor(room_id, col, row)
+
+
+def is_air_at(terrain: Terrain, room_id: int, col: int, row: int) -> bool:
+    """¿La celda está libre para el cuerpo / las manos? Ni muro, ni suelo,
+    ni gate cerrada (canon: no se agarra "a través" de un muro ni de un
+    suelo). Fuera del mapa cuenta como muro."""
+    cell = terrain.cell(room_id, col, row)
+    if cell is None:
+        return False
+    _, tile, _ = cell
+    if tile is Tile.WALL:
+        return False
+    if terrain.is_closed_gate(room_id, col, row):
+        return False
+    if tile is Tile.GATE:
+        return True  # gate abierta: se pasa por debajo
+    return not terrain.is_floor(room_id, col, row)
+
+
+# ---------------------------------------------------------------------------
 # Hang grab (CHECK_GRAB canónico — exige SHIFT)
 # ---------------------------------------------------------------------------
 
 
-def can_grab(char: Char, room: Room, *, shift_held: bool) -> tuple[int, int] | None:
+def can_grab(char: Char, terrain: Terrain, *, shift_held: bool) -> tuple[int, int] | None:
     """Detecta si el char puede engancharse a una cornisa.
 
     Geometría canon: el cuerpo está en la celda (col, row) — en el aire —
     y las manos alcanzan la cornisa en diagonal: (col+fwd, row-1) debe
     ser suelo, y la celda sobre el cuerpo (col, row-1) debe ser aire
     (si fuera suelo, el char tendría el techo encima). Vale tanto
-    subiendo en un salto como cayendo.
+    subiendo en un salto como cayendo. La cornisa puede estar en la sala
+    vecina (norte / este / oeste).
 
-    Devuelve ``(ledge_col, ledge_row)`` o ``None``.
+    Devuelve ``(ledge_col, ledge_row)`` relativos a la sala del char, o
+    ``None``.
     """
     if not shift_held:
         return None
@@ -366,16 +465,14 @@ def can_grab(char: Char, room: Room, *, shift_held: bool) -> tuple[int, int] | N
         return None
     if char.alive >= 0:
         return None
+    if not (0 <= char.curr_col < SCREEN_TILECOUNT_X and 0 <= char.curr_row < SCREEN_TILECOUNT_Y):
+        return None
 
     forward_col = char.curr_col + _forward_sign(char.direction)
     ledge_row = char.curr_row - 1
-    if not (0 <= forward_col < SCREEN_TILECOUNT_X) or ledge_row < 0:
+    if not is_ledge_at(terrain, char.room, forward_col, ledge_row):
         return None
-    if not (0 <= char.curr_col < SCREEN_TILECOUNT_X and 0 <= char.curr_row < SCREEN_TILECOUNT_Y):
-        return None
-    if not is_solid_at(room, forward_col, ledge_row):
-        return None
-    if is_solid_at(room, char.curr_col, ledge_row):
+    if not is_air_at(terrain, char.room, char.curr_col, ledge_row):
         return None  # techo sobre la cabeza: no hay hueco para las manos
     # El cuerpo puede estar en una celda de suelo: es el salto-y-agarre
     # canon desde el piso de abajo (cuelga en su propia banda).
@@ -386,33 +483,88 @@ def snap_to_hang(char: Char, ledge_col: int, ledge_row: int) -> Char:
     """Coloca el char colgando: el cuerpo se queda en su celda (bajo la
     cornisa, en el aire), manos arriba, mirando hacia la cornisa."""
     fwd = 1 if ledge_col > char.curr_col else -1
+    return _hanging(
+        replace(char, curr_row=ledge_row + 1),
+        fwd,
+        Seq.GRAB_LEDGE_MIDAIR,
+    )
+
+
+def _hanging(char: Char, fwd: int, seq: Seq) -> Char:
+    """Estado colgado en la celda actual del char, cornisa en (col+fwd,
+    row-1). La secuencia ``seq`` anima el agarre y desemboca en el idle
+    colgado (``HANG_STRAIGHT``); mientras dura no se acepta input.
+
+    Canon ``check_grab``: ``Char.y = y_land[curr_row + 1]`` — colgado, los
+    pies quedan a la altura del suelo de la fila del cuerpo (el char mide
+    una fila; las manos en la cornisa). Por eso descolgarse "resta un
+    piso" a la caída."""
     return replace(
         char,
-        curr_row=ledge_row + 1,
         x=TILE_SIZE_X - 3 if fwd > 0 else 2,
-        y=4,
+        y=FEET_Y,
         direction=int(Direction.RIGHT) if fwd > 0 else int(Direction.LEFT),
-        action=Action.HANG_STRAIGHT,
+        action=Action.HANG_CLIMB,
         fall_x=0,
         fall_y=0,
         fall_dist=0,
-        curr_seq_id=int(Seq.GRAB_LEDGE_MIDAIR),
+        curr_seq_id=int(seq),
         curr_seq_idx=0,
     )
 
 
-def release_hang(char: Char) -> Char:
-    """Suelta la cornisa: pasa a IN_FREEFALL con fall_y inicial 0."""
-    if char.action is not Action.HANG_STRAIGHT:
-        return char
-    return replace(
-        char,
-        action=Action.IN_FREEFALL,
-        curr_seq_id=int(Seq.FALL),
-        curr_seq_idx=0,
-        fall_x=0,
-        fall_y=0,
-    )
+def _body_cell(terrain: Terrain, room_id: int, col: int, row: int) -> tuple[int, int, int] | None:
+    """Celda donde queda el cuerpo colgado (puede ser la sala vecina); un
+    muro no vale."""
+    cell = terrain.cell(room_id, col, row)
+    if cell is None or cell[1] is Tile.WALL:
+        return None
+    return resolve_cell(terrain.level, room_id, col, row)
+
+
+def jump_up(char: Char, terrain: Terrain) -> Char | None:
+    """↑ de pie (canon ``check_jump_up``): si hay una cornisa al alcance,
+    el char salta y se agarra; si no, ``None`` (salto vertical normal).
+
+    1. Cornisa delante-arriba (col+fwd, row-1) con aire encima del char:
+       se agarra y cuelga en su propia celda.
+    2. Suelo justo encima (col, row-1) con aire detrás-arriba: se agarra
+       a su borde trasero — el cuerpo pasa a la celda de detrás (puede
+       ser la sala vecina) colgando sobre el vacío o sobre el piso de
+       atrás. Es el gesto canon para trepar un pozo de cornisas de
+       espaldas al hueco.
+    """
+    fwd = _forward_sign(char.direction)
+    col, row, rid = char.curr_col, char.curr_row, char.room
+    if is_ledge_at(terrain, rid, col + fwd, row - 1) and is_air_at(terrain, rid, col, row - 1):
+        return _hanging(char, fwd, Seq.JUMP_UP_GRAB)
+    if is_ledge_at(terrain, rid, col, row - 1) and is_air_at(terrain, rid, col - fwd, row - 1):
+        body = _body_cell(terrain, rid, col - fwd, row)
+        if body is None:
+            return None
+        brid, bcol, brow = body
+        return _hanging(
+            replace(char, room=brid, curr_col=bcol, curr_row=brow), fwd, Seq.JUMP_UP_GRAB
+        )
+    return None
+
+
+def climb_down(char: Char, terrain: Terrain) -> Char | None:
+    """↓ de pie de espaldas a un borde (canon ``down_pressed``): el char se
+    descuelga de la celda que pisa y queda colgado con el cuerpo en la
+    celda de detrás, una fila más abajo (puede ser la sala sur). ``None``
+    si no hay borde detrás (→ agacharse)."""
+    fwd = _forward_sign(char.direction)
+    col, row, rid = char.curr_col, char.curr_row, char.room
+    if not is_ledge_at(terrain, rid, col, row):
+        return None
+    if not is_air_at(terrain, rid, col - fwd, row):
+        return None
+    body = _body_cell(terrain, rid, col - fwd, row + 1)
+    if body is None:
+        return None
+    brid, bcol, brow = body
+    return _hanging(replace(char, room=brid, curr_col=bcol, curr_row=brow), fwd, Seq.CLIMB_DOWN)
 
 
 def climb_up_target(char: Char) -> tuple[int, int]:
@@ -545,13 +697,10 @@ def _finish_climb(char: Char, snapshot: Char, level: Level) -> Char:
     row-1 respecto a donde colgaba). Si la cornisa está en la sala norte
     (row -1), cambia de sala."""
     tcol, trow = climb_up_target(snapshot)
-    room_id = snapshot.room
-    if trow < 0:
-        north = level.room(room_id).link_n if 1 <= room_id <= len(level.rooms) else 0
-        if not north:
-            return char
-        room_id, trow = north, SCREEN_TILECOUNT_Y - 1
-    tcol = max(0, min(SCREEN_TILECOUNT_X - 1, tcol))
+    cell = resolve_cell(level, snapshot.room, tcol, trow)
+    if cell is None:
+        return char
+    room_id, tcol, trow = cell
     return replace(
         char,
         room=room_id,
@@ -664,15 +813,22 @@ def step_physics(
             frame=char.frame,
         )
 
-    # 7. Aterrizaje: en caída libre dentro de una celda de suelo.
+    # 7. Aterrizaje: en caída libre, con los pies en la superficie de una
+    #    celda de suelo (la superficie es el borde INFERIOR de la celda:
+    #    el char atraviesa la banda hasta llegar a ella; la sonda 3a
+    #    cubre el caso de rebasarla dentro del tick).
     if char.action is Action.IN_FREEFALL and char.alive < 0:
-        if in_cell and is_solid_at(room, char.curr_col, char.curr_row, broken_floors):
+        if (
+            in_cell
+            and char.y >= FEET_Y
+            and is_solid_at(room, char.curr_col, char.curr_row, broken_floors)
+        ):
             return _land(char)
         if char.curr_row >= SCREEN_TILECOUNT_Y:
             return _die_in_abyss(char)
 
     # 8. Hang grab
-    ledge = can_grab(char, room, shift_held=shift_held)
+    ledge = can_grab(char, Terrain(level, open_gates, broken_floors), shift_held=shift_held)
     if ledge is not None:
         return snap_to_hang(char, *ledge)
 

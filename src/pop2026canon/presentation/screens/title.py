@@ -56,10 +56,10 @@ def draw(
 
     # Panel semi-transparente para los controles al pie
     controls = [
-        "IZQ / DER  Correr     ARRIBA  Saltar / Trepar     ABAJO  Agacharse / Envainar",
-        "SHIFT  Agarrar cornisa / En guardia   -   ARRIBA+SHIFT  Desenvainar",
-        "ESPACIO  Atacar   -   ARRIBA en guardia = Bloquear",
-        "P Pausa   -   TAB Tiempo restante   -   ESC Salir",
+        "IZQ / DER  Correr  -  ARRIBA+dir  Salto largo  -  SHIFT+dir  Paso corto",
+        "ARRIBA  Saltar y agarrar la cornisa / Trepar  -  ABAJO  Agacharse",
+        "ABAJO de espaldas al borde  Descolgarse  -  SHIFT  Agarrarse y seguir colgado",
+        "ESPACIO  Atacar  -  ARRIBA+SHIFT  Desenvainar  -  P Pausa  -  TAB Tiempo  -  ESC",
         "",
         "Pulsa ENTER para empezar",
     ]

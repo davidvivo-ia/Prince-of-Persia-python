@@ -15,8 +15,10 @@ from pop2026canon.domain.constants import (
     TILE_SIZE_X,
     TILE_SIZE_Y,
 )
+from pop2026canon.domain.level import Level
 from pop2026canon.domain.levels_canon import LEVEL_1
 from pop2026canon.domain.physics import (
+    Terrain,
     can_grab,
     cross_border,
     fall_accel,
@@ -227,39 +229,49 @@ class TestCanGrab:
         for c in range(5, 10):
             fg[10 + c] = int(Tile.FLOOR)
         room = Room(id=1, fg=tuple(fg), bg=(0,) * 30)
+        level = Level(number=1, name="grab", rooms=(room,), start_room=1, start_col=4, start_row=1)
         kid = replace(
             _kid(room=1, col=4, row=1),
             action=Action.IN_FREEFALL,
             fall_y=15,  # cayendo pero < 32
             direction=int(Direction.RIGHT),
         )
-        return kid, room
+        return kid, level
 
     def test_grab_requires_shift(self) -> None:
-        kid, room = self._falling_kid_at_ledge()
-        assert can_grab(kid, room, shift_held=False) is None
+        kid, level = self._falling_kid_at_ledge()
+        assert can_grab(kid, Terrain(level), shift_held=False) is None
         # Con SHIFT, sí
-        assert can_grab(kid, room, shift_held=True) is not None
+        assert can_grab(kid, Terrain(level), shift_held=True) is not None
 
     def test_grab_requires_freefall(self) -> None:
-        kid, room = self._falling_kid_at_ledge()
+        kid, level = self._falling_kid_at_ledge()
         kid = replace(kid, action=Action.STAND)
-        assert can_grab(kid, room, shift_held=True) is None
+        assert can_grab(kid, Terrain(level), shift_held=True) is None
 
     def test_grab_fails_if_falling_too_fast(self) -> None:
-        kid, room = self._falling_kid_at_ledge()
+        kid, level = self._falling_kid_at_ledge()
         kid = replace(kid, fall_y=GRAB_FALL_Y_THRESHOLD)  # exactamente el threshold
-        assert can_grab(kid, room, shift_held=True) is None
+        assert can_grab(kid, Terrain(level), shift_held=True) is None
 
     def test_grab_returns_ledge_position(self) -> None:
-        kid, room = self._falling_kid_at_ledge()
-        ledge = can_grab(kid, room, shift_held=True)
+        kid, level = self._falling_kid_at_ledge()
+        ledge = can_grab(kid, Terrain(level), shift_held=True)
         assert ledge == (5, 0)  # cornisa en diagonal: col 5, row 0
+
+    def test_wall_is_not_a_ledge(self) -> None:
+        """Canon: ``tile_is_floor(WALL)`` es falso — no se agarra un muro."""
+        kid, level = self._falling_kid_at_ledge()
+        fg = list(level.rooms[0].fg)
+        fg[0 + 5] = int(Tile.WALL)
+        walled = replace(level, rooms=(replace(level.rooms[0], fg=tuple(fg)),))
+        assert can_grab(kid, Terrain(walled), shift_held=True) is None
 
     def test_snap_to_hang(self) -> None:
         kid, _ = self._falling_kid_at_ledge()
         new_kid = snap_to_hang(kid, ledge_col=5, ledge_row=0)
-        assert new_kid.action is Action.HANG_STRAIGHT
+        # La animación de agarre (HANG_CLIMB) desemboca en HANG_STRAIGHT.
+        assert new_kid.action in (Action.HANG_CLIMB, Action.HANG_STRAIGHT)
         assert new_kid.fall_x == 0
         assert new_kid.fall_y == 0
         assert new_kid.curr_seq_id == int(Seq.GRAB_LEDGE_MIDAIR)

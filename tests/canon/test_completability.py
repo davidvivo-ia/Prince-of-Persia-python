@@ -16,6 +16,7 @@ loose floors que caen, gates que abren con plate y cierran solas.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable
 from dataclasses import replace
 
 import pytest
@@ -87,10 +88,10 @@ _L = Command(left=True)
 _RU = Command(right=True, up=True)
 _LU = Command(left=True, up=True)
 _U = Command(up=True)
-_US = Command(up=True, shift=True)
 _S = Command(shift=True)
 _D = Command(down=True)
-_DS = Command(down=True, shift=True)
+_RS = Command(right=True, shift=True)
+_LS = Command(left=True, shift=True)
 
 _MACROS: list[list[tuple[Command, int]]] = [
     [(_R, 4)],  # paso corto derecha
@@ -99,17 +100,48 @@ _MACROS: list[list[tuple[Command, int]]] = [
     [(_L, 10)],  # carrera izquierda
     [(_R, 7), (_RU, 3), (_R, 14)],  # run-jump derecha
     [(_L, 7), (_LU, 3), (_L, 14)],  # run-jump izquierda
+    [(_R, 22)],  # carrera larga (las gates se cierran: hay que correr)
+    [(_L, 22)],
+    [(_R, 7), (_RU, 3), (_R, 24)],  # run-jump y seguir corriendo
+    [(_L, 7), (_LU, 3), (_L, 24)],
+    # Run-jump + SHIFT: si el salto se queda corto, las manos agarran la
+    # cornisa de enfrente (canon: libra 4 celdas colgándose); ↑ trepa.
+    [(_R, 7), (_RU, 3), (_RS, 16), (_U, 1), (_S, 18)],
+    [(_L, 7), (_LU, 3), (_LS, 16), (_U, 1), (_S, 18)],
     [(_R, 2), (_RU, 3), (_R, 12)],  # salto corto derecha
     [(_L, 2), (_LU, 3), (_L, 12)],  # salto corto izquierda
-    [(_US, 8), (_S, 8), (_U, 20)],  # salto vertical + grab + climb
-    [(_DS, 2), (_D, 2), (_NOOP, 12)],  # descolgarse del borde y soltarse
+    # Salto largo desde parado (↑+dir): libra 2 celdas sin carrerilla —
+    # imprescindible en plataformas de una celda. Si el kid mira al otro
+    # lado, sólo se gira (el salto no arranca durante el TURN).
+    [(_RU, 2), (_NOOP, 14)],
+    [(_LU, 2), (_NOOP, 14)],
+    # ↑: agarra la cornisa (si hay), SHIFT mantiene el agarre mientras
+    # dura la animación, ↑ trepa. Sin cornisa es un salto vertical.
+    [(_U, 1), (_S, 7), (_U, 1), (_S, 16)],
+    [(_D, 1), (_NOOP, 14)],  # ↓ de espaldas al borde: descolgarse y soltarse
+    [(_D, 1), (_NOOP, 10), (_S, 12)],  # bajar un pozo: soltarse y agarrar la siguiente
     [(_NOOP, 16)],  # esperar (loose floors, gates)
 ]
 
 
 def _state_key(game: Game) -> tuple:  # type: ignore[type-arg]
     k = game.kid
-    return (k.room, k.curr_col, k.curr_row, game.state.open_gates, game.state.fallen_floors)
+    # La dirección importa: los verbos de cornisa (↑ de espaldas al pozo,
+    # ↓ de espaldas al borde) dependen de hacia dónde mira el kid.
+    # Las gates abiertas se cierran solas (canon ~18 s): el tiempo que
+    # les queda forma parte del estado, en tramos gruesos, para que una
+    # ruta lenta no "gaste" el estado que una ruta rápida necesita.
+    gates = tuple(
+        sorted((coord, game.state.state_at(coord) // 24) for coord in game.state.open_gates)
+    )
+    return (
+        k.room,
+        k.curr_col,
+        k.curr_row,
+        k.direction,
+        gates,
+        game.state.fallen_floors,
+    )
 
 
 def _room_distances_to_goal(level: Level, goal_tile: Tile) -> dict[int, int]:
@@ -119,6 +151,10 @@ def _room_distances_to_goal(level: Level, goal_tile: Tile) -> dict[int, int]:
     # un objetivo (si hay otra puerta en otra sala).
     if len(goal_rooms) > 1:
         goal_rooms.discard(level.start_room)
+    return _room_distances_to_goal_rooms(level, goal_rooms)
+
+
+def _room_distances_to_goal_rooms(level: Level, goal_rooms: set[int]) -> dict[int, int]:
     dist = dict.fromkeys(goal_rooms, 0)
     frontier = deque(goal_rooms)
     while frontier:
@@ -131,12 +167,60 @@ def _room_distances_to_goal(level: Level, goal_tile: Tile) -> dict[int, int]:
     return dist
 
 
+ROOM_COST_TICKS = 120
+"""Peso de la heurística: una sala de distancia "vale" ~120 ticks."""
+
+
+def _exit_goal(level: Level) -> tuple[tuple[int, int, int] | None, tuple[int, int, int] | None]:
+    """``(exit_coord, plate_coord)``: la exit door (de otra sala que la de
+    spawn si hay varias) y la plate que la abre, si tiene doorlink."""
+    exits = [
+        (rm.id, i % 10, i // 10)
+        for rm in level.rooms
+        for i, b in enumerate(rm.fg)
+        if (b & 0x1F) == int(Tile.LEVEL_DOOR_LEFT)
+    ]
+    if len(exits) > 1:
+        exits = [e for e in exits if e[0] != level.start_room] or exits
+    if not exits:
+        return None, None
+    exit_coord = exits[0]
+    plates = level.plates_for_gate(exit_coord)
+    return exit_coord, (plates[0] if plates else None)
+
+
+def make_priority(level: Level, dist: dict[int, int]) -> Callable[[Game], int]:
+    """f = ticks + heurística. Mientras la exit door esté cerrada y tenga
+    plate, el objetivo es la plate (su sala y su FILA: en la sala
+    objetivo, estar en otra fila cuesta media sala); abierta, la puerta."""
+    exit_coord, plate_coord = _exit_goal(level)
+    plate_dist = _room_distances_to_goal_rooms(level, {plate_coord[0]}) if plate_coord else {}
+
+    def _f(game: Game) -> int:
+        k = game.kid
+        door_open = exit_coord is None or exit_coord in game.state.open_gates
+        if door_open or plate_coord is None:
+            goal_room, goal_row, d = (
+                (exit_coord[0], exit_coord[2], dist) if exit_coord else (None, None, dist)
+            )
+        else:
+            goal_room, goal_row, d = plate_coord[0], plate_coord[2], plate_dist
+        h = ROOM_COST_TICKS * d.get(k.room, 99)
+        if goal_room is not None and k.room == goal_room and k.curr_row != goal_row:
+            h += ROOM_COST_TICKS // 2
+        return game.tick_count + h
+
+    return _f
+
+
 def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
     """A* de macro-acciones. ``True`` si el bot cruza la exit door.
 
-    La heurística es la distancia de salas hasta la sala del exit —
-    dirige la búsqueda sin sacrificar corrección (cada estado guardado
-    es un ``Game`` real alcanzado tick a tick).
+    f = ticks transcurridos + distancia en salas por ROOM_COST_TICKS. El
+    tiempo cuenta de verdad: las gates se cierran solas (~18 s canon),
+    así que entre dos formas de llegar a la misma celda se expande antes
+    la más rápida, y un estado ya visto sólo se descarta si no mejora el
+    tiempo con que se alcanzó (dedup al sacar de la cola, no al meter).
     """
     import heapq
 
@@ -147,15 +231,16 @@ def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
     if settled is None:
         return False
 
-    def _priority(game: Game) -> int:
-        return dist.get(game.kid.room, 99)
+    _f = make_priority(stripped, dist)
 
-    seen: set[tuple] = {_state_key(settled)}  # type: ignore[type-arg]
+    best: dict[tuple, int] = {_state_key(settled): settled.tick_count}  # type: ignore[type-arg]
     counter = 0
-    heap: list[tuple[int, int, Game]] = [(_priority(settled), counter, settled)]
+    heap: list[tuple[int, int, Game]] = [(_f(settled), counter, settled)]
     budget = max_macros
     while heap and budget > 0:
         _, _, game = heapq.heappop(heap)
+        if game.tick_count > best.get(_state_key(game), game.tick_count):
+            continue  # ya se sacó una versión más rápida de este estado
         for macro in _MACROS:
             budget -= 1
             result = _run_macro(game, macro)
@@ -164,11 +249,11 @@ def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
             if result.status is GameStatus.WON_LEVEL:
                 return True
             key = _state_key(result)
-            if key in seen:
+            if result.tick_count >= best.get(key, 10**9):
                 continue
-            seen.add(key)
+            best[key] = result.tick_count
             counter += 1
-            heapq.heappush(heap, (_priority(result), counter, result))
+            heapq.heappush(heap, (_f(result), counter, result))
     return False
 
 

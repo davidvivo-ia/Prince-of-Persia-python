@@ -63,6 +63,8 @@ class Seq(IntEnum):
     CLIMB_UP = 10
     RELEASE_LEDGE_LAND = 11
     STOP_RUN = 13
+    CLIMB_DOWN = 68
+    """Descolgarse por el borde de espaldas al hueco (↓ de pie)."""
     GRAB_LEDGE_MIDAIR = 15
     JUMP_UP_GRAB = 16
     SOFT_LAND = 17

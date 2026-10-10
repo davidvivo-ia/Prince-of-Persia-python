@@ -356,7 +356,24 @@ def _draw_kid_frame_raw(
         return
 
     if 67 <= frame_id <= 99 or 135 <= frame_id <= 149:
-        _draw_body(surf, px_x, px_y, fsign, colors, arm_angle=-math.pi / 2, body_h=52)
+        # Colgado / trepando: en el dominio los pies están a ras del
+        # suelo de la fila del cuerpo (canon y_land), pero el sprite
+        # cuelga de las MANOS: se dibuja elevado para que las manos
+        # toquen la cornisa (una fila = 84 px a 1:1; brazos arriba
+        # alcanzan ~68). Al trepar (135→149) sube progresivamente hasta
+        # quedar de pie en la cornisa.
+        lift = 23
+        if 135 <= frame_id <= 149:
+            lift = 23 + ((frame_id - 135) * (84 - 23)) // 14
+        head_cx, head_cy, _ = _draw_body(
+            surf, px_x, px_y - lift, fsign, colors, arm_angle=-math.pi / 2, body_h=52
+        )
+        # Brazos estirados hacia arriba: cuelga de las manos.
+        shoulder_y = head_cy + 10
+        for sx in (head_cx - 6, head_cx + 6):
+            pygame.draw.line(surf, colors.tunic, (sx, shoulder_y), (sx, shoulder_y - 18), 4)
+            pygame.draw.line(surf, colors.skin, (sx, shoulder_y - 18), (sx, shoulder_y - 26), 3)
+            pygame.draw.circle(surf, colors.skin, (sx, shoulder_y - 27), 2)
         return
 
     if 102 <= frame_id <= 108:

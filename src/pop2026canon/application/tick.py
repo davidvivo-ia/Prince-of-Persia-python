@@ -20,6 +20,7 @@ Cada tick produce un nuevo ``Game`` inmutable.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import replace
 
 from pop2026canon.application.controller import Command, apply_input
@@ -27,7 +28,8 @@ from pop2026canon.domain.actions import Action, Seq
 from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.combat import resolve_combat
 from pop2026canon.domain.game import Game, GameStatus, TimeRemaining
-from pop2026canon.domain.physics import step_physics
+from pop2026canon.domain.level import Level
+from pop2026canon.domain.physics import Terrain, step_physics
 from pop2026canon.domain.tiles import Tile
 from pop2026canon.domain.traps import (
     chomper_is_lethal,
@@ -35,6 +37,8 @@ from pop2026canon.domain.traps import (
     tick_chomper,
     tick_gate,
     tick_loose,
+    trigger_gate_close,
+    trigger_gate_open,
 )
 
 
@@ -44,7 +48,9 @@ def advance(game: Game, cmd: Command) -> Game:
         return game
 
     # 1. Input del jugador → posible cambio de seq del kid
-    new_kid = apply_input(game.kid, cmd, game.level)
+    new_kid = apply_input(
+        game.kid, cmd, Terrain(game.level, game.state.open_gates, game.state.fallen_floors)
+    )
 
     # 1a. Canon: con espada, el kid se pone en guardia solo al acercarse
     #     un guard (misma sala y fila, a ≤ 3 celdas).
@@ -179,52 +185,48 @@ def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
             if tile is Tile.CHOMPER:
                 new_state = tick_chomper(new_state, (kid.room, c, r))
 
-    # Gates: ticken en TODAS las salas con doorlinks activos + sala visible.
+    # Botones (canon ``check_press`` + ``do_trigger_list``): cada plate
+    # pisada dispara sus doorlinks — OPENER abre, CLOSER cierra. Una
+    # plate vinculada a una LEVEL_DOOR la abre de forma PERMANENTE.
     pressed_plates = _find_pressed_plates_global(game)
-
-    # Exit doors: una plate vinculada a una LEVEL_DOOR la abre de forma
-    # PERMANENTE (canon: la puerta de salida sube y se queda arriba).
     for link in game.level.doorlinks:
-        if link.gate_coord in new_state.open_gates:
-            continue
-        if not any(p in pressed_plates for p in (link.plate_coord,)):
+        kind = pressed_plates.get(link.plate_coord)
+        if kind is None:
             continue
         gate_room_id, gate_col, gate_row = link.gate_coord
         if not (1 <= gate_room_id <= len(game.level.rooms)):
             continue
         target_tile, _ = game.level.room(gate_room_id).tile_at(gate_col, gate_row)
         if target_tile in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT):
-            new_state = new_state.with_gate_open(link.gate_coord)
-    rooms_to_tick = {kid.room}
-    for link in game.level.doorlinks:
-        if link.plate_coord in pressed_plates or link.gate_coord in new_state.open_gates:
-            rooms_to_tick.add(link.gate_room)
-    for room_id in rooms_to_tick:
-        if not (1 <= room_id <= len(game.level.rooms)):
-            continue
-        gate_room = game.level.room(room_id)
-        for c in range(10):
-            for r in range(3):
-                tile, _ = gate_room.tile_at(c, r)
-                if tile is not Tile.GATE:
-                    continue
-                gate_coord = (room_id, c, r)
-                linked_plates = game.level.plates_for_gate(gate_coord)
-                if linked_plates:
-                    is_pressed = any(p in pressed_plates for p in linked_plates)
-                else:
-                    # Sin link explícito → sólo trigger scripted la abre.
-                    is_pressed = gate_coord in new_state.open_gates
-                new_state = tick_gate(new_state, gate_coord, plate_pressed=is_pressed)
+            if kind is Tile.OPENER:
+                new_state = new_state.with_gate_open(link.gate_coord)
+        elif target_tile is Tile.GATE:
+            if kind is Tile.OPENER:
+                new_state = trigger_gate_open(new_state, link.gate_coord)
+            else:
+                new_state = trigger_gate_close(new_state, link.gate_coord)
+
+    # Gates: animan en TODAS las salas (canon: los trobs siguen aunque la
+    # sala no esté en pantalla). Una gate sin plate vinculada sólo la abre
+    # un evento scripted (ratón de L8): el evento la mete en open_gates y
+    # aquí se convierte en una apertura normal.
+    for gate_coord in _gate_coords(game.level):
+        if (
+            gate_coord in new_state.open_gates
+            and new_state.state_at(gate_coord) == 0
+            and gate_coord not in new_state.opening_gates
+        ):
+            new_state = trigger_gate_open(new_state, gate_coord)
+        new_state = tick_gate(new_state, gate_coord)
 
     return new_state
 
 
-def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
-    """Devuelve plates pisadas este tick en CUALQUIER sala (canon: el
-    estado de una plate persiste mientras tenga peso encima, independientemente
-    de la sala visible)."""
-    pressed: set[tuple[int, int, int]] = set()
+def _find_pressed_plates_global(game: Game) -> dict[tuple[int, int, int], Tile]:
+    """Botones pisados este tick en CUALQUIER sala → tipo (OPENER /
+    CLOSER). Canon: el estado de una plate persiste mientras tenga peso
+    encima, independientemente de la sala visible."""
+    pressed: dict[tuple[int, int, int], Tile] = {}
     actors = [game.kid, *game.others]
     for actor in actors:
         if not (1 <= actor.room <= len(game.level.rooms)):
@@ -235,9 +237,21 @@ def _find_pressed_plates_global(game: Game) -> set[tuple[int, int, int]]:
             continue
         room = game.level.room(actor.room)
         tile, _ = room.tile_at(actor.curr_col, actor.curr_row)
-        if tile is Tile.OPENER:
-            pressed.add((actor.room, actor.curr_col, actor.curr_row))
+        if tile in (Tile.OPENER, Tile.CLOSER):
+            pressed[(actor.room, actor.curr_col, actor.curr_row)] = tile
     return pressed
+
+
+@functools.lru_cache(maxsize=32)
+def _gate_coords(level: Level) -> tuple[tuple[int, int, int], ...]:
+    """Coordenadas de todas las gates del nivel (cacheado por nivel)."""
+    out: list[tuple[int, int, int]] = []
+    for room in level.rooms:
+        for r in range(3):
+            for c in range(10):
+                if room.tile_at(c, r)[0] is Tile.GATE:
+                    out.append((room.id, c, r))
+    return tuple(out)
 
 
 def _auto_engarde(kid: Char, others: tuple[Char, ...]) -> Char:

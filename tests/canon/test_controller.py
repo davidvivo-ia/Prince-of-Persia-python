@@ -132,10 +132,16 @@ class TestHangTransitions:
         new_kid = apply_input(kid, Command(down=True))
         assert new_kid.curr_seq_id == int(Seq.RELEASE_LEDGE_LAND)
 
-    def test_no_input_keeps_hanging(self) -> None:
+    def test_shift_keeps_hanging(self) -> None:
+        """Canon: hay que mantener SHIFT para seguir colgado."""
+        kid = self._kid_hanging()
+        new_kid = apply_input(kid, Command(shift=True))
+        assert new_kid is kid
+
+    def test_no_input_releases(self) -> None:
         kid = self._kid_hanging()
         new_kid = apply_input(kid, Command())
-        assert new_kid is kid
+        assert new_kid.curr_seq_id == int(Seq.RELEASE_LEDGE_LAND)
 
 
 class TestDeadCharNoInput:

@@ -18,12 +18,18 @@ E, F = Tile.EMPTY, Tile.FLOOR
 
 
 def _level(
-    bot: list[Tile], guards: tuple[GuardSpawn, ...] = (), mid: list[Tile] | None = None
+    bot: list[Tile],
+    guards: tuple[GuardSpawn, ...] = (),
+    mid: list[Tile] | None = None,
+    top: list[Tile] | None = None,
 ) -> Level:
     """Sala de prueba. Geometría canon: el kid pisa la fila 2 (``bot``)."""
-    fg = tuple(encode_tile(t, 0) for row in [[E] * 10, mid or [E] * 10, bot] for t in row)
+    fg = tuple(encode_tile(t, 0) for row in [top or [E] * 10, mid or [E] * 10, bot] for t in row)
     room = Room(id=1, fg=fg, bg=tuple([0] * 30), guards=guards)
     return Level(number=2, name="verbs", rooms=(room,), start_room=1, start_col=2, start_row=2)
+
+
+_HANGING = (Action.HANG_STRAIGHT, Action.HANG_CLIMB)
 
 
 def _run(game, cmds):  # type: ignore[no-untyped-def]
@@ -74,7 +80,8 @@ class TestCarefulStep:
 class TestClimbDown:
     def _ledge_level(self) -> Level:
         """Cornisa en la fila 1 (cols 0-3) sobre un pit (cols 4-5 de la
-        fila 2 vacías): el kid de pie en (3,1) tiene el borde delante."""
+        fila 2 vacías): el kid de pie en (3,1), de espaldas al hueco
+        (mirando a la izquierda), tiene el borde detrás."""
         mid = [F, F, F, F, E, E, E, E, E, E]
         bot = [F] * 10
         bot[4] = E
@@ -82,41 +89,171 @@ class TestClimbDown:
         lvl = _level(bot, mid=mid)
         return replace(lvl, start_col=3, start_row=1)
 
-    def test_down_shift_at_edge_hangs(self) -> None:
-        """↓+SHIFT en un borde: el kid queda colgado de la cornisa, con el
-        cuerpo en la celda de delante una fila más abajo."""
+    def test_down_with_back_to_edge_hangs(self) -> None:
+        """↓ de espaldas al borde (canon): el kid se descuelga y queda
+        colgado de la cornisa, con el cuerpo en la celda del hueco una
+        fila más abajo, mirando hacia la cornisa."""
         g = new_game(self._ledge_level())
-        g = replace(g, kid=replace(g.kid, direction=0))
-        g = advance(g, Command(down=True, shift=True))
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(down=True))
         k = g.kid
-        assert k.action is Action.HANG_STRAIGHT
+        assert k.action in _HANGING
         assert (k.curr_col, k.curr_row) == (4, 2)
         assert k.direction == -1, "cuelga mirando hacia la cornisa"
 
-    def test_climb_back_up(self) -> None:
+    def test_down_facing_the_edge_crouches(self) -> None:
+        """Mirando al hueco, ↓ es agacharse (no hay borde detrás)."""
         g = new_game(self._ledge_level())
         g = replace(g, kid=replace(g.kid, direction=0))
-        g = advance(g, Command(down=True, shift=True))
-        g = _run(g, [Command(up=True)] * 3 + [Command()] * 30)
+        g = advance(g, Command(down=True))
+        assert g.kid.action is Action.STAND
+        assert g.kid.curr_seq_id == int(Seq.CROUCH)
+        assert (g.kid.curr_col, g.kid.curr_row) == (3, 1)
+
+    def test_climb_back_up(self) -> None:
+        g = new_game(self._ledge_level())
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(down=True))
+        # SHIFT mantiene el agarre durante la animación; luego ↑ trepa.
+        g = _run(g, [Command(shift=True)] * 10 + [Command(up=True)] * 3 + [Command()] * 30)
         assert g.kid.action is Action.STAND
         assert (g.kid.curr_col, g.kid.curr_row) == (3, 1)
         assert g.kid.alive < 0
 
-    def test_release_drops_safely(self) -> None:
-        """Soltarse desde colgado cae un piso (a la sala de abajo) sin daño."""
+    def _two_room_level(self, south_floor_row: int) -> Level:
         top = self._ledge_level()
         room1 = replace(top.rooms[0], link_s=2)
+        rows = [[E] * 10 for _ in range(3)]
+        rows[south_floor_row] = [F] * 10
+        fg2 = tuple(encode_tile(t, 0) for row in rows for t in row)
+        room2 = Room(id=2, fg=fg2, bg=tuple([0] * 30), link_n=1)
+        return replace(top, rooms=(room1, room2))
+
+    def test_release_two_rows_below_ledge_is_safe(self) -> None:
+        """Soltarse desde colgado (sin SHIFT): de pie en la fila 1, el
+        cuerpo cuelga en la fila 2 (pies a ras de su suelo) y aterriza
+        en la sala sur fila 0 — dos filas bajo la cornisa: sin daño. Es
+        el truco canon de descolgarse para bajar dos pisos."""
+        g = new_game(self._two_room_level(0))
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(down=True))
+        assert g.kid.action in _HANGING
+        g = _run(g, [Command()] * 50)
+        assert g.kid.action is Action.STAND
+        assert (g.kid.room, g.kid.curr_row) == (2, 0)
+        assert g.kid.hp_curr == 3
+
+    def test_release_three_rows_below_ledge_hurts(self) -> None:
+        """Tres filas bajo la cornisa (dos bajo el cuerpo colgado) cuesta
+        1 HP pero no mata (canon)."""
+        g = new_game(self._two_room_level(1))
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(down=True))
+        g = _run(g, [Command()] * 50)
+        assert g.kid.action is Action.STAND
+        assert g.kid.alive < 0
+        assert (g.kid.room, g.kid.curr_row) == (2, 1)
+        assert g.kid.hp_curr == 2
+
+    def test_release_four_rows_below_ledge_kills(self) -> None:
+        g = new_game(self._two_room_level(2))
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(down=True))
+        g = _run(g, [Command()] * 50)
+        assert g.kid.alive >= 0
+
+    def test_shift_keeps_hanging(self) -> None:
+        g = new_game(self._ledge_level())
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(down=True))
+        g = _run(g, [Command(shift=True)] * 30)
+        assert g.kid.action is Action.HANG_STRAIGHT
+        assert (g.kid.curr_col, g.kid.curr_row) == (4, 2)
+
+    def test_climb_down_into_south_room(self) -> None:
+        """Descolgarse desde la última fila: el cuerpo pasa a la sala sur."""
+        bot = [F, F, F, F, E, E, E, E, E, E]
+        room1 = replace(_level(bot).rooms[0], link_s=2)
         fg2 = tuple(encode_tile(t, 0) for row in [[E] * 10, [E] * 10, [F] * 10] for t in row)
         room2 = Room(id=2, fg=fg2, bg=tuple([0] * 30), link_n=1)
-        lvl = replace(top, rooms=(room1, room2))
+        lvl = Level(
+            number=2, name="s", rooms=(room1, room2), start_room=1, start_col=3, start_row=2
+        )
         g = new_game(lvl)
-        g = replace(g, kid=replace(g.kid, direction=0))
-        g = advance(g, Command(down=True, shift=True))
-        assert g.kid.action is Action.HANG_STRAIGHT
-        g = _run(g, [Command(down=True)] * 2 + [Command()] * 40)
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(down=True))
+        assert g.kid.action in _HANGING
+        assert (g.kid.room, g.kid.curr_col, g.kid.curr_row) == (2, 4, 0)
+        g = _run(g, [Command(shift=True)] * 10 + [Command(up=True)] * 3 + [Command()] * 30)
+        assert (g.kid.room, g.kid.curr_col, g.kid.curr_row) == (1, 3, 2)
         assert g.kid.action is Action.STAND
-        assert (g.kid.room, g.kid.curr_row) == (2, 2)
-        assert g.kid.hp_curr == 3
+
+
+class TestJumpUpGrab:
+    def test_up_grabs_ledge_in_front(self) -> None:
+        """↑ de pie bajo una cornisa delante-arriba: salta, se agarra y
+        con ↑ trepa a ella (canon grab_up_with_floor_behind)."""
+        mid = [E, E, E, E, F, F, F, F, F, F]
+        g = new_game(_level([F] * 10, mid=mid))
+        g = replace(g, kid=replace(g.kid, curr_col=3, direction=0))
+        g = advance(g, Command(up=True))
+        assert g.kid.action in _HANGING
+        assert (g.kid.curr_col, g.kid.curr_row) == (3, 2)
+        g = _run(g, [Command(shift=True)] * 8 + [Command(up=True)] * 3 + [Command()] * 30)
+        assert g.kid.action is Action.STAND
+        assert (g.kid.curr_col, g.kid.curr_row) == (4, 1)
+
+    def test_up_with_back_to_a_shaft_grabs_ledge_above(self) -> None:
+        """Canon grab_up_no_floor_behind: de pie en (3,1) de espaldas al
+        pozo (col 4), con suelo justo encima (3,0) y aire en (4,0): ↑
+        se agarra al borde trasero de (3,0) colgando sobre el pozo, y
+        trepa a (3,0). Es cómo se sube un pozo de cornisas en POP1."""
+        top = [F, F, F, F, E, E, E, E, E, E]
+        mid = [F, F, F, F, E, E, E, E, E, E]
+        lvl = replace(_level([F] * 10, mid=mid, top=top), start_col=3, start_row=1)
+        g = new_game(lvl)
+        g = replace(g, kid=replace(g.kid, direction=-1))
+        g = advance(g, Command(up=True))
+        assert g.kid.action in _HANGING
+        assert (g.kid.curr_col, g.kid.curr_row) == (4, 1)
+        assert g.kid.direction == -1
+        g = _run(g, [Command(shift=True)] * 8 + [Command(up=True)] * 3 + [Command()] * 30)
+        assert g.kid.action is Action.STAND
+        assert (g.kid.curr_col, g.kid.curr_row) == (3, 0)
+
+    def test_up_under_a_ceiling_is_a_plain_jump(self) -> None:
+        """Con suelo encima y suelo detrás-arriba no hay cornisa: ↑ es un
+        salto vertical que no cambia de celda."""
+        mid = [F] * 10
+        g = new_game(_level([F] * 10, mid=mid))
+        g = replace(g, kid=replace(g.kid, curr_col=3, direction=0))
+        g = advance(g, Command(up=True))
+        assert g.kid.curr_seq_id == int(Seq.STANDING_JUMP)
+        g = _run(g, [Command()] * 30)
+        assert g.kid.action is Action.STAND
+        assert (g.kid.curr_col, g.kid.curr_row) == (3, 2)
+
+    def test_up_grabs_ledge_in_north_room(self) -> None:
+        """La cornisa puede estar en la sala norte (fila -1)."""
+        fg_n = tuple(
+            encode_tile(t, 0)
+            for row in [[E] * 10, [E] * 10, [F, F, F, F, E, E, E, E, E, E]]
+            for t in row
+        )
+        north = Room(id=2, fg=fg_n, bg=tuple([0] * 30), link_s=1)
+        top = [F, F, F, F, E, E, E, E, E, E]
+        south = replace(_level([F] * 10, top=top).rooms[0], link_n=2)
+        lvl = Level(
+            number=2, name="n", rooms=(south, north), start_room=1, start_col=3, start_row=0
+        )
+        g = new_game(lvl)
+        g = replace(g, kid=replace(g.kid, curr_col=3, curr_row=0, direction=-1))
+        # De pie en (3,0) de espaldas al hueco: suelo encima = sala 2 (3,2)
+        g = advance(g, Command(up=True))
+        assert g.kid.action in _HANGING
+        g = _run(g, [Command(shift=True)] * 8 + [Command(up=True)] * 3 + [Command()] * 30)
+        assert g.kid.action is Action.STAND
+        assert (g.kid.room, g.kid.curr_col, g.kid.curr_row) == (2, 3, 2)
 
 
 class TestAutoEngarde:

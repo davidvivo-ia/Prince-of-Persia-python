@@ -42,22 +42,22 @@ def _corridor_level(*, pit_cols: tuple[int, ...] = (), wall_col: int | None = No
     return Level(number=1, name="test", rooms=(room,), start_room=1, start_col=1, start_row=2)
 
 
-def _stacked_level(stories: int) -> Level:
-    """``stories`` salas apiladas: todas huecas con pit menos la última,
-    que tiene suelo completo. El kid cae desde la sala 1 hasta abajo."""
+def _shaft_level(rows_below: int) -> Level:
+    """Pozo en la columna 4: el kid está de pie en la sala 1 fila 0 y el
+    suelo del pozo está ``rows_below`` FILAS más abajo (canon: un piso es
+    una fila; una sala tiene tres). Dos salas apiladas."""
+    floor_row = rows_below  # fila absoluta (0..5) del suelo del pozo
     rooms = []
-    for i in range(1, stories + 1):
-        is_last = i == stories
-        bot = [F] * 10 if is_last else [F] * 4 + [E, E] + [F] * 4
-        rooms.append(
-            _room(
-                [[E] * 10, [E] * 10, bot],
-                room_id=i,
-                link_s=0 if is_last else i + 1,
-                link_n=i - 1,
-            )
-        )
-    return Level(number=1, name="test", rooms=tuple(rooms), start_room=1, start_col=1, start_row=1)
+    for i in (1, 2):
+        rows = []
+        for r in range(3):
+            absolute = (i - 1) * 3 + r
+            row = [F] * 10
+            if 0 <= absolute < floor_row:
+                row[4] = E
+            rows.append(row)
+        rooms.append(_room(rows, room_id=i, link_s=2 if i == 1 else 0, link_n=0 if i == 1 else 1))
+    return Level(number=1, name="test", rooms=tuple(rooms), start_room=1, start_col=4, start_row=0)
 
 
 def _kid(level: Level, **kw: object) -> Char:
@@ -66,6 +66,7 @@ def _kid(level: Level, **kw: object) -> Char:
         "room": 1,
         "curr_col": 1,
         "curr_row": 2,  # geometría canon: de pie EN la celda del suelo
+        "y": 62,  # pies en la superficie (FEET_Y)
         "hp_curr": 3,
         "hp_max": 3,
         "curr_seq_id": int(Seq.STAND),
@@ -90,7 +91,7 @@ class TestWalkOff:
 
 def _drop_kid(level: Level, *, float_ticks: int = 0) -> Char:
     """Suelta al kid sobre el pit de la sala 1 y simula hasta aterrizar."""
-    kid = _kid(level, curr_col=4, curr_row=2, float_ticks=float_ticks)
+    kid = _kid(level, curr_col=4, curr_row=0, float_ticks=float_ticks)
     for _ in range(200):
         kid = step_physics(kid, level, has_feather=kid.float_ticks > 0)
         if kid.action is not Action.IN_FREEFALL:
@@ -99,41 +100,44 @@ def _drop_kid(level: Level, *, float_ticks: int = 0) -> Char:
 
 
 class TestLanding:
-    def test_in_room_fall_soft_lands(self) -> None:
+    def test_in_room_fall_from_top_row_hurts(self) -> None:
+        """De la fila 0 a la 2 dentro de la sala son dos pisos: 1 HP."""
         level = _corridor_level()
-        kid = _kid(level, curr_row=0, action=Action.IN_FREEFALL, curr_seq_id=int(Seq.FALL))
-        for _ in range(10):
+        kid = _kid(level, curr_row=0, y=62, action=Action.IN_FREEFALL, curr_seq_id=int(Seq.FALL))
+        for _ in range(12):
             kid = step_physics(kid, level)
             if kid.action is not Action.IN_FREEFALL:
                 break
         assert kid.action is Action.STAND
-        assert kid.hp_curr == 3, "Una caída dentro de la sala no debería hacer daño"
+        assert kid.hp_curr == 2, "Dos filas de caída cuestan 1 HP (canon)"
         assert kid.curr_row == 2, "Debería quedar de pie EN la celda de suelo de row 2"
 
     def test_one_story_fall_is_safe(self) -> None:
-        kid = _drop_kid(_stacked_level(2))
-        assert kid.room == 2
+        """Canon: un piso es una FILA. Caer una fila no hace daño."""
+        kid = _drop_kid(_shaft_level(1))
+        assert (kid.room, kid.curr_row) == (1, 1)
         assert kid.action is Action.STAND
         assert kid.hp_curr == 3, "1 piso de caída es seguro (canon)"
 
     def test_two_story_fall_hurts(self) -> None:
-        kid = _drop_kid(_stacked_level(3))
-        assert kid.room == 3
+        kid = _drop_kid(_shaft_level(2))
+        assert (kid.room, kid.curr_row) == (1, 2)
         assert kid.alive < 0
         assert kid.hp_curr == 2, "2 pisos de caída cuestan 1 HP (canon)"
 
     def test_three_story_fall_kills(self) -> None:
-        kid = _drop_kid(_stacked_level(4))
+        kid = _drop_kid(_shaft_level(3))
+        assert kid.room == 2
         assert kid.alive >= 0, "3 pisos de caída matan (canon)"
         assert kid.hp_curr == 0
 
     def test_feather_fall_saves_any_height(self) -> None:
-        kid = _drop_kid(_stacked_level(4), float_ticks=500)
+        kid = _drop_kid(_shaft_level(4), float_ticks=500)
         assert kid.alive < 0, "Con FLOAT activa ninguna caída mata"
         assert kid.hp_curr == 3
 
     def test_landing_records_impact_speed(self) -> None:
-        kid = _drop_kid(_stacked_level(3))
+        kid = _drop_kid(_shaft_level(2))
         assert kid.landed_fall_y > 0, "landed_fall_y debe registrar la velocidad de impacto"
 
 

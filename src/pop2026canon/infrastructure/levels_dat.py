@@ -101,11 +101,18 @@ def parse_level_blob(data: bytes, *, number: int, name: str = "") -> Level:
             mod = room_mod[t]
             if piece == int(Tile.POTION):
                 mod = _POTION_REMAP.get(mod, mod)
+            if piece == int(Tile.GATE):
+                # Canon ``load_alter_mod``: modifier 1 = gate abierta de
+                # inicio (188); cualquier otro valor = cerrada (0). En
+                # nuestro empaquetado de 3 bits, 7 = totalmente abierta.
+                mod = 7 if mod == 1 else 0
             if piece in (int(Tile.OPENER), int(Tile.CLOSER)):
                 # El modifier es un índice de cadena de doorlinks, no
                 # cabe en 3 bits — resolvemos la cadena aquí y el tile
                 # se guarda con modifier 0.
-                if piece == int(Tile.OPENER):
+                # OPENER abre; CLOSER cierra (el tick distingue por el tile
+                # de la plate).
+                if True:
                     col, row = t % 10, t // 10
                     for gate_room, gate_tile in _walk_doorlink_chain(doorlinks1, doorlinks2, mod):
                         doorlink_pairs.append(

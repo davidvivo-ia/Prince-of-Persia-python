@@ -143,6 +143,7 @@ def _key(game: Game) -> tuple:  # type: ignore[type-arg]
         k.room,
         k.curr_col,
         k.curr_row,
+        k.direction,
         k.hp_curr,
         k.has_sword,
         phase,

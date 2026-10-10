@@ -123,7 +123,6 @@ SOLID: frozenset[Tile] = frozenset(
         Tile.CLOSER,
         Tile.DOORTOP_WITH_FLOOR,
         Tile.BIGPILLAR_BOTTOM,
-        Tile.BIGPILLAR_TOP,
         Tile.POTION,
         Tile.LOOSE,
         Tile.MIRROR,
@@ -143,8 +142,9 @@ SOLID: frozenset[Tile] = frozenset(
     }
 )
 """Tiles que SOPORTAN peso — el set canon de `tile_is_floor` (todo
-excepto EMPTY, DOORTOP y las celosías) más los que nuestro motor trata
-como soporte (WALL, BIGPILLAR_TOP para aterrizar sobre pilares)."""
+excepto EMPTY, DOORTOP, BIGPILLAR_TOP y las celosías) más WALL, que en
+nuestro motor es una celda intransitable (no se agarra: ver
+``physics.is_ledge_at``)."""
 """Tiles sobre los que el kid puede pararse o que bloquean movimiento."""
 
 LETHAL_WITH_FALL: frozenset[Tile] = frozenset({Tile.SPIKE})

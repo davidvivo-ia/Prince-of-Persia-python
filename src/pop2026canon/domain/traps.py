@@ -47,7 +47,11 @@ class LevelState:
     """Loose floors que ya cayeron — el tile pasa a DEBRIS."""
 
     open_gates: frozenset[TileCoord] = field(default_factory=frozenset)
-    """Gates totalmente abiertas (modifier=7) — atravesables."""
+    """Gates lo bastante abiertas para pasar (canon ``modifier >> 2 >= 6``)."""
+
+    opening_gates: frozenset[TileCoord] = field(default_factory=frozenset)
+    """Gates cuya apertura está en marcha (canon: el *trob* de apertura
+    sigue aunque el kid deje la plate)."""
 
     def state_at(self, coord: TileCoord) -> int:
         """Devuelve el state actual de la trampa en `coord`, o 0 si no hay."""
@@ -71,6 +75,11 @@ class LevelState:
 
     def with_gate_closed(self, coord: TileCoord) -> LevelState:
         return replace(self, open_gates=self.open_gates - {coord})
+
+    def with_gate_opening(self, coord: TileCoord, opening: bool) -> LevelState:
+        if opening:
+            return replace(self, opening_gates=self.opening_gates | {coord})
+        return replace(self, opening_gates=self.opening_gates - {coord})
 
     def with_potion_consumed(self, coord: TileCoord) -> LevelState:
         return replace(self, consumed_potions=self.consumed_potions | {coord})
@@ -183,39 +192,65 @@ def spike_kills_on_land(fall_y: int) -> bool:
 
 class GatePhase(IntEnum):
     CLOSED = 0
-    # 1..139 = parcialmente abierta (proporcional)
-    OPEN = 140
+    FULLY_OPEN = 188
+    """Canon: a partir de 188 la gate está del todo arriba."""
+    OPEN = 238
+    """Canon ``animate_door``: al terminar de abrir, el modifier salta a 238
+    y baja 1 por frame; sigue del todo abierta hasta 188 y es
+    franqueable mientras ``modifier >> 2 >= 6`` (≥ 24)."""
 
 
-GATE_OPEN_SPEED: int = 20
-"""Unidades de apertura por tick → 7 ticks (~0.6 s) para abrir del todo."""
+GATE_OPEN_SPEED: int = 4
+"""Unidades de apertura por tick (canon ``door_delta[1]`` = 4): 47 ticks
+(~4 s) hasta estar del todo abierta."""
 
 GATE_CLOSE_SPEED: int = 1
-"""Unidades de cierre por tick → 140 ticks (~12 s) para cerrar del todo.
-Canon: la gate abre rápido con la plate pisada y baja LENTA al soltarla —
-da tiempo a cruzar desde la plate aunque esté a varias salas."""
+"""Unidades de cierre por tick (canon ``door_delta[0]`` = -1): desde 238
+la gate tarda 214 ticks (~18 s) en dejar de ser franqueable. Es el
+margen canon para cruzar desde una plate a varias salas (L3)."""
 
-GATE_PASSABLE_MIN: int = 80
-"""Por debajo de este state la gate ya no deja pasar el cuerpo."""
+GATE_PASSABLE_MIN: int = 24
+"""Por debajo de este state la gate ya no deja pasar el cuerpo (canon:
+``modifier >> 2 < 6``)."""
+
+
+def trigger_gate_open(state: LevelState, coord: TileCoord) -> LevelState:
+    """Canon ``trigger_gate`` con un OPENER: si ya está del todo abierta
+    se recarga a 238 (sigue abierta un rato más); si no, arranca la
+    apertura, que continúa sola aunque se suelte la plate."""
+    if state.state_at(coord) >= int(GatePhase.FULLY_OPEN):
+        return state.with_state(coord, int(GatePhase.OPEN)).with_gate_opening(coord, False)
+    return state.with_gate_opening(coord, True)
+
+
+def trigger_gate_close(state: LevelState, coord: TileCoord) -> LevelState:
+    """Canon ``trigger_gate`` con un CLOSER: cierre rápido."""
+    return state.with_state(coord, 0).with_gate_opening(coord, False).with_gate_closed(coord)
 
 
 def tick_gate(
     state: LevelState,
     coord: TileCoord,
-    plate_pressed: bool,
+    plate_pressed: bool = False,
 ) -> LevelState:
-    """Avanza el state de una gate según si su plate está pisada.
+    """Avanza un tick el estado de una gate (canon ``animate_door``).
 
-    - `plate_pressed=True` → abre rápido (hasta ``GatePhase.OPEN``).
-    - `plate_pressed=False` → cierra lento (hasta 0).
+    - ``plate_pressed`` dispara la apertura (:func:`trigger_gate_open`).
+    - Abriéndose: +4 por tick; al llegar a 188 salta a 238 y empieza a
+      bajar sola.
+    - Si no, baja 1 por tick hasta 0.
 
     La gate es atravesable mientras ``state >= GATE_PASSABLE_MIN`` —
     el set ``open_gates`` de :class:`LevelState` refleja eso.
     """
-    current = state.state_at(coord)
-
     if plate_pressed:
-        new_value = min(int(GatePhase.OPEN), current + GATE_OPEN_SPEED)
+        state = trigger_gate_open(state, coord)
+    current = state.state_at(coord)
+    if coord in state.opening_gates:
+        new_value = current + GATE_OPEN_SPEED
+        if new_value >= int(GatePhase.FULLY_OPEN):
+            new_value = int(GatePhase.OPEN)
+            state = state.with_gate_opening(coord, False)
     else:
         new_value = max(int(GatePhase.CLOSED), current - GATE_CLOSE_SPEED)
 

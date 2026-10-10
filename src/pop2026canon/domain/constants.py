@@ -55,14 +55,16 @@ FEATHER_FALL_TICKS: int = 225
 GRAB_FALL_Y_THRESHOLD: int = 32
 """``check_grab`` exige fall_y < 32 para enganchar."""
 
-LAND_MED_FALL_DIST: int = 300
+LAND_MED_FALL_DIST: int = 124
 """Distancia de caída (sub-tile px acumulados) a partir de la cual el
-aterrizaje hace daño (1 HP). Calibrado a la geometría del motor: una
-caída de 1 piso acumula ≈264 px (segura); 2 pisos ≈462 (daño)."""
+aterrizaje hace daño (1 HP). Canon POP1: un piso es una FILA (63 px).
+1 fila = 63 (segura); 2 filas = 126 (daño). Colgado, los pies ya están
+a la altura del suelo de la fila del cuerpo, así que descolgarse resta
+una fila a la caída (de pie en la cornisa → 2 filas más abajo: seguro)."""
 
-LAND_DEAD_FALL_DIST: int = 500
-"""Distancia de caída a partir de la cual el aterrizaje es mortal
-(3 pisos ≈ 660; el umbral corta entre 2 y 3 pisos)."""
+LAND_DEAD_FALL_DIST: int = 187
+"""Distancia de caída a partir de la cual el aterrizaje es mortal:
+3 filas = 189."""
 
 GRAB_TIMER_INITIAL: int = 12
 """Duración del grab inicial en frames."""

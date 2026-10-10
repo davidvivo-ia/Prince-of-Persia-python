@@ -141,8 +141,23 @@ class TestGate:
         s = LevelState()
         for _ in range(int(GatePhase.OPEN)):
             s = tick_gate(s, CELL, plate_pressed=True)
-        assert s.state_at(CELL) == int(GatePhase.OPEN)
+        assert s.state_at(CELL) >= int(GatePhase.FULLY_OPEN)
         assert gate_is_passable(s, CELL)
+
+    def test_opening_continues_after_release(self) -> None:
+        """Canon: pisar la plate un instante basta — la gate termina de
+        abrirse sola y queda franqueable ~18 s."""
+        s = tick_gate(LevelState(), CELL, plate_pressed=True)
+        for _ in range(60):
+            s = tick_gate(s, CELL, plate_pressed=False)
+        assert s.state_at(CELL) >= int(GatePhase.FULLY_OPEN)
+        assert gate_is_passable(s, CELL)
+        for _ in range(200):
+            s = tick_gate(s, CELL, plate_pressed=False)
+        assert gate_is_passable(s, CELL), "sigue franqueable a los ~21 s de pisar"
+        for _ in range(30):
+            s = tick_gate(s, CELL, plate_pressed=False)
+        assert not gate_is_passable(s, CELL)
 
     def test_plate_release_closes(self) -> None:
         # Abre
@@ -159,7 +174,8 @@ class TestGate:
     def test_cannot_exceed_open_limit(self) -> None:
         s = LevelState().with_state(CELL, int(GatePhase.OPEN))
         s = tick_gate(s, CELL, plate_pressed=True)
-        assert s.state_at(CELL) == int(GatePhase.OPEN)
+        assert s.state_at(CELL) <= int(GatePhase.OPEN)
+        assert s.state_at(CELL) >= int(GatePhase.FULLY_OPEN)
 
     def test_cannot_go_below_zero(self) -> None:
         s = LevelState()
