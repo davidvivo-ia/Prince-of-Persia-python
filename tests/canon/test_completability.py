@@ -154,14 +154,71 @@ def _room_distances_to_goal(level: Level, goal_tile: Tile) -> dict[int, int]:
     return _room_distances_to_goal_rooms(level, goal_rooms)
 
 
-def _room_distances_to_goal_rooms(level: Level, goal_rooms: set[int]) -> dict[int, int]:
+def _link_gates(level: Level) -> dict[tuple[int, int], frozenset[tuple[int, int, int]] | None]:
+    """Para cada enlace horizontal ``(sala, vecina)``: ``None`` si es
+    intransitable (muro en todas las filas), o el conjunto de gates que
+    hay que abrir para cruzarlo (vacío = libre). Una fila es transitable
+    si ningún lado es muro; cruzar la sala exige que las gates de alguna
+    fila transitable estén abiertas."""
+    out: dict[tuple[int, int], frozenset[tuple[int, int, int]] | None] = {}
+    for room in level.rooms:
+        for other_id, col_here, col_there in ((room.link_e, 9, 0), (room.link_w, 0, 9)):
+            if not (1 <= other_id <= len(level.rooms)):
+                continue
+            other = level.room(other_id)
+            options: list[frozenset[tuple[int, int, int]]] = []
+            for r in range(3):
+                t_here = room.tile_at(col_here, r)[0]
+                t_there = other.tile_at(col_there, r)[0]
+                if t_here is Tile.WALL or t_there is Tile.WALL:
+                    continue
+                gates = set()
+                if t_here is Tile.GATE and room.tile_at(col_here, r)[1] < 7:
+                    gates.add((room.id, col_here, r))
+                if t_there is Tile.GATE and other.tile_at(col_there, r)[1] < 7:
+                    gates.add((other_id, col_there, r))
+                options.append(frozenset(gates))
+            if not options:
+                out[(room.id, other_id)] = None
+            else:
+                # La fila con menos gates manda (si hay una libre, libre).
+                out[(room.id, other_id)] = min(options, key=len)
+    return out
+
+
+def _room_distances_to_goal_rooms(
+    level: Level,
+    goal_rooms: set[int],
+    open_gates: frozenset[tuple[int, int, int]] = frozenset(),
+    link_gates: dict[tuple[int, int], frozenset[tuple[int, int, int]] | None] | None = None,
+) -> dict[int, int]:
+    """Distancia (en salas) de cada sala a las salas objetivo. Los enlaces
+    horizontales cerrados por una gate no abierta no cuentan (la
+    heurística no debe empujar hacia una gate que sólo se abre desde el
+    otro lado); norte/sur siempre cuentan (caídas, trepadas)."""
+    if link_gates is None:
+        link_gates = _link_gates(level)
+
+    def _usable(a: int, b: int, horizontal: bool) -> bool:
+        if not horizontal:
+            return True
+        req = link_gates.get((a, b))
+        if req is None:
+            return False
+        return req <= open_gates
+
     dist = dict.fromkeys(goal_rooms, 0)
     frontier = deque(goal_rooms)
     while frontier:
         rid = frontier.popleft()
         for other in level.rooms:
-            for link in (other.link_n, other.link_s, other.link_e, other.link_w):
-                if link == rid and other.id not in dist:
+            for link, horizontal in (
+                (other.link_n, False),
+                (other.link_s, False),
+                (other.link_e, True),
+                (other.link_w, True),
+            ):
+                if link == rid and other.id not in dist and _usable(other.id, rid, horizontal):
                     dist[other.id] = dist[rid] + 1
                     frontier.append(other.id)
     return dist
@@ -194,18 +251,33 @@ def make_priority(level: Level, dist: dict[int, int]) -> Callable[[Game], int]:
     plate, el objetivo es la plate (su sala y su FILA: en la sala
     objetivo, estar en otra fila cuesta media sala); abierta, la puerta."""
     exit_coord, plate_coord = _exit_goal(level)
-    plate_dist = _room_distances_to_goal_rooms(level, {plate_coord[0]}) if plate_coord else {}
+    link_gates = _link_gates(level)
+    exit_rooms = set(dist)  # salas con dist conocida sin gates = objetivo
+    exit_rooms = {r for r, dv in dist.items() if dv == 0} or exit_rooms
+    cache: dict[tuple[bool, frozenset[tuple[int, int, int]]], dict[int, int]] = {}
+
+    def _dist_for(to_plate: bool, open_gates: frozenset[tuple[int, int, int]]) -> dict[int, int]:
+        key = (to_plate, open_gates)
+        d = cache.get(key)
+        if d is None:
+            goal_rooms = {plate_coord[0]} if (to_plate and plate_coord) else exit_rooms
+            d = _room_distances_to_goal_rooms(level, goal_rooms, open_gates, link_gates)
+            cache[key] = d
+        return d
 
     def _f(game: Game) -> int:
         k = game.kid
+        gates_now = frozenset(c for c in game.state.open_gates)
         door_open = exit_coord is None or exit_coord in game.state.open_gates
         if door_open or plate_coord is None:
-            goal_room, goal_row, d = (
-                (exit_coord[0], exit_coord[2], dist) if exit_coord else (None, None, dist)
-            )
+            goal_room, goal_row = (exit_coord[0], exit_coord[2]) if exit_coord else (None, None)
+            d = _dist_for(False, gates_now)
         else:
-            goal_room, goal_row, d = plate_coord[0], plate_coord[2], plate_dist
-        h = ROOM_COST_TICKS * d.get(k.room, 99)
+            goal_room, goal_row = plate_coord[0], plate_coord[2]
+            d = _dist_for(True, gates_now)
+        # Sala inalcanzable con las gates actuales: sin guía (sólo tiempo),
+        # pero peor que cualquier sala con camino conocido.
+        h = ROOM_COST_TICKS * d.get(k.room, 30)
         if goal_room is not None and k.room == goal_room and k.curr_row != goal_row:
             h += ROOM_COST_TICKS // 2
         return game.tick_count + h
