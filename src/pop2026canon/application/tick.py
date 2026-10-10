@@ -176,7 +176,7 @@ def _tick_traps(game: Game, kid: Char):  # type: ignore[no-untyped-def]
 
     # Loose floor: el kid pisa el loose si ESTÁ en su celda (geometría canon)
     kid_cell = (kid.room, kid.curr_col, kid.curr_row)
-    if 0 <= kid.curr_row < 3 and 0 <= kid.curr_col < 10:
+    if _grounded(kid) and 0 <= kid.curr_row < 3 and 0 <= kid.curr_col < 10:
         tile_here, _ = room.tile_at(kid.curr_col, kid.curr_row)
         if tile_here is Tile.LOOSE:
             new_state, _ = tick_loose(new_state, kid_cell, kid_pressing=True)
@@ -264,11 +264,25 @@ def _find_pressed_plates_global(game: Game) -> dict[tuple[int, int, int], Tile]:
             continue
         if not (0 <= actor.curr_col < 10 and 0 <= actor.curr_row < 3):
             continue
+        if not _grounded(actor):
+            continue  # canon check_press: sólo con los pies en el suelo
         room = game.level.room(actor.room)
         tile, _ = room.tile_at(actor.curr_col, actor.curr_row)
         if tile in (Tile.OPENER, Tile.CLOSER):
             pressed[(actor.room, actor.curr_col, actor.curr_row)] = tile
     return pressed
+
+
+_AIRBORNE: frozenset[Action] = frozenset(
+    {Action.IN_MIDAIR, Action.IN_FREEFALL, Action.HANG_STRAIGHT, Action.HANG_CLIMB}
+)
+
+
+def _grounded(actor: Char) -> bool:
+    """¿Pisa el suelo de su celda? Saltando por encima de un botón o de
+    una losa suelta no se activan (canon: ``check_press`` sólo en frames
+    con los pies en el suelo)."""
+    return actor.action not in _AIRBORNE
 
 
 @functools.lru_cache(maxsize=32)
