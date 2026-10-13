@@ -6,6 +6,53 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.18.0] — 2026-10-13
+
+### Edición 2026: presentación, audio, controles y ayudas modernas
+
+La lógica canon no se toca; todo lo nuevo vive encima (``presentation/``,
+``application/assist.py``, ``hints.py``, ``stats.py``) y se deriva del
+estado inmutable del juego.
+
+- **Modos de juego**: *moderno* — **Arenas del Tiempo** (mantener R /
+  LB rebobina hasta 6 s, con medidor de arena que se recarga jugando;
+  funciona también desde la pantalla de muerte) y **punto de control
+  por sala** (morir te devuelve a la entrada de la sala con la vida
+  llena; el reloj no se devuelve) — y *clásico 1989*.
+- **Iluminación dinámica**: mapa de luz multiplicativo + brillo aditivo;
+  antorchas que parpadean, halo del kid y de los enemigos, pociones y
+  puerta de salida; luz fría en la mazmorra y cálida en el palacio
+  (tabla canon ``tbl_level_type``). Pared de fondo con sillería
+  procedural por sala (grietas, musgo, cadenas; azulejos y arcos en el
+  palacio).
+- **Partículas y juice**: polvo al aterrizar y al correr, chispas en
+  las paradas, sangre, cascotes al romperse y estrellarse las losas,
+  destellos de pociones y espada, ascuas de antorcha, motas en la luz;
+  *hit-stop*, sacudida de cámara, destello de daño, pulso rojo con 1 HP,
+  sombras bajo los personajes, transición deslizante entre salas y
+  filtro sepia al rebobinar.
+- **Audio**: SFX sintetizados con ruido filtrado y parciales metálicos
+  (espadas, rejas, cuchillas, pinchos, losas), paneo estéreo según la
+  posición; música procedural en modo *hijaz* (bordón + laúd) con capa
+  de darbuka *maqsum* que entra en combate.
+- **Mando** SDL GameController + teclado unificados (stick con
+  detección de flanco en menús).
+- **Menús**: principal, pausa (reanudar, reiniciar nivel, mapa,
+  opciones, controles, salir), opciones persistentes en JSON, pantalla
+  de controles, mapa de salas exploradas, pantalla de **nivel superado**
+  con estadísticas.
+- **Pistas contextuales** (una vez cada una): agarrarse, trepar,
+  descolgarse, saltos, duelo, suelo suelto, placas, rebobinar.
+- **Pantalla**: lienzo de 640x426 escalado a ventana redimensionable o
+  pantalla completa (F11 / Alt+Enter), píxel nítido o suave, filtro CRT.
+- **Accesibilidad**: sacudida y destellos desactivables, reloj siempre
+  visible, volumen por canal; tipografía con símbolos (o palabras si el
+  sistema no tiene una fuente con flechas).
+- Coste de dibujo con todos los efectos: ~3,4 ms por frame.
+- Tests: ajustes, escalado, entrada, rebobinado, checkpoints, pistas,
+  estadísticas, mapa, eventos FX, partículas, audio y un recorrido del
+  bucle real (título → nivel → pausa → opciones → juego). 916 tests.
+
 ## [canon-0.17.0] — 2026-10-10
 
 ### Trampas y enemigos rehechos sobre el código del original

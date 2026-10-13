@@ -23,9 +23,17 @@ def _ease_out_cubic(x: float) -> float:
 
 
 def draw(
-    surf: pygame.Surface, font_big: pygame.font.Font, font_small: pygame.font.Font, t: float
+    surf: pygame.Surface,
+    font_big: pygame.font.Font,
+    font_small: pygame.font.Font,
+    t: float,
+    *,
+    with_controls: bool = True,
 ) -> None:
-    """Pinta el título con animación de apertura si ``t < INTRO_DURATION``."""
+    """Pinta el título con animación de apertura si ``t < INTRO_DURATION``.
+
+    ``with_controls=False`` deja sólo el póster y el subtítulo (el menú
+    principal va encima)."""
     if t < INTRO_DURATION:
         # Fase de intro: cortinas opening + título fade-in.
         progress = _ease_out_cubic(min(1.0, t / INTRO_DURATION))
@@ -53,6 +61,8 @@ def draw(
     w, h = surf.get_size()
     subtitle = font_small.render("Canon Edition — Python 2026", True, PALETTE.poster_gold)
     surf.blit(subtitle, subtitle.get_rect(center=(w // 2, h // 4 + 30)))
+    if not with_controls:
+        return
 
     # Panel semi-transparente para los controles al pie
     controls = [

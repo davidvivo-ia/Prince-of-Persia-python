@@ -352,13 +352,8 @@ def draw_torch(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:
     )
     pygame.draw.polygon(surf, PALETTE.error, [(cx - 4, cy + 3), (cx, cy - 12), (cx + 4, cy + 3)])
     pygame.draw.polygon(surf, (255, 240, 180), [(cx - 2, cy + 2), (cx, cy - 5), (cx + 2, cy + 2)])
-    # Halo cálido suave. BLEND_ADD ignora el alpha: la intensidad va en
-    # el propio color (RGB bajo), si no sale un disco sólido.
-    halo = pygame.Surface((56, 56))
-    halo.fill((0, 0, 0))
-    pygame.draw.circle(halo, (26, 16, 4), (28, 28), 28)
-    pygame.draw.circle(halo, (40, 24, 6), (28, 28), 14)
-    surf.blit(halo, (cx - 28, cy - 32), special_flags=pygame.BLEND_ADD)
+    # El halo lo pone la iluminación (o ``renderer._draw_torch_flicker``
+    # sin iluminación): un disco fijo aquí se veía como un parche.
 
 
 def draw_wall(surf: pygame.Surface, x: int, y: int, modifier: int = 0) -> None:

@@ -17,6 +17,45 @@ alma del original; reimagina todo lo demás.
   juega solo.
 - **Calidad**: `ruff`, `mypy --strict`, `pytest` con cobertura ≥80%.
 
+## Motor canon · Edición 2026 (`pop2026canon`)
+
+El motor `pop2026canon` reproduce las reglas del POP1 de 1989 (física,
+trampas y enemigos calcados de SDLPoP) y las presenta como un juego de
+hoy:
+
+```bash
+uv run pop2026canon                    # juega (menú principal)
+uv run pop2026canon --levels-dat RUTA  # con los niveles de tu copia original
+```
+
+- **Dos modos**: *moderno* (rebobinar con las Arenas del Tiempo y
+  reaparecer en la entrada de la sala) y *clásico 1989* (morir
+  reinicia el nivel). El reloj de 60 minutos es canon en ambos.
+- **Luz y ambiente**: antorchas que iluminan la piedra, mazmorra fría y
+  palacio cálido, partículas (polvo, chispas, sangre, cascotes, ascuas),
+  viñeta, sacudida de cámara, *hit-stop* en cada estocada y transición
+  deslizante entre salas.
+- **Audio sintetizado**: choques metálicos, pasos, rejas; música
+  procedural en modo *hijaz* con capa de darbuka en combate; estéreo.
+- **Mando** (Xbox, PlayStation, Switch Pro, Steam Deck) y teclado.
+- **Interfaz**: menú principal, pausa, opciones persistentes, controles,
+  mapa de salas exploradas, estadísticas por nivel, pistas contextuales
+  la primera vez que hace falta cada verbo.
+- **Pantalla**: ventana redimensionable, pantalla completa (F11), escala
+  de píxel nítido o suavizada, filtro CRT opcional.
+- **Accesibilidad**: sacudida y destellos desactivables, reloj siempre
+  visible, pistas, volumen por canal.
+
+| Acción | Teclado | Mando |
+|---|---|---|
+| Correr | ← → / A D | Cruceta / stick |
+| Saltar · trepar | ↑ / W | A |
+| Agacharse · descolgarse | ↓ / S | B |
+| Agarrarse · paso corto | Shift | RB / RT |
+| Atacar | Espacio / J | X |
+| Rebobinar (moderno) | R (mantener) | LB / LT |
+| Pausa · mapa | Esc · M | Start · Back |
+
 ## Vista previa (ASCII de captura)
 
 ```
