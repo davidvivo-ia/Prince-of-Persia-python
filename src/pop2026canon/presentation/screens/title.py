@@ -11,6 +11,7 @@ import math
 
 import pygame
 
+from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
 from pop2026canon.presentation.poster import PosterCast, draw_poster
 
@@ -60,7 +61,7 @@ def draw(
 
     w, h = surf.get_size()
     subtitle = font_small.render("Canon Edition — Python 2026", True, PALETTE.poster_gold)
-    surf.blit(subtitle, subtitle.get_rect(center=(w // 2, h // 4 + 30)))
+    surf.blit(subtitle, subtitle.get_rect(center=(w // 2, h // 4 + px(34))))
     if not with_controls:
         return
 
@@ -73,12 +74,12 @@ def draw(
         "",
         "Pulsa ENTER para empezar",
     ]
-    panel_h = 22 * len(controls) + 16
-    panel = pygame.Surface((w - 40, panel_h), pygame.SRCALPHA)
-    pygame.draw.rect(panel, (*PALETTE.bg, 180), panel.get_rect(), border_radius=8)
-    surf.blit(panel, panel.get_rect(center=(w // 2, h - panel_h // 2 - 12)))
+    panel_h = px(22 * len(controls) + 16)
+    panel = pygame.Surface((w - px(40), panel_h), pygame.SRCALPHA)
+    pygame.draw.rect(panel, (*PALETTE.bg, 180), panel.get_rect(), border_radius=px(8))
+    surf.blit(panel, panel.get_rect(center=(w // 2, h - panel_h // 2 - px(12))))
 
-    base_y = h - panel_h - 4 + 16
+    base_y = h - panel_h - px(4) + px(16)
     blink = abs(math.sin(t * 2.5)) > 0.3
     for i, line in enumerate(controls):
         if i == len(controls) - 1:
@@ -86,4 +87,4 @@ def draw(
         else:
             col = PALETTE.primary
         text = font_small.render(line, True, col)
-        surf.blit(text, text.get_rect(center=(w // 2, base_y + i * 22)))
+        surf.blit(text, text.get_rect(center=(w // 2, base_y + px(i * 22))))

@@ -16,6 +16,7 @@ from pop2026canon.domain.game import Game
 from pop2026canon.infrastructure.settings import Settings
 from pop2026canon.presentation import renderer
 from pop2026canon.presentation.backdrop import backdrop
+from pop2026canon.presentation.char_atlas import WARM_FRAMES, CharPalette, is_cached, sprite
 from pop2026canon.presentation.fx import (
     FxEvent,
     FxKind,
@@ -23,8 +24,11 @@ from pop2026canon.presentation.fx import (
     Particles,
     PostFx,
     RoomTransition,
+    bloom,
     detect_fx_events,
+    draw_atmosphere,
     draw_char_shadows,
+    grade,
     level_is_palace,
     rewind_filter,
     transition_direction,
@@ -36,7 +40,7 @@ from pop2026canon.presentation.hud import (
     draw_rewind_icon,
     draw_toast,
 )
-from pop2026canon.presentation.layout import LAYOUT
+from pop2026canon.presentation.layout import LAYOUT, px
 
 
 @dataclass
@@ -52,7 +56,7 @@ class Shake:
     def offset(self, t: float) -> tuple[int, int]:
         if self.amount < 0.5:
             return 0, 0
-        a = self.amount
+        a = self.amount * LAYOUT.scale
         return int(a * _noise(t * 37.0)), int(a * _noise(t * 41.0 + 3.1))
 
 
@@ -75,6 +79,9 @@ class Scene:
         self._t = 0.0
         self._world = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
         self._last_frame = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
+        self._base = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
+        self._base_key: tuple[object, ...] | None = None
+        self._warm: list[tuple[int, CharPalette, int]] = []
         self.last_events: list[FxEvent] = []
 
     # --- ciclo de vida -------------------------------------------------
@@ -84,6 +91,21 @@ class Scene:
         self.transition.old = None
         self.hud.shown_hp = float(game.kid.hp_curr)
         self.hud.show_banner()
+        # Pre-pintado gradual de las poses más usadas (kid y enemigos del
+        # nivel): evita el tirón de la primera vez que sale cada pose.
+        palettes = [CharPalette.KID]
+        for c in game.others:
+            pal = renderer._palette_for(c.charid)
+            if pal not in palettes:
+                palettes.append(pal)
+        self._warm = [
+            (f, pal, facing)
+            for pal in palettes
+            for f in WARM_FRAMES
+            for facing in (0, -1)
+            if not is_cached(f, pal, facing)
+        ]
+        self._warm.reverse()
 
     def on_respawn(self, game: Game) -> None:
         self.particles.clear()
@@ -100,7 +122,7 @@ class Scene:
             k = ev.kind
             if k is FxKind.HIT:
                 self.hitstop = max(self.hitstop, 3)
-                self.lighting.flash(ev.x, ev.y, 70, (160, 40, 30))
+                self.lighting.flash(ev.x, ev.y, px(70), (160, 40, 30))
                 if ev.on_kid:
                     self.post.damage_flash((255, 30, 30), 1.0)
                     self._shake(7)
@@ -108,7 +130,7 @@ class Scene:
                     self._shake(4)
             elif k is FxKind.PARRY:
                 self.hitstop = max(self.hitstop, 2)
-                self.lighting.flash(ev.x, ev.y, 90, (255, 220, 150))
+                self.lighting.flash(ev.x, ev.y, px(90), (255, 220, 150))
                 self._shake(2)
             elif k is FxKind.LAND and ev.strength > 1.1 and ev.on_kid:
                 self._shake(3 * ev.strength)
@@ -121,7 +143,7 @@ class Scene:
             elif k is FxKind.CRASH:
                 self._shake(5)
             elif k in (FxKind.POTION, FxKind.SWORD):
-                self.lighting.flash(ev.x, ev.y, 120, ev.color)
+                self.lighting.flash(ev.x, ev.y, px(120), ev.color)
                 self.post.damage_flash(ev.color, 0.5)
             elif k is FxKind.GATE_SLAM:
                 self._shake(2)
@@ -140,6 +162,9 @@ class Scene:
             self.shake.add(amount)
 
     def update(self, dt: float, game: Game, t: float) -> None:
+        if self._warm:
+            f, pal, facing = self._warm.pop()
+            sprite(f, pal, facing)
         self.particles.update(dt)
         if self.settings.particles and not self.transition.active:
             self.particles.ambient(game, dt, t)
@@ -163,20 +188,35 @@ class Scene:
     ) -> None:
         """Sala con luz, sombras, personajes y partículas (sin HUD)."""
         s = self.settings
-        world.fill((0, 0, 0))
-        world.blit(backdrop(game.kid.room, level_is_palace(game.level.number)), (0, LAYOUT.hud_top))
-        renderer._draw_room_tiles(world, game)
-        if not s.lighting:
-            renderer._draw_torch_flicker(world, game)
+        palace = level_is_palace(game.level.number)
+        cells = renderer.room_cells(game)
+        key = (game.level.number, game.kid.room, cells)
+        if key != self._base_key:
+            # Pared + tiles: sólo se recompone si cambia algo (rejas,
+            # trampas, losas...). Por frame basta un blit.
+            base = self._base
+            base.fill((0, 0, 0))
+            base.blit(backdrop(game.kid.room, palace), (0, LAYOUT.hud_top))
+            renderer.draw_cells(base, game.kid.room, cells, palace)
+            self._base_key = key
+        world.blit(self._base, (0, 0))
+        renderer.draw_animated(world, game, cells, t)
         if chars:
             draw_char_shadows(world, game, prev, alpha)
             renderer._draw_chars(world, game, prev, alpha)
-            if s.particles:
-                self.particles.draw(world)
+        renderer._draw_front_tiles(world, game)
+        if chars and s.particles:
+            self.particles.draw(world)
         if s.lighting:
             prev_kid = prev.kid if prev is not None else None
             kid_px = renderer._lerp_char_px(prev_kid, game.kid, alpha)
             self.lighting.apply(world, game, kid_px, t)
+            draw_atmosphere(world, game, t)
+        area = pygame.Rect(0, LAYOUT.hud_top, LAYOUT.window_w, LAYOUT.room_h)
+        if s.bloom:
+            bloom(world, area)
+        if s.lighting:
+            grade(world, area, level_is_palace(game.level.number))
             self.post.vignette(world)
 
     def draw(

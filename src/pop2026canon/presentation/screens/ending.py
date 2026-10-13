@@ -9,6 +9,7 @@ import pygame
 
 from pop2026canon.application.stats import LevelStats
 from pop2026canon.presentation import fonts
+from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
 
 
@@ -34,14 +35,14 @@ def draw_victory(
     """Final victorioso: reunión con la princesa."""
     surf.fill(PALETTE.bg)
     w, h = surf.get_size()
-    title = fonts.render("VICTORIA", 64, PALETTE.poster_gold, bold=True)
+    title = fonts.gold_title("VICTORIA", 60, glow=8)
     surf.blit(title, title.get_rect(center=(w // 2, h // 3)))
     lines = ["La princesa está a salvo.", "Jaffar ha caído."]
     if time_left:
         lines.append(f"Tiempo restante: {time_left}  ·  Muertes: {deaths}")
     for i, line in enumerate(lines):
         txt = fonts.render(line, 24, PALETTE.primary)
-        surf.blit(txt, txt.get_rect(center=(w // 2, h // 2 + i * 28)))
+        surf.blit(txt, txt.get_rect(center=(w // 2, h // 2 + px(i * 28))))
     hint = fonts.render("Enter para volver al título", 20, _blink(t))
     surf.blit(hint, hint.get_rect(center=(w // 2, h * 5 // 6)))
 
@@ -98,7 +99,7 @@ def draw_death_overlay(
     for i, hint in enumerate(hints):
         col = _blink(t) if i == len(hints) - 1 else PALETTE.poster_gold
         txt = fonts.render(hint, 21, col)
-        surf.blit(txt, txt.get_rect(center=(w // 2, h * 2 // 3 + i * 28)))
+        surf.blit(txt, txt.get_rect(center=(w // 2, h * 2 // 3 + px(i * 28))))
 
 
 def draw_level_complete(
@@ -114,11 +115,11 @@ def draw_level_complete(
     w, h = surf.get_size()
     _veil(surf, (6, 4, 14), 175)
     k = min(1.0, t / 0.5)
-    title = fonts.render("NIVEL SUPERADO", 46, PALETTE.poster_gold, bold=True)
+    title = fonts.gold_title("NIVEL SUPERADO", 44, glow=6).copy()
     title.set_alpha(int(255 * k))
     surf.blit(title, title.get_rect(center=(w // 2, h // 4)))
     name = fonts.render(f"{stats.level} · {level_name}", 24, PALETTE.primary)
-    surf.blit(name, name.get_rect(center=(w // 2, h // 4 + 40)))
+    surf.blit(name, name.get_rect(center=(w // 2, h // 4 + px(40))))
     rows = [
         ("Tiempo", stats.clock),
         ("Muertes", str(stats.deaths)),
@@ -128,18 +129,18 @@ def draw_level_complete(
     ]
     if stats.rewound_ticks:
         rows.append(("Tiempo rebobinado", f"{stats.rewound_ticks / 12:.1f} s"))
-    top = h // 2 - 20
+    top = h // 2 - px(20)
     for i, (label, value) in enumerate(rows):
         appear = min(1.0, max(0.0, (t - 0.3 - i * 0.12) / 0.25))
         if appear <= 0:
             continue
-        y = top + i * 28
+        y = top + px(i * 28)
         lt = fonts.render(label, 22, PALETTE.primary_dark)
         vt = fonts.render(value, 22, PALETTE.warning)
         lt.set_alpha(int(255 * appear))
         vt.set_alpha(int(255 * appear))
-        surf.blit(lt, lt.get_rect(midleft=(w // 2 - 170, y)))
-        surf.blit(vt, vt.get_rect(midright=(w // 2 + 170, y)))
+        surf.blit(lt, lt.get_rect(midleft=(w // 2 - px(170), y)))
+        surf.blit(vt, vt.get_rect(midright=(w // 2 + px(170), y)))
     if t > 1.0:
         hint = fonts.render(("A" if pad else "Enter") + " para continuar", 20, _blink(t))
-        surf.blit(hint, hint.get_rect(center=(w // 2, h - 40)))
+        surf.blit(hint, hint.get_rect(center=(w // 2, h - px(40))))

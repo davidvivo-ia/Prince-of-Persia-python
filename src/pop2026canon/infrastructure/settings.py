@@ -34,15 +34,18 @@ class Settings:
     music_volume: float = 0.55
     fullscreen: bool = False
     window_scale: int = 2
-    """Escala inicial de la ventana sobre el lienzo de 640x426."""
-    scale_mode: str = "pixel"
-    """``pixel``: escalado entero nítido; ``smooth``: suavizado."""
+    """Ventana inicial: múltiplo de 640x426 (2 = el lienzo HD a 1:1)."""
+    scale_mode: str = "smooth"
+    """``smooth``: escala filtrada que llena la pantalla; ``pixel``: sólo
+    factores enteros (nítido, con bandas)."""
     crt_filter: bool = False
     screen_shake: bool = True
     flashes: bool = True
     """Accesibilidad: destellos de pantalla al recibir daño."""
     lighting: bool = True
     particles: bool = True
+    bloom: bool = True
+    """Resplandor de llamas, pociones y chispas (post-proceso)."""
     game_mode: str = "modern"
     hints: bool = True
     """Pistas contextuales para los verbos del original."""
@@ -69,7 +72,7 @@ class Settings:
             sfx_volume=vol(self.sfx_volume),
             music_volume=vol(self.music_volume),
             window_scale=int(min(4, max(1, int(self.window_scale)))),
-            scale_mode=self.scale_mode if self.scale_mode in SCALE_MODES else "pixel",
+            scale_mode=self.scale_mode if self.scale_mode in SCALE_MODES else "smooth",
             game_mode=self.game_mode if self.game_mode in GAME_MODES else "modern",
             seen_hints=tuple(dict.fromkeys(str(h) for h in self.seen_hints)),
         )

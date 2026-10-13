@@ -1,11 +1,11 @@
 """Renderer canon — pinta una sala completa.
 
 Capas:
-  0. Back wall (degradado + sillería tenue + arcos)
-  1. BG tiles (overlays detrás del char)
-  2. FG tiles (suelo, gates, chompers...)
-  3. Char en primer plano (kid + others)
-  4. HUD (tiempo + HP + sword status)
+  0. Pared del fondo (``backdrop``)
+  1. Tiles (losas, rejas, trampas...) y llamas animadas
+  2. Personajes (interpolados entre ticks)
+  3. Capa delantera: fustes de columnas
+  4. HUD
 """
 
 from __future__ import annotations
@@ -26,119 +26,155 @@ def _room_hash(room_id: int, c: int = 0, r: int = 0) -> int:
     return (room_id * 2654435761 + c * 40503 + r * 69621) & 0xFFFFFFFF
 
 
-def _draw_back_wall(surf: pygame.Surface, room_id: int = 0) -> None:
-    """Pared trasera con degradado + arcos rebajados + decoración por sala."""
-    w = surf.get_width()
-    top = LAYOUT.hud_top
-    h = LAYOUT.room_h
-    # Degradado vertical
-    steps = 12
-    band = max(1, h // steps)
-    for i in range(steps):
-        t = i / max(1, steps - 1)
-        col = tuple(int(PALETTE.bg_far[k] * (1 - t) + PALETTE.bg[k] * t * 0.6) for k in range(3))
-        pygame.draw.rect(surf, col, (0, top + i * band, w, band + 1))
-    # Arcos rebajados cada 2 tiles
-    arch_w = LAYOUT.tile_w * 2 - 10
-    arch_h = LAYOUT.tile_h - 24
-    arch_top = top + 18
-    n_arches = max(1, w // (LAYOUT.tile_w * 2))
-    for i in range(n_arches):
-        ax = i * LAYOUT.tile_w * 2 + 5
-        rect = pygame.Rect(ax, arch_top, arch_w, arch_h)
-        pygame.draw.rect(
-            surf,
-            PALETTE.bg,
-            rect,
-            border_top_left_radius=arch_w // 2,
-            border_top_right_radius=arch_w // 2,
-        )
-        pygame.draw.rect(
-            surf,
-            PALETTE.bg_far,
-            rect,
-            1,
-            border_top_left_radius=arch_w // 2,
-            border_top_right_radius=arch_w // 2,
-        )
-    # Decoración determinista por sala: sillares hundidos y alguna
-    # ventana estrecha — rompe la monotonía (cada sala se reconoce).
-    hsh = _room_hash(room_id)
-    for i in range(4):
-        bx = ((hsh >> (i * 5)) % max(1, w - 40)) + 8
-        by = top + 24 + ((hsh >> (i * 7 + 3)) % max(1, h - 80))
-        bw = 14 + ((hsh >> (i * 3)) % 18)
-        shade = pygame.Surface((bw, 8), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 26))
-        surf.blit(shade, (bx, by))
-    if hsh % 5 == 2:
-        wx = (hsh >> 9) % max(1, w - 60) + 20
-        wy = top + 26
-        pygame.draw.rect(
-            surf, (8, 6, 12), (wx, wy, 12, 26), border_top_left_radius=6, border_top_right_radius=6
-        )
-        pygame.draw.rect(
-            surf,
-            PALETTE.bg_far,
-            (wx, wy, 12, 26),
-            1,
-            border_top_left_radius=6,
-            border_top_right_radius=6,
-        )
-
-
-def _draw_room_tiles(surf: pygame.Surface, game: Game) -> None:
-    """Pinta los 30 tiles de la sala actual."""
+def _cell_tile(game: Game, room_id: int, c: int, r: int) -> tuple[int, int]:
+    """(tile, modifier) visibles de una celda: estado de trampas y rejas,
+    losas caídas y escombros aplicados."""
     from pop2026canon.domain.tiles import Tile
+    from pop2026canon.domain.traps import gate_phase
 
-    room = game.level.room(game.kid.room)
+    room = game.level.room(room_id)
+    byte = room.fg[r * LAYOUT.room_cols + c]
+    tile_val = byte & 0x1F
+    modifier = (byte >> 5) & 0x07
+    coord = (room_id, c, r)
+    piece = Tile(tile_val)
+    if piece is Tile.GATE:
+        modifier = gate_phase(game.state, coord)
+    elif piece in (Tile.CHOMPER, Tile.LOOSE, Tile.SPIKE):
+        modifier = game.state.state_at(coord)
+    elif piece in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT):
+        modifier = int(
+            any(
+                g[0] == room_id and g[1] in (c - 1, c, c + 1) and g[2] == r
+                for g in game.state.open_gates
+            )
+        )
+    # Loose caído: la losa ya no está — agujero real.
+    if coord in game.state.fallen_floors:
+        tile_val = int(Tile.EMPTY)
+    # Escombros de una losa estrellada: tapan pinchos, pociones...
+    if coord in game.state.debris_cells:
+        if piece in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
+            tile_val = int(Tile.TORCH_WITH_DEBRIS)
+        else:
+            tile_val = int(Tile.DEBRIS)
+    return tile_val, modifier
+
+
+def _neighbor_has_floor(game: Game, room_id: int, c: int, r: int) -> bool:
+    """¿Hay losa en la celda (c, r), aunque sea de la sala contigua?"""
+    from pop2026canon.presentation.tile_atlas import has_floor
+
+    if c < 0 or c >= LAYOUT.room_cols:
+        room = game.level.room(room_id)
+        nb = room.link_w if c < 0 else room.link_e
+        if not (1 <= nb <= len(game.level.rooms)):
+            return True  # borde del mundo: muro
+        room_id, c = nb, c % LAYOUT.room_cols
+    return has_floor(_cell_tile(game, room_id, c, r)[0])
+
+
+Cell = tuple[int, int, int, int, bool, bool]
+"""(col, row, tile, modifier, sin suelo a la izquierda, a la derecha)."""
+
+
+def room_cells(game: Game) -> tuple[Cell, ...]:
+    """Celdas visibles de la sala del kid (sólo las que tienen algo)."""
+    from pop2026canon.presentation.tile_atlas import mod_key
+
+    rid = game.kid.room
+    out: list[Cell] = []
     for r in range(LAYOUT.room_rows):
         for c in range(LAYOUT.room_cols):
-            byte = room.fg[r * LAYOUT.room_cols + c]
-            tile_val = byte & 0x1F
-            modifier = (byte >> 5) & 0x07
-            coord = (game.kid.room, c, r)
-            # Override modifier para gates / trampas con su state canon
-            if Tile(tile_val) is Tile.GATE:
-                from pop2026canon.domain.traps import gate_phase
+            tile_val, modifier = _cell_tile(game, rid, c, r)
+            if tile_val == 0:
+                continue
+            out.append(
+                (
+                    c,
+                    r,
+                    tile_val,
+                    mod_key(tile_val, modifier),
+                    not _neighbor_has_floor(game, rid, c - 1, r),
+                    not _neighbor_has_floor(game, rid, c + 1, r),
+                )
+            )
+    return tuple(out)
 
-                modifier = gate_phase(game.state, coord)
-            elif Tile(tile_val) in (Tile.CHOMPER, Tile.LOOSE, Tile.SPIKE):
-                modifier = game.state.state_at(coord)
-            # Loose caído: la losa ya no está — agujero real (la física
-            # tampoco soporta peso ahí).
-            if coord in game.state.fallen_floors:
-                tile_val = int(Tile.EMPTY)
-            # Escombros de una losa estrellada: tapan pinchos, pociones...
-            if coord in game.state.debris_cells:
-                if Tile(tile_val) in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
-                    tile_val = int(Tile.TORCH_WITH_DEBRIS)
-                else:
-                    tile_val = int(Tile.DEBRIS)
-            x = c * LAYOUT.tile_w
-            y = LAYOUT.hud_top + r * LAYOUT.tile_h
-            draw_tile(surf, tile_val, x, y, modifier)
-            # Variación de sillería en suelos: 1 de cada 3 celdas lleva
-            # un tinte tenue determinista (texturas "BLOCK1-5" del canon).
-            if Tile(tile_val) is Tile.FLOOR and _room_hash(game.kid.room, c, r) % 3 == 0:
-                slab_h = max(18, LAYOUT.tile_h // 3)
-                tint = pygame.Surface((LAYOUT.tile_w, slab_h - 8), pygame.SRCALPHA)
-                tint.fill((0, 0, 0, 22))
-                surf.blit(tint, (x, y + 7))
+
+def draw_cells(surf: pygame.Surface, room_id: int, cells: tuple[Cell, ...], palace: bool) -> None:
+    """Parte estática de la sala: los sprites de los tiles."""
+    for c, r, tile_val, modifier, left, right in cells:
+        draw_tile(
+            surf,
+            tile_val,
+            c * LAYOUT.tile_w,
+            LAYOUT.hud_top + r * LAYOUT.tile_h,
+            modifier,
+            palace=palace,
+            variant=_room_hash(room_id, c, r) % 8,
+            edges=(left, right),
+        )
+
+
+def draw_animated(surf: pygame.Surface, game: Game, cells: tuple[Cell, ...], t: float) -> None:
+    """Parte animada: llamas de antorcha y losas cayendo."""
+    from pop2026canon.domain.tiles import Tile
+    from pop2026canon.presentation.tile_atlas import draw_torch_flame, torch_flame_px
+
+    for c, r, tile_val, *_ in cells:
+        if tile_val in (int(Tile.TORCH), int(Tile.TORCH_WITH_DEBRIS)):
+            fx, fy = torch_flame_px(c, r)
+            draw_torch_flame(surf, fx, fy, t, seed=c * 3 + r)
     _draw_falling_tiles(surf, game)
+
+
+def _draw_room_tiles(surf: pygame.Surface, game: Game, t: float = 0.0) -> None:
+    """Pinta los 30 tiles de la sala actual (llamas animadas con ``t``)."""
+    from pop2026canon.presentation.tile_atlas import level_is_palace
+
+    cells = room_cells(game)
+    draw_cells(surf, game.kid.room, cells, level_is_palace(game.level.number))
+    draw_animated(surf, game, cells, t)
+
+
+def _draw_front_tiles(surf: pygame.Surface, game: Game) -> None:
+    """Capa delantera: fustes de columnas por delante de los personajes."""
+    from pop2026canon.presentation.tile_atlas import (
+        FRONT_TILES,
+        draw_tile_front,
+        level_is_palace,
+    )
+
+    palace = level_is_palace(game.level.number)
+    rid = game.kid.room
+    for r in range(LAYOUT.room_rows):
+        for c in range(LAYOUT.room_cols):
+            tile_val = _cell_tile(game, rid, c, r)[0]
+            if tile_val in FRONT_TILES:
+                x = c * LAYOUT.tile_w
+                y = LAYOUT.hud_top + r * LAYOUT.tile_h
+                draw_tile_front(surf, tile_val, x, y, palace=palace)
 
 
 def _draw_falling_tiles(surf: pygame.Surface, game: Game) -> None:
     """Losas sueltas en caída (canon mobs): una losa que baja por su columna."""
     from pop2026canon.domain.constants import TILE_SIZE_Y
-    from pop2026canon.presentation.tile_atlas import draw_falling_slab
+    from pop2026canon.presentation.tile_atlas import draw_falling_slab, level_is_palace
 
+    palace = level_is_palace(game.level.number)
+    slab_off = LAYOUT.tile_h - LAYOUT.floor_face - LAYOUT.floor_top
     for mob in game.state.falling_tiles:
         if mob.room != game.kid.room:
             continue
         x = mob.col * LAYOUT.tile_w
-        top = LAYOUT.hud_top + mob.row * LAYOUT.tile_h + (LAYOUT.tile_h * mob.y) // TILE_SIZE_Y
-        draw_falling_slab(surf, x, top)
+        top = (
+            LAYOUT.hud_top
+            + mob.row * LAYOUT.tile_h
+            + (LAYOUT.tile_h * mob.y) // TILE_SIZE_Y
+            + slab_off
+        )
+        draw_falling_slab(surf, x, top, palace=palace)
 
 
 def _char_px(char: Char) -> tuple[int, int]:
@@ -154,7 +190,13 @@ def _char_px(char: Char) -> tuple[int, int]:
     )
     # Geometría canon: el char ocupa la celda del suelo; ``y`` es la
     # altura de los pies dentro de la fila (0 arriba, 62 en el suelo).
-    px_y = LAYOUT.hud_top + char.curr_row * LAYOUT.tile_h + (LAYOUT.tile_h * char.y) // TILE_SIZE_Y
+    # Los pies pisan el centro de la cara superior de la losa.
+    px_y = (
+        LAYOUT.hud_top
+        + char.curr_row * LAYOUT.tile_h
+        + (LAYOUT.tile_h * char.y) // TILE_SIZE_Y
+        - LAYOUT.foot_lift
+    )
     return px_x, px_y
 
 
@@ -210,90 +252,29 @@ def _draw_chars(
     draw_kid_frame(surf, game.kid.frame or 15, px_x, px_y, game.kid.direction, CharPalette.KID)
 
 
-def _draw_hud(
-    surf: pygame.Surface, game: Game, font: pygame.font.Font, *, show_time: bool = False
-) -> None:
-    """Banda HUD superior con HP, tiempo, sala y HP del guard visible."""
-    w = surf.get_width()
-    pygame.draw.rect(surf, PALETTE.bg, (0, 0, w, LAYOUT.hud_top))
-    pygame.draw.line(surf, PALETTE.warning, (0, LAYOUT.hud_top - 1), (w, LAYOUT.hud_top - 1), 1)
-
-    # HP del kid — corazones (izquierda, como el original)
-    for i in range(game.kid.hp_max):
-        cx = 16 + i * 16 + 6
-        cy = 18
-        col = PALETTE.error if i < game.kid.hp_curr else PALETTE.muted
-        pygame.draw.circle(surf, col, (cx - 3, cy - 1), 3)
-        pygame.draw.circle(surf, col, (cx + 3, cy - 1), 3)
-        pygame.draw.polygon(surf, col, [(cx - 5, cy), (cx + 5, cy), (cx, cy + 6)])
-
-    # HP del guard en la sala visible — derecha (canon: barra azul)
-    guard = next(
-        (
-            c
-            for c in game.others
-            if c.charid is CharId.GUARD and c.room == game.kid.room and c.alive < 0
-        ),
-        None,
-    )
-    if guard is not None:
-        for i in range(guard.hp_curr):
-            cx = w - 16 - i * 14
-            cy = 18
-            pygame.draw.rect(surf, PALETTE.accent, (cx - 4, cy - 5, 9, 11), border_radius=2)
-
-    # Texto: nivel y sala
-    label = f"{game.level.name} L{game.level.number}/14 S{game.kid.room}/{len(game.level.rooms)}"
-    surf.blit(font.render(label, True, PALETTE.primary), (w // 3, 14))
-
-    # Tiempo: bajo demanda (TAB) o siempre en los últimos 5 minutos
-    if show_time or game.time.minutes <= 5:
-        time_txt = f"{game.time.minutes:02d}:{game.time.ticks // 12:02d}"
-        color = PALETTE.warning if game.time.minutes <= 5 else PALETTE.primary
-        x = w - 80 if guard is None else w - 170
-        surf.blit(font.render(time_txt, True, color), (x, 14))
-
-
-def _draw_torch_flicker(surf: pygame.Surface, game: Game) -> None:
-    """Halo pulsante sobre las antorchas de la sala (animado a 60 fps)."""
-    from pop2026canon.domain.tiles import Tile
-
-    t = pygame.time.get_ticks()
-    room = game.level.room(game.kid.room)
-    for r in range(LAYOUT.room_rows):
-        for c in range(LAYOUT.room_cols):
-            piece = Tile(room.fg[r * LAYOUT.room_cols + c] & 0x1F)
-            if piece not in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
-                continue
-            phase = (t // 70 + _room_hash(game.kid.room, c, r)) % 5
-            radius = 18 + phase * 3
-            cx = c * LAYOUT.tile_w + LAYOUT.tile_w // 2
-            cy = LAYOUT.hud_top + r * LAYOUT.tile_h + LAYOUT.tile_h // 2 - 18
-            # BLEND_ADD ignora el alpha: el parpadeo va en la intensidad RGB.
-            halo = pygame.Surface((radius * 2, radius * 2))
-            halo.fill((0, 0, 0))
-            glow = 6 + phase * 3
-            pygame.draw.circle(halo, (glow * 2, glow, glow // 3), (radius, radius), radius)
-            surf.blit(halo, (cx - radius, cy - radius), special_flags=pygame.BLEND_ADD)
-
-
 def render(
     surf: pygame.Surface,
     game: Game,
-    font: pygame.font.Font,
+    font: pygame.font.Font | None = None,
     *,
     show_time: bool = False,
     prev: Game | None = None,
     alpha: float = 1.0,
 ) -> None:
-    """Renderiza un frame completo.
+    """Frame completo sin efectos (modo *headless* y pruebas): pared,
+    tiles, personajes, columnas delanteras y HUD.
 
     ``prev``/``alpha`` interpolan las posiciones de los chars entre el
     tick lógico anterior y el actual (12 FPS lógicos → 60 visuales).
     """
+    from pop2026canon.presentation.backdrop import backdrop
+    from pop2026canon.presentation.hud import HudState, draw_hud
+    from pop2026canon.presentation.tile_atlas import level_is_palace
+
+    _ = font
     surf.fill(PALETTE.bg)
-    _draw_back_wall(surf, game.kid.room)
-    _draw_room_tiles(surf, game)
-    _draw_torch_flicker(surf, game)
+    surf.blit(backdrop(game.kid.room, level_is_palace(game.level.number)), (0, LAYOUT.hud_top))
+    _draw_room_tiles(surf, game, pygame.time.get_ticks() / 1000.0)
     _draw_chars(surf, game, prev, alpha)
-    _draw_hud(surf, game, font, show_time=show_time)
+    _draw_front_tiles(surf, game)
+    draw_hud(surf, game, HudState(), t=0.0, sand=None, rewinding=False, show_time=show_time)

@@ -149,16 +149,20 @@ def preview(
 
     import pygame
 
-    from pop2026canon.presentation import renderer
+    from pop2026canon.infrastructure.settings import Settings
     from pop2026canon.presentation.layout import LAYOUT
+    from pop2026canon.presentation.scene import Scene
 
     pygame.init()
     try:
         lv = CANON_LEVELS[level - 1]
         game = new_game(lv)
         surf = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
-        font = pygame.font.Font(None, 22)
-        renderer.render(surf, game, font)
+        # Escena completa (luz, resplandor, niebla) en un instante fijo.
+        scene = Scene(Settings())
+        scene.on_level_start(game)
+        scene.hud.banner_t = 0.0
+        scene.draw(surf, game, None, 1.0, 1.0, sand=None, rewinding=False, show_time=True)
         out.parent.mkdir(parents=True, exist_ok=True)
         pygame.image.save(surf, str(out))
         typer.echo(f"Preview guardado en {out}")

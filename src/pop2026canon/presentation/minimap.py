@@ -15,6 +15,7 @@ import pygame
 
 from pop2026canon.domain.level import Level
 from pop2026canon.domain.tiles import Tile
+from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
 
 
@@ -77,17 +78,18 @@ def draw_minimap(
     if not xs:
         return
     w, h = surf.get_size()
-    cell_w, cell_h = 70, 44
+    cell_w, cell_h = px(70), px(44)
     span_w = (max(xs) - min(xs) + 1) * cell_w
     span_h = (max(ys) - min(ys) + 1) * cell_h
-    scale = min(1.0, (w - 60) / max(1, span_w), (h - 120) / max(1, span_h))
-    cw, ch = max(10, int(cell_w * scale)), max(8, int(cell_h * scale))
+    scale = min(1.0, (w - px(60)) / max(1, span_w), (h - px(120)) / max(1, span_h))
+    cw, ch = max(px(10), int(cell_w * scale)), max(px(8), int(cell_h * scale))
     ox = (w - (max(xs) - min(xs) + 1) * cw) // 2 - min(xs) * cw
-    oy = (h - (max(ys) - min(ys) + 1) * ch) // 2 - min(ys) * ch + 10
+    oy = (h - (max(ys) - min(ys) + 1) * ch) // 2 - min(ys) * ch + px(10)
 
     def rect_of(rid: int) -> pygame.Rect:
         x, y = layout[rid]
-        return pygame.Rect(ox + x * cw + 3, oy + y * ch + 3, cw - 6, ch - 6)
+        g = px(3)
+        return pygame.Rect(ox + x * cw + g, oy + y * ch + g, cw - 2 * g, ch - 2 * g)
 
     # Pasillos entre salas conocidas
     for rid in known:
@@ -97,7 +99,7 @@ def draw_minimap(
         for nb in (rm.link_e, rm.link_s, rm.link_w, rm.link_n):
             if nb in shown and nb in layout:
                 a, b = rect_of(rid).center, rect_of(nb).center
-                pygame.draw.line(surf, PALETTE.primary_dark, a, b, 3)
+                pygame.draw.line(surf, PALETTE.primary_dark, a, b, px(3))
     for rid in shown:
         if rid not in layout:
             continue
@@ -110,11 +112,11 @@ def draw_minimap(
                     int(PALETTE.brick[i] * pulse + PALETTE.brick_dark[i] * (1 - pulse))
                     for i in range(3)
                 )
-            pygame.draw.rect(surf, fill, r, border_radius=4)
-            pygame.draw.rect(surf, PALETTE.brick_top, r, 1, border_radius=4)
+            pygame.draw.rect(surf, fill, r, border_radius=px(4))
+            pygame.draw.rect(surf, PALETTE.brick_top, r, px(1), border_radius=px(4))
             if _has_exit(level, rid):
                 pygame.draw.rect(surf, PALETTE.poster_gold, r.inflate(-r.w // 2, -r.h // 3), 0, 2)
         else:
-            pygame.draw.rect(surf, PALETTE.muted, r, 1, border_radius=4)
+            pygame.draw.rect(surf, PALETTE.muted, r, 1, border_radius=px(4))
             q = font.render("?", True, PALETTE.muted)
             surf.blit(q, q.get_rect(center=r.center))

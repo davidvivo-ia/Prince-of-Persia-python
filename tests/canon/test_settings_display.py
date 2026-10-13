@@ -34,7 +34,7 @@ class TestSettings:
         assert s.master_volume == 1.0
         assert s.window_scale == 4
         assert s.game_mode == "modern"
-        assert s.scale_mode == "pixel"
+        assert s.scale_mode == "smooth"
 
     def test_effective_volumes(self) -> None:
         s = Settings().with_(master_volume=0.5, sfx_volume=0.5, music_volume=1.0)

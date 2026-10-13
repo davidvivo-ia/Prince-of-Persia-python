@@ -15,6 +15,8 @@ import math
 import pygame
 
 from pop2026canon.domain.level import Level
+from pop2026canon.presentation import fonts
+from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
 from pop2026canon.presentation.poster import cast_for_level, draw_poster
 
@@ -58,31 +60,32 @@ def draw_level_card(
 
     # Panel central con la información del nivel.
     panel_w = int(w * 0.6)
-    panel_h = 160
+    panel_h = px(160)
     panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-    pygame.draw.rect(panel, (*PALETTE.bg, 200), panel.get_rect(), border_radius=10)
+    pygame.draw.rect(panel, (*PALETTE.bg, 210), panel.get_rect(), border_radius=px(10))
+    pygame.draw.rect(panel, PALETTE.poster_gold, panel.get_rect(), px(2), border_radius=px(10))
     pygame.draw.rect(
         panel,
-        PALETTE.poster_gold,
-        panel.get_rect(),
-        2,
-        border_radius=10,
+        (*PALETTE.poster_gold, 110),
+        panel.get_rect().inflate(-px(6), -px(6)),
+        1,
+        border_radius=px(8),
     )
     panel_rect = panel.get_rect(center=(w // 2, h // 2))
     surf.blit(panel, panel_rect)
 
-    title = font_big.render(level.name, True, PALETTE.poster_gold)
-    surf.blit(title, title.get_rect(center=(w // 2, panel_rect.y + 32)))
+    title = fonts.gold_title(level.name, 34, glow=4)
+    surf.blit(title, title.get_rect(center=(w // 2, panel_rect.y + px(34))))
 
     sub = font_small.render(f"NIVEL {level.number} de 14", True, PALETTE.primary)
-    surf.blit(sub, sub.get_rect(center=(w // 2, panel_rect.y + 64)))
+    surf.blit(sub, sub.get_rect(center=(w // 2, panel_rect.y + px(68))))
 
     tagline = LEVEL_TAGLINES.get(level.number, "")
     if tagline:
         text = font_small.render(tagline, True, PALETTE.primary_dark)
-        surf.blit(text, text.get_rect(center=(w // 2, panel_rect.y + 100)))
+        surf.blit(text, text.get_rect(center=(w // 2, panel_rect.y + px(102))))
 
     blink = abs(math.sin(t * 2.5)) > 0.3
     hint_col = PALETTE.warning if blink else PALETTE.poster_gold_dark
     hint = font_small.render("Pulsa ENTER", True, hint_col)
-    surf.blit(hint, hint.get_rect(center=(w // 2, panel_rect.y + panel_h - 24)))
+    surf.blit(hint, hint.get_rect(center=(w // 2, panel_rect.y + panel_h - px(24))))

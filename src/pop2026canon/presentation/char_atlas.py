@@ -1,23 +1,35 @@
-"""Atlas procedural del kid (y otros chars) — silueta por frame.
+"""Personajes HD: esqueleto con poses canon (``poses``) vestido por
+personaje y pintado con volumen.
 
-Los ~180 frames se agrupan en ~12 *building blocks* visuales:
-stand, run cycle, jump, fall, hang, climb, sword, drink, death, etc.
-Cada función recibe `(surf, x_px, y_px, facing, palette_kind)`.
+Cada sprite se dibuja supermuestreado (x2) con miembros cónicos de tres
+tonos (sombra, base, brillo), contorno oscuro y se reduce con filtrado:
+bordes suaves a la resolución HD. Los sprites se cachean por
+``(frame, paleta, dirección)`` — un frame canon es una pose fija, así
+que pintar a 60 fps cuesta sólo un ``blit``.
 """
 
 from __future__ import annotations
 
 import math
+from collections import OrderedDict
 from dataclasses import dataclass
 from enum import IntEnum
 
 import pygame
 
-from pop2026canon.presentation.palette import PALETTE
+from pop2026canon.presentation.layout import LAYOUT
+from pop2026canon.presentation.poses import (
+    HEAD_R,
+    ROW_UNITS,
+    Joints,
+    Pose,
+    pose_for,
+    solve,
+)
 
 
 class CharPalette(IntEnum):
-    """Variantes de paleta por tipo de char."""
+    """Variantes de vestuario por tipo de char."""
 
     KID = 0
     SHADOW = 1
@@ -29,251 +41,639 @@ class CharPalette(IntEnum):
 
 
 RGB = tuple[int, int, int]
+Vec = tuple[float, float]
 
 
 @dataclass(frozen=True, slots=True)
-class CharColors:
-    """Paleta completa para dibujar un char humanoide.
-
-    Cada char tiene piel, pelo, túnica, cinturón, pantalones, botas y
-    arma. Los building blocks usan estos roles para que cualquier char
-    quede coherente.
-    """
-
+class Outfit:
     skin: RGB
     hair: RGB
-    tunic: RGB
-    tunic_shade: RGB
-    belt: RGB
+    shirt: RGB
     pants: RGB
-    boots: RGB
-    weapon: RGB | None = None
+    sash: RGB
+    shoes: RGB
+    trim: RGB
+    head: str = "kid"
+    """``kid`` | ``turban`` | ``tall_turban`` | ``long_hair`` | ``skull``."""
+    vest: RGB | None = None
+    robe: bool = False
+    beard: bool = False
+    baggy: bool = False
+    bones: bool = False
+    glow_eyes: bool = False
+    alpha: int = 255
+    eye: RGB = (24, 14, 10)
 
 
-def _colors(kind: CharPalette) -> CharColors:
-    if kind is CharPalette.KID:
-        return CharColors(
-            skin=PALETTE.kid_skin,
-            hair=PALETTE.kid_hair,
-            tunic=PALETTE.kid_tunic,
-            tunic_shade=PALETTE.kid_tunic_dark,
-            belt=PALETTE.kid_belt,
-            pants=PALETTE.kid_tunic,
-            boots=PALETTE.kid_boot,
-            weapon=PALETTE.blade,
-        )
-    if kind is CharPalette.SHADOW:
-        sil = PALETTE.shadow_silhouette
-        return CharColors(
-            skin=sil,
-            hair=PALETTE.bg,
-            tunic=sil,
-            tunic_shade=PALETTE.bg,
-            belt=PALETTE.accent,
-            pants=sil,
-            boots=PALETTE.bg,
-            weapon=PALETTE.blade,
-        )
-    if kind is CharPalette.GUARD:
-        return CharColors(
-            skin=PALETTE.guard_skin,
-            hair=(0x20, 0x18, 0x18),
-            tunic=PALETTE.guard_armor,
-            tunic_shade=(0x20, 0x20, 0x30),
-            belt=(0x60, 0x40, 0x18),
-            pants=PALETTE.guard_armor,
-            boots=(0x20, 0x18, 0x10),
-            weapon=PALETTE.blade,
-        )
-    if kind is CharPalette.SKELETON:
-        bone = (0xCF, 0xCF, 0xDC)
-        bone_dark = (0x5E, 0x4F, 0x7A)
-        return CharColors(
-            skin=bone,
-            hair=bone_dark,
-            tunic=bone_dark,
-            tunic_shade=PALETTE.bg,
-            belt=bone_dark,
-            pants=bone_dark,
-            boots=PALETTE.bg,
-            weapon=PALETTE.blade,
-        )
-    if kind is CharPalette.PRINCESS:
-        return CharColors(
-            skin=PALETTE.kid_skin,
-            hair=(0x40, 0x20, 0x60),
-            tunic=PALETTE.princess_robe,
-            tunic_shade=(0x80, 0x28, 0x60),
-            belt=PALETTE.warning,
-            pants=PALETTE.princess_robe,
-            boots=(0x40, 0x20, 0x40),
-            weapon=None,
-        )
-    if kind is CharPalette.VIZIER:
-        return CharColors(
-            skin=PALETTE.guard_skin,
-            hair=(0x10, 0x08, 0x08),
-            tunic=PALETTE.vizier_robe,
-            tunic_shade=(0x10, 0x08, 0x10),
-            belt=PALETTE.warning,
-            pants=PALETTE.vizier_robe,
-            boots=(0x10, 0x08, 0x08),
-            weapon=PALETTE.blade,
-        )
-    # Mouse / fallback
-    return CharColors(
-        skin=PALETTE.muted,
-        hair=PALETTE.bg,
-        tunic=PALETTE.muted,
-        tunic_shade=PALETTE.bg,
-        belt=PALETTE.bg,
-        pants=PALETTE.muted,
-        boots=PALETTE.bg,
-        weapon=None,
-    )
+OUTFITS: dict[CharPalette, Outfit] = {
+    CharPalette.KID: Outfit(
+        skin=(222, 164, 118),
+        hair=(62, 32, 18),
+        shirt=(238, 234, 220),
+        pants=(226, 222, 206),
+        sash=(198, 40, 30),
+        shoes=(176, 140, 100),
+        trim=(232, 192, 64),
+    ),
+    CharPalette.SHADOW: Outfit(
+        skin=(40, 34, 62),
+        hair=(16, 12, 26),
+        shirt=(46, 40, 72),
+        pants=(42, 36, 66),
+        sash=(90, 40, 120),
+        shoes=(20, 16, 30),
+        trim=(120, 90, 170),
+        glow_eyes=True,
+        alpha=232,
+        eye=(235, 245, 255),
+    ),
+    CharPalette.GUARD: Outfit(
+        skin=(168, 116, 80),
+        hair=(26, 18, 16),
+        shirt=(64, 78, 140),
+        pants=(58, 62, 104),
+        sash=(214, 170, 60),
+        shoes=(64, 38, 24),
+        trim=(226, 214, 186),
+        head="turban",
+        vest=(142, 34, 38),
+        beard=True,
+        baggy=True,
+    ),
+    CharPalette.SKELETON: Outfit(
+        skin=(226, 222, 204),
+        hair=(226, 222, 204),
+        shirt=(226, 222, 204),
+        pants=(226, 222, 204),
+        sash=(120, 110, 96),
+        shoes=(200, 196, 180),
+        trim=(160, 150, 130),
+        head="skull",
+        bones=True,
+    ),
+    CharPalette.PRINCESS: Outfit(
+        skin=(232, 178, 136),
+        hair=(48, 24, 40),
+        shirt=(236, 120, 170),
+        pants=(236, 120, 170),
+        sash=(232, 192, 64),
+        shoes=(120, 50, 90),
+        trim=(250, 220, 120),
+        head="long_hair",
+        robe=True,
+    ),
+    CharPalette.VIZIER: Outfit(
+        skin=(176, 122, 88),
+        hair=(16, 10, 10),
+        shirt=(74, 24, 62),
+        pants=(60, 18, 50),
+        sash=(224, 180, 64),
+        shoes=(30, 14, 22),
+        trim=(232, 192, 64),
+        head="tall_turban",
+        robe=True,
+        beard=True,
+    ),
+    CharPalette.MOUSE: Outfit(
+        skin=(150, 140, 150),
+        hair=(110, 100, 110),
+        shirt=(150, 140, 150),
+        pants=(150, 140, 150),
+        sash=(150, 140, 150),
+        shoes=(220, 150, 160),
+        trim=(220, 150, 160),
+    ),
+}
+
+OUTLINE: RGB = (16, 10, 22)
+STEEL: RGB = (214, 220, 234)
+STEEL_DARK: RGB = (120, 128, 150)
+GOLD: RGB = (232, 192, 64)
+LIGHT: Vec = (0.42, -0.62)
+"""Dirección de la luz principal en el sprite (arriba y por delante)."""
+
+SS = 2
+"""Supermuestreo del dibujo."""
+
+
+def _shade(c: RGB, k: float) -> RGB:
+    return (min(255, int(c[0] * k)), min(255, int(c[1] * k)), min(255, int(c[2] * k)))
+
+
+def _tint(c: RGB, add: int) -> RGB:
+    return (min(255, c[0] + add), min(255, c[1] + add), min(255, c[2] + add))
+
+
+def _norm(v: Vec) -> Vec:
+    d = math.hypot(*v) or 1.0
+    return v[0] / d, v[1] / d
+
+
+_LIGHT = _norm(LIGHT)
+
+
+class _Pen:
+    """Dibujo en unidades del esqueleto sobre la superficie supermuestreada."""
+
+    def __init__(self, surf: pygame.Surface, origin: Vec, k: float) -> None:
+        self.s = surf
+        self.ox, self.oy = origin
+        self.k = k
+
+    def p(self, v: Vec) -> tuple[int, int]:
+        return round(self.ox + v[0] * self.k), round(self.oy + v[1] * self.k)
+
+    def r(self, units: float) -> int:
+        return max(1, round(units * self.k))
+
+    def circle(self, c: RGB, at: Vec, radius: float) -> None:
+        pygame.draw.circle(self.s, c, self.p(at), self.r(radius))
+
+    def poly(self, c: RGB, pts: list[Vec]) -> None:
+        pygame.draw.polygon(self.s, c, [self.p(q) for q in pts])
+
+    def line(self, c: RGB, a: Vec, b: Vec, width: float) -> None:
+        pygame.draw.line(self.s, c, self.p(a), self.p(b), self.r(width))
+
+    def ellipse(self, c: RGB, center: Vec, rx: float, ry: float) -> None:
+        cx, cy = self.p(center)
+        w, h = self.r(rx * 2), self.r(ry * 2)
+        pygame.draw.ellipse(self.s, c, (cx - w // 2, cy - h // 2, w, h))
+
+    def capsule(self, c: RGB, a: Vec, b: Vec, ra: float, rb: float) -> None:
+        d = _norm((b[0] - a[0], b[1] - a[1]))
+        n = (-d[1], d[0])
+        pts = [
+            (a[0] + n[0] * ra, a[1] + n[1] * ra),
+            (b[0] + n[0] * rb, b[1] + n[1] * rb),
+            (b[0] - n[0] * rb, b[1] - n[1] * rb),
+            (a[0] - n[0] * ra, a[1] - n[1] * ra),
+        ]
+        self.poly(c, pts)
+        self.circle(c, a, ra)
+        self.circle(c, b, rb)
+
+    def limb(self, base: RGB, a: Vec, b: Vec, ra: float, rb: float) -> None:
+        """Miembro con volumen: sombra, base desplazada a la luz, brillo."""
+        self.capsule(_shade(base, 0.62), a, b, ra, rb)
+        o = 0.2
+        la = (a[0] + _LIGHT[0] * ra * o, a[1] + _LIGHT[1] * ra * o)
+        lb = (b[0] + _LIGHT[0] * rb * o, b[1] + _LIGHT[1] * rb * o)
+        self.capsule(base, la, lb, ra * 0.78, rb * 0.78)
+        h = 0.5
+        ha = (a[0] + _LIGHT[0] * ra * h, a[1] + _LIGHT[1] * ra * h)
+        hb = (b[0] + _LIGHT[0] * rb * h, b[1] + _LIGHT[1] * rb * h)
+        self.capsule(_tint(base, 28), ha, hb, ra * 0.26, rb * 0.26)
 
 
 # ---------------------------------------------------------------------------
-# Building blocks
+# Partes del cuerpo
 # ---------------------------------------------------------------------------
 
 
-def _draw_body(
-    surf: pygame.Surface,
-    feet_x: int,
-    feet_y: int,
-    facing_sign: int,
-    colors: CharColors,
-    *,
-    body_h: int = 56,
-    torso_w: int = 16,
-    torso_h: int = 22,
-    head_r: int = 7,
-    arm_angle: float = 0.0,
-    leg_spread: int = 8,
-    bob: int = 0,
-) -> tuple[int, int, int]:
-    """Dibuja un cuerpo humanoide con ropa canónica.
+def _frame(angle: float) -> tuple[Vec, Vec]:
+    """(arriba, delante) de un segmento inclinado ``angle`` grados."""
+    a = math.radians(angle)
+    return (math.sin(a), -math.cos(a)), (math.cos(a), math.sin(a))
 
-    Capas (de atrás a delante): pantalones → botas → torso/túnica →
-    cinturón → brazos con mangas → cabeza con pelo.
-    Devuelve ``(head_cx, head_cy, hip_y)``.
-    """
-    feet_y += bob
-    head_cx = feet_x
-    head_cy = feet_y - body_h + head_r
-    torso_top = head_cy + head_r
-    hip_y = torso_top + torso_h
-    half_w = torso_w // 2
 
-    # ---- Piernas (pantalones blancos) + botas
-    foot_l = (head_cx - max(2, leg_spread // 2), feet_y)
-    foot_r = (head_cx + max(2, leg_spread // 2), feet_y)
-    # Muslo+pierna como rectángulos rellenos para mayor cuerpo
-    pygame.draw.line(surf, colors.pants, (head_cx - 4, hip_y), foot_l, 7)
-    pygame.draw.line(surf, colors.pants, (head_cx + 4, hip_y), foot_r, 7)
-    # Sombra interior del pantalón (línea fina al borde)
-    pygame.draw.line(surf, colors.tunic_shade, (head_cx - 4, hip_y), foot_l, 1)
-    pygame.draw.line(surf, colors.tunic_shade, (head_cx + 4, hip_y), foot_r, 1)
-    # Botas
-    pygame.draw.ellipse(surf, colors.boots, (foot_l[0] - 4, feet_y - 3, 9, 6))
-    pygame.draw.ellipse(surf, colors.boots, (foot_r[0] - 5, feet_y - 3, 9, 6))
+def _at(o: Vec, up: Vec, fw: Vec, f: float, u: float) -> Vec:
+    return o[0] + fw[0] * f + up[0] * u, o[1] + fw[1] * f + up[1] * u
 
-    # ---- Torso (túnica) — trapecio relleno + outline
-    torso_pts = [
-        (head_cx - half_w, torso_top),
-        (head_cx + half_w, torso_top),
-        (head_cx + half_w - 2, hip_y),
-        (head_cx - half_w + 2, hip_y),
+
+def _leg(pen: _Pen, o: Outfit, j: Joints, near: bool, far_k: float) -> None:
+    k = 1.0 if near else far_k
+    hip = j.hip
+    knee = j.knee_n if near else j.knee_f
+    ankle = j.ankle_n if near else j.ankle_f
+    toe = j.toe_n if near else j.toe_f
+    if o.bones:
+        bone = _shade(o.skin, k)
+        pen.line(_shade(bone, 0.6), hip, knee, 1.6)
+        pen.line(bone, hip, knee, 1.1)
+        pen.line(_shade(bone, 0.6), knee, ankle, 1.4)
+        pen.line(bone, knee, ankle, 0.9)
+        pen.circle(bone, knee, 1.5)
+        pen.line(bone, ankle, toe, 1.0)
+        return
+    pants = _shade(o.pants, k)
+    if o.baggy:
+        mid = ((knee[0] + ankle[0]) / 2, (knee[1] + ankle[1]) / 2)
+        pen.limb(pants, hip, knee, 3.8, 3.4)
+        pen.limb(pants, knee, mid, 3.4, 3.2)
+        pen.limb(pants, mid, ankle, 3.2, 1.9)
+    else:
+        pen.limb(pants, hip, knee, 3.5, 2.6)
+        pen.limb(pants, knee, ankle, 2.5, 1.8)
+    # Pie / zapato con suela
+    shoe = _shade(o.shoes, k)
+    pen.limb(shoe, ankle, toe, 1.9, 1.2)
+    if o.head in {"turban", "tall_turban"}:
+        # Babucha con punta curva
+        d = _norm((toe[0] - ankle[0], toe[1] - ankle[1]))
+        tip = (toe[0] + d[0] * 1.6, toe[1] + d[1] * 1.6 - 1.2)
+        pen.line(shoe, toe, tip, 0.9)
+
+
+def _torso(pen: _Pen, o: Outfit, j: Joints) -> None:
+    up, fw = _frame(j.lean)
+    hip = j.hip
+
+    def at(f: float, u: float) -> Vec:
+        return _at(hip, up, fw, f, u)
+
+    if o.bones:
+        bone = o.skin
+        dark = _shade(bone, 0.55)
+        # Columna, costillas y pelvis
+        pen.line(dark, at(-1.2, 0), at(-1.0, 15), 1.6)
+        pen.line(bone, at(-1.2, 0), at(-1.0, 15), 1.0)
+        for i in range(5):
+            u = 6.0 + i * 1.9
+            w = 3.6 - abs(i - 2) * 0.35
+            pen.line(dark, at(-1.0, u), at(w, u - 1.2), 1.2)
+            pen.line(bone, at(-1.0, u), at(w, u - 1.2), 0.7)
+        pen.poly(bone, [at(-3.2, 0.5), at(3.0, 0.5), at(2.0, -1.8), at(-2.2, -1.8)])
+        pen.poly(dark, [at(-1.0, -0.2), at(1.0, -0.2), at(0.0, -1.4)])
+        return
+    shirt = o.shirt
+    body = [
+        at(-3.6, -0.4),
+        at(3.9, -0.4),
+        at(4.4, 4.0),
+        at(5.0, 9.4),
+        at(3.4, 14.0),
+        at(0.4, 15.2),
+        at(-3.8, 13.6),
+        at(-3.5, 7.0),
     ]
-    pygame.draw.polygon(surf, colors.tunic, torso_pts)
-    pygame.draw.polygon(surf, colors.tunic_shade, torso_pts, 1)
-    # Pliegue central de la túnica
-    pygame.draw.line(
-        surf,
-        colors.tunic_shade,
-        (head_cx, torso_top + 2),
-        (head_cx, hip_y - 2),
-        1,
-    )
+    pen.poly(_shade(shirt, 0.66), body)
+    lit = [
+        at(-1.8, 0.2),
+        at(3.4, 0.2),
+        at(3.9, 4.0),
+        at(4.4, 9.2),
+        at(2.9, 13.2),
+        at(0.5, 14.2),
+        at(-2.2, 12.6),
+        at(-2.0, 6.5),
+    ]
+    pen.poly(shirt, lit)
+    pen.poly(_tint(shirt, 26), [at(1.8, 8.0), at(4.0, 9.2), at(2.9, 12.6), at(1.6, 12.0)])
+    # Pliegues de la camisa
+    pen.line(_shade(shirt, 0.8), at(0.8, 2.5), at(1.6, 8.5), 0.45)
+    pen.line(_shade(shirt, 0.8), at(-1.4, 3.0), at(-0.8, 9.5), 0.4)
+    if o.vest is not None:
+        vest = o.vest
+        pen.poly(
+            _shade(vest, 0.7),
+            [at(-3.7, 2.0), at(0.4, 2.0), at(1.4, 13.6), at(-3.7, 13.4)],
+        )
+        pen.poly(vest, [at(-2.4, 2.4), at(0.1, 2.4), at(1.0, 13.0), at(-2.6, 12.8)])
+        pen.line(o.trim, at(0.4, 2.0), at(1.4, 13.6), 0.5)
+        pen.poly(
+            vest,
+            [at(3.6, 2.0), at(4.4, 4.0), at(4.8, 9.2), at(3.2, 13.6), at(2.4, 13.0), at(2.8, 2.4)],
+        )
+    # Faja / cinturón con nudo y caída por detrás
+    sash = o.sash
+    band = [at(-3.7, 1.4), at(4.0, 1.4), at(4.3, 4.4), at(-3.6, 4.4)]
+    pen.poly(_shade(sash, 0.7), band)
+    pen.poly(sash, [at(-2.6, 1.8), at(3.6, 1.8), at(3.9, 3.6), at(-2.6, 3.6)])
+    pen.line(_tint(sash, 40), at(-1.5, 3.4), at(3.6, 3.4), 0.35)
+    if not o.robe:
+        tail = [at(-3.4, 2.6), at(-6.4, -3.2), at(-5.0, -3.8), at(-2.6, 1.2)]
+        pen.poly(_shade(sash, 0.75), tail)
+    # Faldón de la camisa por debajo de la faja (kid)
+    if not o.robe and o.vest is None:
+        pen.poly(_shade(shirt, 0.8), [at(-3.6, 1.5), at(4.0, 1.5), at(4.4, -1.2), at(-4.0, -1.0)])
 
-    # ---- Cinturón rojo (siempre visible — clave canon)
-    belt_y = hip_y - 4
-    belt_rect = pygame.Rect(head_cx - half_w + 1, belt_y, torso_w - 2, 4)
-    pygame.draw.rect(surf, colors.belt, belt_rect)
-    pygame.draw.rect(surf, colors.tunic_shade, belt_rect, 1)
 
-    # ---- Brazos con manga blanca + mano piel
-    # arm_angle = 0 → brazos colgando; pi/4 → enfrente; -pi/2 → arriba.
-    shoulder_l = (head_cx - half_w + 1, torso_top + 3)
-    shoulder_r = (head_cx + half_w - 1, torso_top + 3)
-    arm_len = 16
-    elbow_dx = int(math.cos(arm_angle) * arm_len * 0.55)
-    elbow_dy = int(math.sin(arm_angle) * arm_len * 0.55) + 6
-    # Brazo derecho (delante) — empuja hacia facing
-    elbow_r = (shoulder_r[0] + elbow_dx * facing_sign, shoulder_r[1] + elbow_dy)
-    hand_r = (
-        elbow_r[0] + int(math.cos(arm_angle + 0.3) * 7) * facing_sign,
-        elbow_r[1] + int(math.sin(arm_angle + 0.3) * 7) + 4,
-    )
-    pygame.draw.line(surf, colors.tunic, shoulder_r, elbow_r, 5)
-    pygame.draw.line(surf, colors.skin, elbow_r, hand_r, 4)
-    pygame.draw.circle(surf, colors.skin, hand_r, 2)
-    # Brazo trasero — más sombreado, ángulo simétrico
-    elbow_l = (shoulder_l[0] - elbow_dx * facing_sign, shoulder_l[1] + elbow_dy)
-    hand_l = (
-        elbow_l[0] - int(math.cos(arm_angle + 0.3) * 6) * facing_sign,
-        elbow_l[1] + int(math.sin(arm_angle + 0.3) * 6) + 4,
-    )
-    pygame.draw.line(surf, colors.tunic_shade, shoulder_l, elbow_l, 5)
-    pygame.draw.line(surf, colors.skin, elbow_l, hand_l, 3)
-    pygame.draw.circle(surf, colors.skin, hand_l, 2)
+def _robe(pen: _Pen, o: Outfit, j: Joints) -> None:
+    up, fw = _frame(j.lean)
+    hip = j.hip
+    pts = (j.knee_n, j.knee_f, j.ankle_n, j.ankle_f)
+    front = max(p[0] for p in pts) + 3.0
+    back = min(p[0] for p in pts) - 3.0
+    hem = max(j.ankle_n[1], j.ankle_f[1]) + 0.3
+    w_back = _at(hip, up, fw, -4.2, 3.0)
+    w_front = _at(hip, up, fw, 4.6, 3.0)
+    skirt = [w_back, w_front, (front, hem), (back, hem)]
+    pen.poly(_shade(o.shirt, 0.62), skirt)
+    inner = [
+        (w_back[0] + 1.6, w_back[1]),
+        (w_front[0] - 0.6, w_front[1]),
+        (front - 1.2, hem - 0.6),
+        ((front + back) / 2, hem - 0.6),
+    ]
+    pen.poly(o.shirt, inner)
+    # Pliegues y ribete del bajo
+    for t in (0.3, 0.55, 0.8):
+        top = (w_back[0] + (w_front[0] - w_back[0]) * t, w_back[1] + (w_front[1] - w_back[1]) * t)
+        bot = (back + (front - back) * t, hem)
+        pen.line(_shade(o.shirt, 0.72), top, bot, 0.5)
+    pen.line(o.trim, (back, hem - 0.4), (front, hem - 0.4), 0.9)
 
-    # ---- Cabeza (piel) + pelo
-    pygame.draw.circle(surf, colors.skin, (head_cx, head_cy), head_r)
+
+def _arm(pen: _Pen, o: Outfit, j: Joints, near: bool, far_k: float) -> None:
+    k = 1.0 if near else far_k
+    sh = j.shoulder
+    el = j.elbow_n if near else j.elbow_f
+    ha = j.hand_n if near else j.hand_f
+    if o.bones:
+        bone = _shade(o.skin, k)
+        pen.line(_shade(bone, 0.6), sh, el, 1.4)
+        pen.line(bone, sh, el, 0.9)
+        pen.line(_shade(bone, 0.6), el, ha, 1.2)
+        pen.line(bone, el, ha, 0.8)
+        pen.circle(bone, el, 1.2)
+        pen.circle(bone, ha, 1.1)
+        return
+    sleeve = _shade(o.shirt, k)
+    pen.limb(sleeve, sh, el, 2.4, 2.0)
+    if o.robe:
+        pen.limb(sleeve, el, ha, 2.0, 2.2)  # manga ancha
+        pen.circle(_shade(o.trim, k), ha, 1.0)
+    else:
+        mid = (el[0] + (ha[0] - el[0]) * 0.7, el[1] + (ha[1] - el[1]) * 0.7)
+        pen.limb(sleeve, el, mid, 2.0, 1.7)
+        pen.limb(_shade(o.skin, k), mid, ha, 1.4, 1.3)
+    pen.limb(_shade(o.skin, k), ha, ha, 1.7, 1.7)
+
+
+def _head(pen: _Pen, o: Outfit, j: Joints) -> None:
+    up, fw = _frame(j.head_angle)
+    c = j.head
+    neck_base = j.neck
+
+    def at(f: float, u: float) -> Vec:
+        return _at(c, up, fw, f, u)
+
+    if o.head == "skull":
+        bone = o.skin
+        pen.line(_shade(bone, 0.6), neck_base, at(-0.5, -3.5), 1.3)
+        pen.circle(_shade(bone, 0.6), at(-0.2, 0.4), HEAD_R * 0.98)
+        pen.circle(bone, at(0.1, 0.8), HEAD_R * 0.86)
+        pen.poly(bone, [at(0.0, -2.0), at(4.2, -2.4), at(4.4, -4.6), at(0.4, -5.0)])
+        pen.line(_shade(bone, 0.5), at(1.0, -3.6), at(4.2, -3.6), 0.35)
+        pen.circle((20, 10, 16), at(2.6, 0.2), 1.35)
+        pen.circle((255, 120, 60), at(2.8, 0.3), 0.35)
+        pen.poly((40, 26, 30), [at(4.3, -1.2), at(5.0, -2.2), at(3.8, -2.0)])
+        return
+    skin = o.skin
     # Cuello
-    pygame.draw.rect(surf, colors.skin, (head_cx - 2, head_cy + head_r - 2, 4, 4))
-    # Casquete del pelo: arco superior y mechón hacia atrás
-    hair_rect = (
-        head_cx - head_r - 1,
-        head_cy - head_r - 1,
-        (head_r + 1) * 2,
-        (head_r + 1) * 2,
-    )
-    pygame.draw.arc(surf, colors.hair, hair_rect, math.pi * 0.15, math.pi * 0.95, 3)
-    # Mechón detrás (hacia el lado contrario al facing)
-    pygame.draw.line(
-        surf,
-        colors.hair,
-        (head_cx - facing_sign * (head_r - 1), head_cy - head_r + 1),
-        (head_cx - facing_sign * (head_r + 2), head_cy + 2),
-        2,
-    )
-    # Ojo
-    pygame.draw.circle(surf, PALETTE.bg, (head_cx + facing_sign * 3, head_cy - 1), 1)
-    return head_cx, head_cy, hip_y
+    pen.limb(skin, neck_base, at(-0.6, -3.6), 1.7, 1.7)
+    # Pelo de la nuca (detrás de la cara)
+    if o.head in ("kid", "long_hair"):
+        pen.circle(_shade(o.hair, 0.8), at(-1.4, 0.8), HEAD_R * 1.02)
+        lock = [at(-4.6, 1.0), at(-1.0, 1.4), at(-1.2, -4.8), at(-4.0, -5.6), at(-5.6, -2.0)]
+        pen.poly(_shade(o.hair, 0.85), lock)
+        if o.head == "long_hair":
+            tress = [at(-5.4, 1.0), at(-1.2, 0.0), at(-2.0, -15.0), at(-5.6, -16.0), at(-7.2, -9.0)]
+            pen.poly(_shade(o.hair, 0.75), tress)
+            pen.line(_tint(o.hair, 20), at(-4.0, -1.0), at(-4.6, -13.0), 0.5)
+    # Cara
+    pen.circle(_shade(skin, 0.72), c, HEAD_R)
+    pen.circle(skin, at(0.6, 0.4), HEAD_R * 0.86)
+    pen.circle(_tint(skin, 22), at(2.2, 1.6), HEAD_R * 0.32)
+    # Nariz, barbilla, oreja
+    pen.poly(skin, [at(4.2, 1.2), at(6.0, -0.9), at(4.4, -1.2)])
+    pen.poly(_shade(skin, 0.75), [at(4.4, -1.2), at(6.0, -0.9), at(5.0, -1.6)])
+    pen.circle(_shade(skin, 0.7), at(-0.8, -0.4), 1.2)
+    # Ojo y ceja
+    eye = at(2.9, 0.5)
+    if o.glow_eyes:
+        pen.circle((150, 170, 255), eye, 1.3)
+        pen.circle(o.eye, eye, 0.75)
+    else:
+        pen.ellipse((250, 246, 236), eye, 0.95, 0.65)
+        pen.circle(o.eye, at(3.3, 0.5), 0.5)
+    pen.line(_shade(o.hair, 0.9), at(1.8, 1.9), at(4.0, 1.7), 0.5)
+    # Boca
+    pen.line(_shade(skin, 0.55), at(3.4, -2.6), at(4.6, -2.4), 0.35)
+    if o.beard:
+        beard = [at(1.0, -1.6), at(4.8, -2.0), at(4.4, -5.6), at(2.6, -7.0), at(0.6, -4.0)]
+        pen.poly(o.hair, beard)
+        pen.line(o.hair, at(3.0, -1.6), at(5.6, -1.4), 0.6)  # bigote
+    # Tocado
+    if o.head == "kid":
+        cap = [
+            at(-4.8, 1.0),
+            at(-3.4, 4.6),
+            at(0.2, 5.8),
+            at(3.6, 4.6),
+            at(4.6, 2.4),
+            at(1.4, 3.0),
+            at(-1.8, 2.0),
+        ]
+        pen.poly(o.hair, cap)
+        pen.poly(_tint(o.hair, 30), [at(-2.4, 4.2), at(0.4, 5.2), at(2.6, 4.4), at(0.2, 4.4)])
+        pen.poly(o.hair, [at(3.0, 4.4), at(4.8, 1.6), at(5.2, 3.4)])  # flequillo
+    elif o.head == "long_hair":
+        cap = [at(-5.0, 0.0), at(-3.6, 4.6), at(0.6, 5.8), at(3.8, 4.4), at(4.4, 2.0), at(1.0, 3.0)]
+        pen.poly(o.hair, cap)
+        pen.circle(o.trim, at(1.4, 5.0), 0.8)  # diadema
+    elif o.head == "turban":
+        t = o.trim
+        pen.ellipse(_shade(t, 0.72), at(-0.4, 3.4), 6.0, 3.6)
+        pen.ellipse(t, at(0.0, 3.8), 5.4, 3.0)
+        for u in (2.4, 4.0):
+            pen.line(_shade(t, 0.8), at(-4.6, u), at(4.4, u + 0.6), 0.4)
+        pen.circle((200, 30, 40), at(3.4, 5.4), 0.9)
+        pen.circle((255, 160, 160), at(3.6, 5.6), 0.3)
+    elif o.head == "tall_turban":
+        t = (236, 228, 210)
+        pen.ellipse(_shade(t, 0.72), at(-0.2, 5.6), 6.0, 6.0)
+        pen.ellipse(t, at(0.2, 6.2), 5.2, 5.4)
+        pen.line(_shade(t, 0.8), at(-4.8, 3.6), at(4.8, 4.6), 0.5)
+        pen.line(_shade(t, 0.8), at(-4.0, 7.0), at(4.0, 8.6), 0.4)
+        pen.circle((40, 160, 90), at(4.6, 4.6), 1.1)
+        pen.circle(o.trim, at(4.6, 4.6), 0.5)
+        pen.line(o.trim, at(0.6, 11.0), at(-1.6, 14.6), 0.6)  # pluma
 
 
-def _draw_sword(
-    surf: pygame.Surface, hand_x: int, hand_y: int, facing_sign: int, weapon: RGB
-) -> None:
-    """Sable horizontal extendido hacia facing."""
-    blade_end = hand_x + facing_sign * 22
-    pygame.draw.line(surf, weapon, (hand_x, hand_y), (blade_end, hand_y - 1), 3)
-    pygame.draw.line(surf, PALETTE.warning, (hand_x, hand_y - 3), (hand_x, hand_y + 3), 2)
+def _blade(pen: _Pen, j: Joints) -> None:
+    if j.blade is None:
+        return
+    a = math.radians(j.blade)
+    d = (math.sin(a), math.cos(a))
+    n = (-d[1], d[0])
+    h = j.hand_n
+    base = (h[0] + d[0] * 2.4, h[1] + d[1] * 2.4)
+    tip = (h[0] + d[0] * 25.0, h[1] + d[1] * 25.0)
+    mid = (h[0] + d[0] * 15.0 - n[0] * 0.9, h[1] + d[1] * 15.0 - n[1] * 0.9)
+    w = 1.05
+    pts = [
+        (base[0] + n[0] * w, base[1] + n[1] * w),
+        (mid[0] + n[0] * w * 0.85, mid[1] + n[1] * w * 0.85),
+        tip,
+        (mid[0] - n[0] * w * 0.9, mid[1] - n[1] * w * 0.9),
+        (base[0] - n[0] * w, base[1] - n[1] * w),
+    ]
+    pen.poly(STEEL_DARK, pts)
+    inner = [
+        (base[0] + n[0] * w * 0.4, base[1] + n[1] * w * 0.4),
+        (mid[0] + n[0] * w * 0.35, mid[1] + n[1] * w * 0.35),
+        tip,
+        (mid[0] - n[0] * w * 0.5, mid[1] - n[1] * w * 0.5),
+        (base[0] - n[0] * w * 0.5, base[1] - n[1] * w * 0.5),
+    ]
+    pen.poly(STEEL, inner)
+    pen.line((255, 255, 255), base, mid, 0.25)
+    # Guarda, puño y pomo
+    g = (h[0] + d[0] * 1.8, h[1] + d[1] * 1.8)
+    pen.line(
+        _shade(GOLD, 0.6),
+        (g[0] + n[0] * 2.8, g[1] + n[1] * 2.8),
+        (g[0] - n[0] * 2.8, g[1] - n[1] * 2.8),
+        1.0,
+    )
+    pen.line(
+        GOLD, (g[0] + n[0] * 2.6, g[1] + n[1] * 2.6), (g[0] - n[0] * 2.6, g[1] - n[1] * 2.6), 0.55
+    )
+    pen.circle(GOLD, (h[0] - d[0] * 1.6, h[1] - d[1] * 1.6), 0.9)
+
+
+def _item(pen: _Pen, j: Joints, item: str) -> None:
+    if item == "flask":
+        h = j.hand_n
+        body = (h[0] + 0.4, h[1] - 1.6)
+        pen.circle((150, 180, 210), body, 2.2)
+        pen.circle((210, 40, 50), (body[0], body[1] + 0.5), 1.7)
+        pen.line((170, 200, 230), body, (body[0] + 0.3, body[1] - 3.2), 0.9)
+        pen.circle((255, 255, 255), (body[0] - 0.8, body[1] - 0.6), 0.45)
+    elif item == "slash":
+        hip = j.hip
+        pen.line((150, 0, 0), (hip[0] - 5, hip[1] + 2), (hip[0] + 6, hip[1] - 6), 1.6)
+        pen.line((220, 30, 30), (hip[0] - 4, hip[1] + 1), (hip[0] + 5, hip[1] - 5), 0.8)
 
 
 # ---------------------------------------------------------------------------
-# Frame → drawer dispatch
+# Composición y caché
 # ---------------------------------------------------------------------------
 
 
-CHAR_SCALE: float = 1.5
-"""Factor de escala del char en pantalla. El cuerpo base mide ~60 px;
-con 1.5x el kid ocupa ~90 px de los 126 de un piso (proporción POP1)."""
+def _bounds(j: Joints) -> tuple[float, float, float, float]:
+    xs = [p[0] for p in j.points()]
+    ys = [p[1] for p in j.points()]
+    if j.blade is not None:
+        a = math.radians(j.blade)
+        h = j.hand_n
+        xs.append(h[0] + math.sin(a) * 26)
+        ys.append(h[1] + math.cos(a) * 26)
+    m = 11.0
+    return min(xs) - m, min(ys) - m - 6.0, max(xs) + m, max(ys) + m
 
-_CANVAS = 160
-_CANVAS_FEET = (80, 130)
+
+def _units_px() -> float:
+    """Píxeles del lienzo por unidad del esqueleto."""
+    return LAYOUT.tile_h / ROW_UNITS
+
+
+def _outline(src: pygame.Surface, width: int) -> pygame.Surface:
+    mask = pygame.mask.from_surface(src, 20)
+    sil = mask.to_surface(setcolor=(*OUTLINE, 255), unsetcolor=(0, 0, 0, 0))
+    out = pygame.Surface(src.get_size(), pygame.SRCALPHA)
+    for dx in (-width, 0, width):
+        for dy in (-width, 0, width):
+            if dx or dy:
+                out.blit(sil, (dx, dy))
+    out.blit(src, (0, 0))
+    return out
+
+
+def _render(pose: Pose, outfit: Outfit) -> tuple[pygame.Surface, tuple[int, int]]:
+    """Sprite mirando a la derecha y la posición de los pies en él."""
+    j = solve(pose)
+    x0, y0, x1, y1 = _bounds(j)
+    k = _units_px() * SS
+    w = max(4, math.ceil((x1 - x0) * k))
+    h = max(4, math.ceil((y1 - y0) * k))
+    big = pygame.Surface((w, h), pygame.SRCALPHA)
+    pen = _Pen(big, (-x0 * k, -y0 * k), k)
+    far_k = 0.7
+    if outfit.robe:
+        _arm(pen, outfit, j, False, far_k)
+        _leg(pen, outfit, j, False, far_k)
+        _leg(pen, outfit, j, True, far_k)
+        _robe(pen, outfit, j)
+        _torso(pen, outfit, j)
+    else:
+        _arm(pen, outfit, j, False, far_k)
+        _leg(pen, outfit, j, False, far_k)
+        _leg(pen, outfit, j, True, far_k)
+        _torso(pen, outfit, j)
+    _head(pen, outfit, j)
+    _blade(pen, j)
+    _arm(pen, outfit, j, True, far_k)
+    _item(pen, j, pose.item)
+    big = _outline(big, max(1, round(k * 0.42)))
+    small = pygame.transform.smoothscale(big, (max(1, w // SS), max(1, h // SS)))
+    anchor = (round(-x0 * k / SS), round(-y0 * k / SS))
+    return small, anchor
+
+
+def _render_mouse(frame: int, outfit: Outfit) -> tuple[pygame.Surface, tuple[int, int]]:
+    k = _units_px() * SS
+    w, h = math.ceil(26 * k), math.ceil(14 * k)
+    big = pygame.Surface((w, h), pygame.SRCALPHA)
+    pen = _Pen(big, (8 * k, 12 * k), k)
+    fur = outfit.skin
+    step = 1.0 if frame % 2 else -1.0
+    pen.line(_shade(fur, 0.6), (-6.0, -2.0), (-7.5, -6.0), 0.5)
+    pen.line(_shade(fur, 0.6), (-7.5, -6.0), (-5.0, -8.5), 0.4)
+    pen.ellipse(_shade(fur, 0.65), (0.0, -2.6), 6.4, 3.0)
+    pen.ellipse(fur, (0.4, -3.0), 5.6, 2.4)
+    pen.circle(fur, (5.6, -3.4), 2.2)
+    pen.circle(_shade(fur, 0.8), (4.6, -5.6), 1.4)
+    pen.circle(outfit.shoes, (4.6, -5.6), 0.8)
+    pen.circle((10, 6, 10), (6.4, -3.8), 0.45)
+    pen.circle(outfit.shoes, (7.7, -3.0), 0.5)
+    for lx in (-3.0, 2.5):
+        pen.line(_shade(fur, 0.55), (lx, -1.0), (lx + step * 0.8, 0.0), 0.5)
+    big = _outline(big, max(1, round(k * 0.35)))
+    small = pygame.transform.smoothscale(big, (w // SS, h // SS))
+    return small, (round(8 * k / SS), round(12 * k / SS))
+
+
+_CACHE: OrderedDict[tuple[int, int, int], tuple[pygame.Surface, tuple[int, int]]] = OrderedDict()
+_CACHE_MAX = 900
+
+
+def sprite(frame: int, palette: CharPalette, facing: int) -> tuple[pygame.Surface, tuple[int, int]]:
+    """Sprite del frame (cacheado) y el punto de los pies dentro de él."""
+    right = facing == 0
+    key = (frame, int(palette), 0 if right else 1)
+    hit = _CACHE.get(key)
+    if hit is not None:
+        _CACHE.move_to_end(key)
+        return hit
+    outfit = OUTFITS.get(palette, OUTFITS[CharPalette.KID])
+    if palette is CharPalette.MOUSE:
+        img, (ax, ay) = _render_mouse(frame, outfit)
+        pose_sx, alpha = 1.0, 1.0
+    else:
+        pose = pose_for(frame)
+        img, (ax, ay) = _render(pose, outfit)
+        pose_sx, alpha = pose.sx, pose.alpha
+    if pose_sx != 1.0:
+        w = max(1, round(img.get_width() * abs(pose_sx)))
+        ax = round(ax * abs(pose_sx))
+        img = pygame.transform.smoothscale(img, (w, img.get_height()))
+        if pose_sx < 0:
+            img = pygame.transform.flip(img, True, False)
+            ax = w - ax
+    if not right:
+        img = pygame.transform.flip(img, True, False)
+        ax = img.get_width() - ax
+    a = int(outfit.alpha * alpha)
+    if a < 255:
+        img.set_alpha(a)
+    out = (img, (ax, ay))
+    _CACHE[key] = out
+    if len(_CACHE) > _CACHE_MAX:
+        _CACHE.popitem(last=False)
+    return out
 
 
 def draw_kid_frame(
@@ -284,241 +684,32 @@ def draw_kid_frame(
     facing: int,
     palette: CharPalette = CharPalette.KID,
 ) -> None:
-    """Dibuja el frame del char en la posición (px_x, px_y) — pie del char.
-
-    Renderiza el cuerpo en un lienzo temporal y lo escala ``CHAR_SCALE``
-    para que la proporción char/sala sea la del original.
-    """
-    canvas = pygame.Surface((_CANVAS, _CANVAS), pygame.SRCALPHA)
-    _draw_kid_frame_raw(canvas, frame_id, _CANVAS_FEET[0], _CANVAS_FEET[1], facing, palette)
-    scaled_size = int(_CANVAS * CHAR_SCALE)
-    scaled = pygame.transform.scale(canvas, (scaled_size, scaled_size))
-    fx = int(_CANVAS_FEET[0] * CHAR_SCALE)
-    fy = int(_CANVAS_FEET[1] * CHAR_SCALE)
-    surf.blit(scaled, (px_x - fx, px_y - fy))
+    """Dibuja el frame del char con los pies en ``(px_x, px_y)``."""
+    img, (ax, ay) = sprite(frame_id, palette, facing)
+    surf.blit(img, (px_x - ax, px_y - ay))
 
 
-def _draw_kid_frame_raw(
-    surf: pygame.Surface,
-    frame_id: int,
-    px_x: int,
-    px_y: int,
-    facing: int,
-    palette: CharPalette = CharPalette.KID,
-) -> None:
-    """Dibuja el frame a escala 1:1 del atlas (uso interno)."""
-    colors = _colors(palette)
-    fsign = 1 if facing == 0 else -1  # canon: 0 = right, -1 = left
+WARM_FRAMES: tuple[int, ...] = (
+    15,
+    *range(7, 12),
+    *range(121, 133),
+    *range(16, 28),
+    *range(34, 45),
+    *range(45, 53),
+    *range(102, 120),
+    67,
+    68,
+    69,
+    70,
+    77,
+    78,
+    91,
+    *range(135, 150),
+    *range(150, 176),
+    *range(179, 186),
+)
+"""Frames más frecuentes: se pre-pintan poco a poco al empezar un nivel."""
 
-    # Frame ranges canónicos
-    if frame_id == 15:
-        _draw_body(surf, px_x, px_y, fsign, colors)
-        return
 
-    if 121 <= frame_id <= 132:
-        # Run cycle — 12 frames
-        phase = (frame_id - 121) / 12.0
-        leg_spread = 10 + int(math.sin(phase * math.pi * 2) * 5)
-        arm_angle = math.sin(phase * math.pi * 2) * 0.6
-        _draw_body(
-            surf,
-            px_x,
-            px_y,
-            fsign,
-            colors,
-            leg_spread=leg_spread,
-            arm_angle=arm_angle,
-        )
-        return
-
-    if 7 <= frame_id <= 11 or 50 <= frame_id <= 52:
-        _draw_body(surf, px_x, px_y, fsign, colors, leg_spread=6)
-        return
-
-    if 16 <= frame_id <= 27 or 34 <= frame_id <= 44:
-        # Standing jump / run jump
-        bob = -8 if 18 <= frame_id <= 22 else 0
-        _draw_body(
-            surf,
-            px_x,
-            px_y,
-            fsign,
-            colors,
-            body_h=52,
-            leg_spread=4,
-            bob=bob,
-            arm_angle=0.4,
-        )
-        return
-
-    if 45 <= frame_id <= 49:
-        _draw_body(surf, px_x, px_y, fsign, colors, torso_w=12)
-        return
-
-    if 67 <= frame_id <= 99 or 135 <= frame_id <= 149:
-        # Colgado / trepando: en el dominio los pies están a ras del
-        # suelo de la fila del cuerpo (canon y_land), pero el sprite
-        # cuelga de las MANOS: se dibuja elevado para que las manos
-        # toquen la cornisa (una fila = 84 px a 1:1; brazos arriba
-        # alcanzan ~68). Al trepar (135→149) sube progresivamente hasta
-        # quedar de pie en la cornisa.
-        lift = 23
-        if 135 <= frame_id <= 149:
-            lift = 23 + ((frame_id - 135) * (84 - 23)) // 14
-        head_cx, head_cy, _ = _draw_body(
-            surf, px_x, px_y - lift, fsign, colors, arm_angle=-math.pi / 2, body_h=52
-        )
-        # Brazos estirados hacia arriba: cuelga de las manos.
-        shoulder_y = head_cy + 10
-        for sx in (head_cx - 6, head_cx + 6):
-            pygame.draw.line(surf, colors.tunic, (sx, shoulder_y), (sx, shoulder_y - 18), 4)
-            pygame.draw.line(surf, colors.skin, (sx, shoulder_y - 18), (sx, shoulder_y - 26), 3)
-            pygame.draw.circle(surf, colors.skin, (sx, shoulder_y - 27), 2)
-        return
-
-    if 102 <= frame_id <= 108:
-        bob = 0 if frame_id < 106 else 4
-        _draw_body(
-            surf,
-            px_x,
-            px_y,
-            fsign,
-            colors,
-            body_h=50,
-            leg_spread=12,
-            bob=bob,
-        )
-        return
-
-    if 110 <= frame_id <= 119:
-        _draw_body(
-            surf,
-            px_x,
-            px_y,
-            fsign,
-            colors,
-            body_h=36,
-            torso_h=14,
-            leg_spread=12,
-        )
-        return
-
-    if 150 <= frame_id <= 175:
-        # Combate a espada con los frames canon (seqtbl.c):
-        #   150 / 161 parada (hoja vertical delante)
-        #   151-154 estocada (la hoja se extiende; 154 = punta fuera)
-        #   155-157 / 165 recoger la espada y andar en guardia
-        #   158 / 170 / 171 en guardia (hoja a media altura)
-        #   159 / 160 / 163 / 164 pasos en guardia
-        #   162 parada → estocada   166 reposo (sin apuntar)
-        #   167 estocada parada (recoil)   168 atrás   169 empieza la parada
-        #   172-174 herido: tambaleo hacia atrás
-        sign = fsign
-        lean = 0
-        if 172 <= frame_id <= 175:
-            lean = -6  # tambaleo hacia atrás
-        elif frame_id == 167:
-            lean = -3
-        elif frame_id in (152, 153, 154):
-            lean = 3
-        head_cx, _, hip_y = _draw_body(
-            surf,
-            px_x + lean * sign,
-            px_y,
-            sign,
-            colors,
-            leg_spread=12 if frame_id in (151, 152, 153, 154, 163, 164) else 10,
-            arm_angle=0.4,
-        )
-        if colors.weapon is None:
-            return
-        hand_y = hip_y - 12
-        if frame_id in (150, 161, 169, 162):
-            # Parada: hoja vertical delante del cuerpo
-            pygame.draw.line(
-                surf,
-                colors.weapon,
-                (head_cx + sign * 9, hip_y - 32),
-                (head_cx + sign * 9, hip_y + 2),
-                3,
-            )
-        elif frame_id in (151, 152):
-            _draw_sword(surf, head_cx + sign * 6, hand_y - 4, sign, colors.weapon)
-        elif frame_id in (153, 154):
-            # Estocada: brazo y hoja extendidos
-            pygame.draw.line(
-                surf,
-                colors.tunic,
-                (head_cx + sign * 5, hand_y - 2),
-                (head_cx + sign * 16, hand_y),
-                4,
-            )
-            _draw_sword(surf, head_cx + sign * 16, hand_y, sign, colors.weapon)
-        elif frame_id == 166:
-            # Reposo: la hoja apunta al suelo
-            pygame.draw.line(
-                surf,
-                colors.weapon,
-                (head_cx + sign * 6, hip_y - 4),
-                (head_cx + sign * 12, hip_y + 12),
-                3,
-            )
-        elif 172 <= frame_id <= 175:
-            pygame.draw.line(
-                surf,
-                colors.weapon,
-                (head_cx + sign * 4, hip_y - 6),
-                (head_cx - sign * 8, hip_y - 26),
-                3,
-            )
-        else:
-            _draw_sword(surf, head_cx + sign * 8, hand_y, sign, colors.weapon)
-        return
-
-    if frame_id == 177:
-        # Spiked — slumped sobre pinchos
-        pygame.draw.line(surf, colors.tunic, (px_x - 10, px_y - 4), (px_x + 10, px_y - 4), 6)
-        pygame.draw.circle(surf, colors.skin, (px_x - fsign * 12, px_y - 6), 5)
-        return
-
-    if frame_id == 178:
-        # Chomped
-        pygame.draw.rect(surf, colors.tunic, (px_x - 8, px_y - 16, 16, 16))
-        return
-
-    if 179 <= frame_id <= 185:
-        progress = (frame_id - 179) / 6.0
-        angle = progress * (math.pi / 2)
-        sa = math.sin(angle)
-        ca = math.cos(angle)
-        body_dx = int(20 * sa) * fsign
-        body_dy = -int(40 * ca) - 4
-        pygame.draw.line(
-            surf, colors.tunic, (px_x, px_y - 2), (px_x - body_dx // 2, px_y + body_dy + 4), 6
-        )
-        pygame.draw.circle(surf, colors.skin, (px_x + body_dx, px_y + body_dy), 7)
-        if progress > 0.7:
-            pool_w = int(28 * (progress - 0.7) / 0.3)
-            pool = pygame.Surface((pool_w + 4, 4), pygame.SRCALPHA)
-            pygame.draw.ellipse(pool, (*PALETTE.error, 100), pool.get_rect())
-            surf.blit(pool, (px_x - pool_w // 2 - 2, px_y - 1))
-        return
-
-    if 191 <= frame_id <= 205:
-        head_cx, head_cy, _ = _draw_body(surf, px_x, px_y, fsign, colors, arm_angle=math.pi / 4)
-        pygame.draw.circle(surf, PALETTE.success, (head_cx + fsign * 5, head_cy + 2), 4)
-        return
-
-    if 207 <= frame_id <= 210:
-        head_cx, _, hip_y = _draw_body(surf, px_x, px_y, fsign, colors)
-        if colors.weapon is not None:
-            pygame.draw.line(
-                surf,
-                colors.weapon,
-                (head_cx + fsign * 4, hip_y - 6),
-                (head_cx + fsign * 12, hip_y - 22),
-                3,
-            )
-        return
-
-    _draw_body(surf, px_x, px_y, fsign, colors)
+def is_cached(frame: int, palette: CharPalette, facing: int) -> bool:
+    return (frame, int(palette), 0 if facing == 0 else 1) in _CACHE

@@ -1,9 +1,9 @@
-"""Salida de vídeo: el juego se pinta en un lienzo fijo de 640x426 (el
-canon a 2x) y se presenta escalado en una ventana redimensionable o a
+"""Salida de vídeo: el juego se pinta en un lienzo HD fijo de 1280x852
+(el canon a 4x) y se presenta escalado en una ventana redimensionable o a
 pantalla completa, con bandas negras para conservar la proporción.
 
-- ``pixel``: escala ENTERA (píxeles nítidos, la estética pixel-art);
-  si la ventana es menor que el lienzo, cae a escala fraccionaria.
+- ``pixel``: escala ENTERA (píxeles nítidos); si la ventana es menor
+  que el lienzo, reduce con filtrado (nunca a vecino más próximo).
 - ``smooth``: escala fraccionaria suavizada que llena todo lo posible.
 - Filtro CRT opcional: líneas de barrido y viñeta de tubo.
 """
@@ -52,13 +52,17 @@ class Display:
         self.canvas_size = (LAYOUT.window_w, LAYOUT.window_h)
         self.canvas = pygame.Surface(self.canvas_size)
         self.settings = settings
-        self._windowed_size = (
-            self.canvas_size[0] * settings.window_scale,
-            self.canvas_size[1] * settings.window_scale,
-        )
+        self._windowed_size = self._scaled(settings.window_scale)
         self._crt_cache: pygame.Surface | None = None
         self._crt_size: tuple[int, int] = (0, 0)
         self.window = self._open(settings.fullscreen)
+
+    @staticmethod
+    def _scaled(scale: int) -> tuple[int, int]:
+        """Tamaño de ventana para el factor de los ajustes (1x = 640x426,
+        2x = el lienzo HD a 1:1)."""
+        bw, bh = LAYOUT.base_size
+        return bw * scale, bh * scale
 
     def _open(self, fullscreen: bool) -> pygame.Surface:
         if fullscreen:
@@ -75,12 +79,13 @@ class Display:
         if not desktops:
             return size
         dw, dh = desktops[0]
+        _ = size
         scale = self.settings.window_scale
         while scale > 1 and (
-            self.canvas_size[0] * scale > dw * 0.95 or self.canvas_size[1] * scale > dh * 0.9
+            self._scaled(scale)[0] > dw * 0.95 or self._scaled(scale)[1] > dh * 0.9
         ):
             scale -= 1
-        return self.canvas_size[0] * scale, self.canvas_size[1] * scale
+        return self._scaled(scale)
 
     def apply(self, settings: Settings) -> None:
         """Aplica cambios de ajustes de vídeo en caliente."""
@@ -88,10 +93,7 @@ class Display:
         scale_changed = settings.window_scale != self.settings.window_scale
         self.settings = settings
         if scale_changed:
-            self._windowed_size = (
-                self.canvas_size[0] * settings.window_scale,
-                self.canvas_size[1] * settings.window_scale,
-            )
+            self._windowed_size = self._scaled(settings.window_scale)
         if fullscreen_changed or (scale_changed and not settings.fullscreen):
             self.window = self._open(settings.fullscreen)
 
@@ -117,7 +119,7 @@ class Display:
         win.fill((0, 0, 0))
         if (w, h) == self.canvas_size:
             frame = self.canvas
-        elif self.settings.scale_mode == "smooth":
+        elif self.settings.scale_mode == "smooth" or w < self.canvas_size[0]:
             frame = pygame.transform.smoothscale(self.canvas, (w, h))
         else:
             frame = pygame.transform.scale(self.canvas, (w, h))
@@ -131,7 +133,7 @@ class Display:
         if self._crt_cache is None or self._crt_size != size:
             w, h = size
             overlay = pygame.Surface(size, pygame.SRCALPHA)
-            step = max(2, h // self.canvas_size[1])
+            step = max(2, h // LAYOUT.base_size[1])
             for yy in range(0, h, step):
                 pygame.draw.line(overlay, (0, 0, 0, 70), (0, yy), (w, yy))
             # Viñeta de tubo: bordes oscurecidos

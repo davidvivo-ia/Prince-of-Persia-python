@@ -36,7 +36,7 @@ from pop2026canon.presentation import fonts
 from pop2026canon.presentation.display import Display
 from pop2026canon.presentation.fx import level_is_palace
 from pop2026canon.presentation.input_device import InputHub, UiAction
-from pop2026canon.presentation.layout import LAYOUT
+from pop2026canon.presentation.layout import LAYOUT, px
 from pop2026canon.presentation.menu import (
     Menu,
     dim,
@@ -85,8 +85,8 @@ class GameApp:
             sfx_volume=self.settings.effective_sfx, music_volume=self.settings.effective_music
         )
         self.scene = Scene(self.settings)
-        self.font_big = pygame.font.Font(None, 56)
-        self.font_small = pygame.font.Font(None, 22)
+        self.font_big = fonts.title_font(44)
+        self.font_small = fonts.font(20)
         self.clock = pygame.time.Clock()
         self.game: Game = self.session.start_game()
         self.prev_game: Game = self.game
@@ -473,12 +473,15 @@ class GameApp:
                     self.menu,
                     self.settings,
                     self.now,
-                    center_y=LAYOUT.window_h * 2 // 3 + 10,
+                    center_y=LAYOUT.window_h * 2 // 3 + px(10),
                     width=260,
                 )
                 if self.input.pad_connected:
                     pad = fonts.render("Mando conectado", 16, (150, 200, 150))
-                    c.blit(pad, pad.get_rect(bottomright=(c.get_width() - 8, c.get_height() - 6)))
+                    c.blit(
+                        pad,
+                        pad.get_rect(bottomright=(c.get_width() - px(8), c.get_height() - px(6))),
+                    )
         elif p == "card":
             cutscene.draw_level_card(
                 c, self.game.level, self.font_big, self.font_small, self.phase_t
@@ -498,9 +501,9 @@ class GameApp:
                     self.now,
                 )
                 t1 = fonts.render(f"MAPA · {self.game.level.name}", 28, (232, 192, 64), bold=True)
-                c.blit(t1, t1.get_rect(midtop=(c.get_width() // 2, LAYOUT.hud_top + 8)))
+                c.blit(t1, t1.get_rect(midtop=(c.get_width() // 2, LAYOUT.hud_top + px(8))))
                 t2 = fonts.render("Enter / B para volver", 18, (92, 76, 108))
-                c.blit(t2, t2.get_rect(midbottom=(c.get_width() // 2, c.get_height() - 8)))
+                c.blit(t2, t2.get_rect(midbottom=(c.get_width() // 2, c.get_height() - px(8))))
             elif self.overlay is None:
                 draw_menu(c, self.menu, self.settings, self.now)
         elif p == "dead":

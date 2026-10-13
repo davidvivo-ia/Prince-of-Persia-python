@@ -31,16 +31,18 @@ import pygame
 from pop2026canon.domain.actions import Action, Seq
 from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.game import Game
-from pop2026canon.domain.tiles import PotionType, Tile
-from pop2026canon.presentation.layout import LAYOUT
+from pop2026canon.domain.tiles import Tile
+from pop2026canon.presentation.layout import LAYOUT, px
 from pop2026canon.presentation.renderer import _char_px, _lerp_char_px
+from pop2026canon.presentation.tile_atlas import (
+    PALACE_LEVELS,
+    POTION_COLORS,
+    has_floor,
+    level_is_palace,
+    torch_flame_px,
+)
 
-PALACE_LEVELS: frozenset[int] = frozenset({4, 5, 6, 10, 11, 14})
-"""Canon ``tbl_level_type``: 1 = palacio, 0 = mazmorra."""
-
-
-def level_is_palace(number: int) -> bool:
-    return number in PALACE_LEVELS
+__all__ = ["PALACE_LEVELS", "level_is_palace"]
 
 
 # ---------------------------------------------------------------------------
@@ -74,23 +76,20 @@ class FxEvent:
     on_kid: bool = False
 
 
-BODY_H = 46
+BODY_H = px(46)
 """Altura en píxeles del centro del cuerpo sobre los pies."""
 
-_POTION_COLORS: dict[int, tuple[int, int, int]] = {
-    int(PotionType.HEAL): (255, 70, 60),
-    int(PotionType.MAX_HP): (90, 255, 120),
-    int(PotionType.POISON): (80, 120, 255),
-    int(PotionType.FLOAT): (180, 220, 255),
-    int(PotionType.TIME): (255, 220, 90),
-}
+_POTION_COLORS = POTION_COLORS
 
 _RUN_STEP_FRAMES = frozenset({125, 129})
 
 
 def _cell_px(col: int, row: int) -> tuple[int, int]:
     """Centro inferior (superficie del suelo) de una celda."""
-    return col * LAYOUT.tile_w + LAYOUT.tile_w // 2, LAYOUT.hud_top + (row + 1) * LAYOUT.tile_h - 4
+    return (
+        col * LAYOUT.tile_w + LAYOUT.tile_w // 2,
+        LAYOUT.hud_top + (row + 1) * LAYOUT.tile_h - LAYOUT.foot_lift,
+    )
 
 
 def _started(prev: Char, now: Char, seq: Seq) -> bool:
@@ -109,11 +108,15 @@ def _char_events(prev: Char, now: Char, *, on_kid: bool) -> list[FxEvent]:
     ):
         out.append(FxEvent(FxKind.HIT, x, body, 1.0, (200, 20, 20), on_kid))
     if _started(prev, now, Seq.ATTACK_PARRIED):
-        out.append(FxEvent(FxKind.PARRY, x + fwd * 26, body - 6, 1.0, (255, 230, 150), on_kid))
+        out.append(
+            FxEvent(FxKind.PARRY, x + fwd * px(26), body - px(6), 1.0, (255, 230, 150), on_kid)
+        )
     if _started(prev, now, Seq.STRIKE) or _started(prev, now, Seq.GUARD_STRIKE):
-        out.append(FxEvent(FxKind.STRIKE, x + fwd * 30, body - 4, 0.5, (230, 230, 255), on_kid))
+        out.append(
+            FxEvent(FxKind.STRIKE, x + fwd * px(30), body - px(4), 0.5, (230, 230, 255), on_kid)
+        )
     if _started(prev, now, Seq.CHOMPED) or _started(prev, now, Seq.SPIKED):
-        out.append(FxEvent(FxKind.BLOOD, x, y - 20, 1.5, (190, 10, 10), on_kid))
+        out.append(FxEvent(FxKind.BLOOD, x, y - px(20), 1.5, (190, 10, 10), on_kid))
     landed = now.landed_fall_y > 0 and prev.landed_fall_y == 0
     if landed or (
         prev.action is Action.IN_FREEFALL
@@ -128,7 +131,7 @@ def _char_events(prev: Char, now: Char, *, on_kid: bool) -> list[FxEvent]:
         and now.frame in _RUN_STEP_FRAMES
         and now.frame != prev.frame
     ):
-        out.append(FxEvent(FxKind.STEP, x - fwd * 8, y, 0.4, (150, 130, 110), on_kid))
+        out.append(FxEvent(FxKind.STEP, x - fwd * px(8), y, 0.4, (150, 130, 110), on_kid))
     if on_kid and now.alive >= 0 and prev.alive < 0:
         out.append(FxEvent(FxKind.DEATH, x, body, 1.0, (120, 0, 0), True))
     return out
@@ -164,10 +167,10 @@ def detect_fx_events(prev: Game, now: Game) -> list[FxEvent]:
         tile, mod = level.room(rid).tile_at(col, row)
         x, y = _cell_px(col, row)
         if tile is Tile.SWORD:
-            events.append(FxEvent(FxKind.SWORD, x, y - 30, 1.5, (255, 220, 120), True))
+            events.append(FxEvent(FxKind.SWORD, x, y - px(30), 1.5, (255, 220, 120), True))
         elif tile is Tile.POTION:
             color = _POTION_COLORS.get(mod, (255, 120, 200))
-            events.append(FxEvent(FxKind.POTION, x, y - 30, 1.2, color, True))
+            events.append(FxEvent(FxKind.POTION, x, y - px(30), 1.2, color, True))
     for rid, col, row in st_prev.open_gates - st_now.open_gates:
         if rid != room or not (1 <= rid <= len(level.rooms)):
             continue
@@ -179,7 +182,7 @@ def detect_fx_events(prev: Game, now: Game) -> list[FxEvent]:
             continue
         if level.room(rid).tile_at(col, row)[0] in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT):
             x, y = _cell_px(col, row)
-            events.append(FxEvent(FxKind.EXIT_OPEN, x, y - 40, 1.0, (255, 210, 120)))
+            events.append(FxEvent(FxKind.EXIT_OPEN, x, y - px(40), 1.0, (255, 210, 120)))
     return events
 
 
@@ -236,11 +239,12 @@ class Particles:
         jitter: float = 0.0,
     ) -> None:
         r = self.rng
+        k = LAYOUT.scale  # recetas en píxeles de diseño → lienzo HD
         for _ in range(n):
             if len(self.items) >= self.max_particles:
                 self.items.pop(0)
             a = r.uniform(*angle)
-            s = r.uniform(*speed)
+            s = r.uniform(*speed) * k
             lf = r.uniform(*life)
             c = color
             if jitter:
@@ -249,15 +253,15 @@ class Particles:
                 )
             self.items.append(
                 Particle(
-                    x + r.uniform(-2, 2),
-                    y + r.uniform(-2, 2),
+                    x + r.uniform(-2, 2) * k,
+                    y + r.uniform(-2, 2) * k,
                     math.cos(a) * s,
                     math.sin(a) * s,
                     lf,
                     lf,
                     c,
-                    r.uniform(*size),
-                    gravity,
+                    r.uniform(*size) * k,
+                    gravity * k,
                     drag,
                     glow,
                     floor_y,
@@ -311,7 +315,7 @@ class Particles:
             n = int(8 + 14 * ev.strength)
             self.burst(
                 ev.x,
-                ev.y - 2,
+                ev.y - px(2),
                 n,
                 ev.color,
                 speed=(20, 70 * ev.strength),
@@ -326,7 +330,7 @@ class Particles:
         elif k is FxKind.STEP:
             self.burst(
                 ev.x,
-                ev.y - 2,
+                ev.y - px(2),
                 3,
                 ev.color,
                 speed=(10, 30),
@@ -379,7 +383,7 @@ class Particles:
                 size=(1.5, 3.5),
                 gravity=380,
                 jitter=25,
-                floor_y=ev.y + 18,
+                floor_y=ev.y + px(18),
             )
         elif k is FxKind.DEATH:
             self.burst(
@@ -396,7 +400,7 @@ class Particles:
         elif k is FxKind.CRUMBLE:
             self.burst(
                 ev.x,
-                ev.y - 6,
+                ev.y - px(6),
                 18,
                 ev.color,
                 speed=(15, 60),
@@ -409,7 +413,7 @@ class Particles:
         elif k is FxKind.CRASH:
             self.burst(
                 ev.x,
-                ev.y - 4,
+                ev.y - px(4),
                 30,
                 ev.color,
                 speed=(40, 170),
@@ -423,7 +427,7 @@ class Particles:
             )
             self.burst(
                 ev.x,
-                ev.y - 6,
+                ev.y - px(6),
                 14,
                 (150, 140, 130),
                 speed=(10, 45),
@@ -449,7 +453,7 @@ class Particles:
         elif k is FxKind.GATE_SLAM:
             self.burst(
                 ev.x,
-                ev.y - 2,
+                ev.y - px(2),
                 14,
                 ev.color,
                 speed=(20, 60),
@@ -472,7 +476,7 @@ class Particles:
                     cx, cy = _torch_flame_px(col, row)
                     self.burst(
                         cx,
-                        cy - 6,
+                        cy - px(6),
                         1,
                         (255, 170, 60),
                         speed=(8, 25),
@@ -484,7 +488,7 @@ class Particles:
                     )
         if r.random() < dt * 1.5:
             x = r.uniform(0, LAYOUT.window_w)
-            y = r.uniform(LAYOUT.hud_top + 10, LAYOUT.window_h - 10)
+            y = r.uniform(LAYOUT.hud_top + px(10), LAYOUT.window_h - px(10))
             self.burst(
                 x,
                 y,
@@ -516,10 +520,9 @@ def _glow_sprite(radius: int, color: tuple[int, int, int], level: int) -> pygame
 
 
 def _torch_flame_px(col: int, row: int) -> tuple[int, int]:
-    """Posición de la llama (coincide con ``tile_atlas.draw_torch``)."""
-    cx = col * LAYOUT.tile_w + LAYOUT.tile_w // 2
-    cy = LAYOUT.hud_top + row * LAYOUT.tile_h + LAYOUT.tile_h // 2 - 10 - 8
-    return cx, cy
+    """Centro de la llama (``tile_atlas.draw_torch_flame``)."""
+    cx, cy = torch_flame_px(col, row)
+    return cx, cy - px(12)
 
 
 # ---------------------------------------------------------------------------
@@ -538,8 +541,8 @@ def _light_texture(radius: int, color: tuple[int, int, int]) -> pygame.Surface:
     return surf
 
 
-DUNGEON_AMBIENT = (74, 78, 112)
-PALACE_AMBIENT = (112, 98, 104)
+DUNGEON_AMBIENT = (84, 88, 124)
+PALACE_AMBIENT = (122, 106, 110)
 
 
 class Lighting:
@@ -594,27 +597,39 @@ class Lighting:
                         math.sin(t * 13.0 + col * 1.7 + row) * 0.5
                         + math.sin(t * 7.3 + col * 0.9) * 0.5
                     )
-                    radius = int(175 + 14 * flick)
-                    add(cx, cy, radius, (235, 150, 70), glow=0.4)
-                    torches.append((cx, cy, int(4 * flick)))
+                    radius = px(175 + 14 * flick)
+                    add(cx, cy, radius, (255, 168, 64), glow=0.3)
+                    torches.append((cx, cy, px(4 * flick)))
                 elif tile is Tile.POTION and (room.id, col, row) not in game.state.consumed_potions:
                     x, y = _cell_px(col, row)
-                    add(x, y - 18, 40, _POTION_COLORS.get(mod, (200, 80, 160)), glow=0.4)
+                    add(x, y - px(14), px(40), _POTION_COLORS.get(mod, (200, 80, 160)), glow=0.4)
                 elif tile in (Tile.LEVEL_DOOR_LEFT, Tile.LEVEL_DOOR_RIGHT) and any(
                     g[0] == room.id and g[1] in (col, col - 1, col + 1) and g[2] == row
                     for g in game.state.open_gates
                 ):
                     x, y = _cell_px(col, row)
-                    add(x, y - 40, 120, (170, 130, 60), glow=0.3)
+                    add(x, y - px(40), px(120), (170, 130, 60), glow=0.3)
+        # Filo de luz en el borde de cada losa: las plataformas se leen
+        # incluso en la penumbra (como el *rim light* de un juego actual).
+        rim = (30, 32, 50) if not palace else (44, 36, 28)
+        lip_w = max(1, px(1))
+        for row in range(3):
+            lip_y = (row + 1) * LAYOUT.tile_h - LAYOUT.floor_face - lip_w
+            for col in range(10):
+                tile = room.tile_at(col, row)[0]
+                if not has_floor(int(tile)) or (room.id, col, row) in game.state.fallen_floors:
+                    continue
+                x0 = col * LAYOUT.tile_w
+                gm.fill(rim, (x0, lip_y, LAYOUT.tile_w, lip_w * 2))
         kx, ky = kid_px
-        add(kx, ky - 40, 120, (80, 78, 86))
+        add(kx, ky - px(40), px(120), (80, 78, 86))
         # Un poco de luz sobre cada enemigo: que no se pierda en la sombra.
         from pop2026canon.domain.combat import is_hostile
 
         for c in game.others:
             if c.room == room.id and is_hostile(c):
                 ex, ey = _char_px(c)
-                add(ex, ey - 40, 100, (90, 86, 100))
+                add(ex, ey - px(40), px(100), (90, 86, 100))
         for f in self.flashes:
             k = f[3] / 0.18
             add(f[0], f[1], int(f[2]), (int(f[4] * k), int(f[5] * k), int(f[6] * k)), glow=0.5)
@@ -623,12 +638,127 @@ class Lighting:
         surf.blit(gm, (ox, top + oy), special_flags=pygame.BLEND_ADD)
         # Brillo aditivo de las llamas (bloom barato)
         for cx, cy, fl in torches:
-            glow = _glow_sprite(22 + fl, (255, 150, 60), 200)
+            glow = _glow_sprite(px(22) + fl, (255, 150, 60), 200)
             surf.blit(
                 glow,
                 (cx - glow.get_width() // 2 + ox, cy - glow.get_height() // 2 + oy),
                 special_flags=pygame.BLEND_ADD,
             )
+
+
+# ---------------------------------------------------------------------------
+# Atmósfera: rayos de luz volumétricos y niebla baja
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=8)
+def _shaft_texture(
+    length: int, width: int, angle: float, color: tuple[int, int, int]
+) -> pygame.Surface:
+    """Haz de luz difuso (aditivo): intenso arriba, se desvanece abajo."""
+    beam = pygame.Surface((width, length))
+    beam.fill((0, 0, 0))
+    for y in range(length):
+        u = y / length
+        k = min(1.0, u / 0.18) ** 2 * (1 - u) ** 1.4
+        for x in range(0, width, 2):
+            e = 1 - abs(x - width / 2) / (width / 2)
+            f = k * max(0.0, e) ** 1.6
+            pygame.draw.line(beam, tuple(int(c * f) for c in color), (x, y), (x + 1, y))
+    beam = pygame.transform.smoothscale(
+        pygame.transform.smoothscale(beam, (max(1, width // 4), max(1, length // 4))),
+        (width, length),
+    )
+    return pygame.transform.rotate(beam, angle)
+
+
+def _wrap_noise(w: int, h: int, cell: int, seed: int) -> list[list[float]]:
+    rng = random.Random(seed)
+    gw, gh = max(2, w // cell), max(2, h // cell + 2)
+    return [[rng.random() for _ in range(gh)] for _ in range(gw)]
+
+
+@functools.lru_cache(maxsize=4)
+def _fog_texture(w: int, h: int, color: tuple[int, int, int]) -> pygame.Surface:
+    """Banda de niebla horizontal repetible (aditiva), más densa abajo."""
+    cell = max(4, h // 3)
+    g = _wrap_noise(w, h, cell, 77)
+    gw, gh = len(g), len(g[0])
+    small_w, small_h = gw * 4, gh * 4
+    small = pygame.Surface((small_w, small_h))
+    for x in range(small_w):
+        for y in range(small_h):
+            fx, fy = x / 4, y / 4
+            x0, y0 = int(fx) % gw, min(gh - 2, int(fy))
+            x1 = (x0 + 1) % gw
+            tx, ty = fx - int(fx), fy - int(fy)
+            v = (
+                g[x0][y0] * (1 - tx) * (1 - ty)
+                + g[x1][y0] * tx * (1 - ty)
+                + g[x0][y0 + 1] * (1 - tx) * ty
+                + g[x1][y0 + 1] * tx * ty
+            )
+            dens = (y / small_h) ** 1.5 * (1 - (y / small_h) ** 6)
+            k = max(0.0, v - 0.35) * 1.6 * dens
+            small.set_at((x, y), tuple(min(255, int(c * k)) for c in color))
+    return pygame.transform.smoothscale(small, (w, h))
+
+
+def draw_atmosphere(surf: pygame.Surface, game: Game, t: float) -> None:
+    """Rayos de luz que entran desde lo alto y niebla que se arrastra por
+    el suelo de cada piso (sólo luz aditiva: no tapa nada)."""
+    palace = level_is_palace(game.level.number)
+    room = game.kid.room
+    rng = random.Random(room * 131 + 7)
+    top = LAYOUT.hud_top
+    th = LAYOUT.tile_h
+    color = (54, 62, 96) if palace else (34, 42, 62)
+    n = rng.choice((0, 1, 1, 2))
+    for i in range(n):
+        x = rng.randint(LAYOUT.tile_w, LAYOUT.window_w - LAYOUT.tile_w * 2)
+        row = rng.randint(0, 2)
+        pulse = 0.75 + 0.25 * math.sin(t * 0.7 + i * 2.1 + room)
+        beam = _shaft_texture(px(150), px(46), -24.0, color)
+        b = beam.copy()
+        b.fill(tuple(int(255 * pulse) for _ in range(3)), special_flags=pygame.BLEND_RGB_MULT)
+        surf.blit(b, (x, top + row * th - px(6)), special_flags=pygame.BLEND_ADD)
+    fog = _fog_texture(LAYOUT.window_w, px(60), (46, 50, 66) if not palace else (52, 44, 40))
+    fw = fog.get_width()
+    for row in range(3):
+        y = top + (row + 1) * th - LAYOUT.foot_lift - px(48)
+        off = int((t * px(9) * (1 + row * 0.3) + row * 300) % fw)
+        surf.blit(fog, (-off, y), special_flags=pygame.BLEND_ADD)
+        surf.blit(fog, (fw - off, y), special_flags=pygame.BLEND_ADD)
+
+
+def bloom(surf: pygame.Surface, rect: pygame.Rect, *, threshold: int = 170, gain: int = 4) -> None:
+    """Resplandor: lo que supera ``threshold`` de LUMINANCIA se difumina a
+    1/8 de resolución y se suma con su color (llamas, pociones, chispas,
+    destellos). El umbral por luminancia evita que una pared cálida bien
+    iluminada se tiña entera.
+
+    Reducción en cascada (1/2 sin filtro, 1/8 filtrado) y ampliación en
+    dos pasos (filtrada a 1/2, doble sin filtro): ~2 ms en el lienzo HD."""
+    area = surf.subsurface(rect)
+    w, h = rect.size
+    half = pygame.transform.scale(area, (w // 2, h // 2))
+    small = pygame.transform.smoothscale(half, (w // 8, h // 8))
+    lum = pygame.transform.grayscale(small)
+    lum.fill((threshold, threshold, threshold), special_flags=pygame.BLEND_RGB_SUB)
+    for _ in range(gain - 1):
+        lum.blit(lum, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+    small.blit(lum, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+    small = pygame.transform.box_blur(small, 2)
+    up = pygame.transform.smoothscale(small, (w // 2, h // 2))
+    big = pygame.transform.scale(up, (w, h))
+    surf.blit(big, rect.topleft, special_flags=pygame.BLEND_RGB_ADD)
+
+
+def grade(surf: pygame.Surface, rect: pygame.Rect, palace: bool) -> None:
+    """Gradación de color: negros levantados hacia un azul profundo (o
+    un ámbar en el palacio) — el "look" cinematográfico."""
+    lift = (6, 7, 16) if not palace else (12, 7, 6)
+    surf.fill(lift, rect, special_flags=pygame.BLEND_RGB_ADD)
 
 
 # ---------------------------------------------------------------------------
@@ -641,10 +771,11 @@ _AIR = (Action.IN_FREEFALL, Action.IN_MIDAIR, Action.HANG_CLIMB, Action.HANG_STR
 @functools.lru_cache(maxsize=4)
 def _shadow_sprite(w: int, h: int) -> pygame.Surface:
     s = pygame.Surface((w, h), pygame.SRCALPHA)
-    for i in range(4):
-        a = 40 + i * 18
-        pygame.draw.ellipse(s, (0, 0, 0, a), (i * 3, i, w - i * 6, h - i * 2))
-    return s
+    for i in range(6):
+        a = 26 + i * 14
+        dx, dy = i * w // 14, i * h // 14
+        pygame.draw.ellipse(s, (0, 0, 0, a), (dx, dy, w - 2 * dx, h - 2 * dy))
+    return pygame.transform.box_blur(s, max(1, px(1)))
 
 
 def draw_char_shadows(surf: pygame.Surface, game: Game, prev: Game | None, alpha: float) -> None:
@@ -656,12 +787,12 @@ def draw_char_shadows(surf: pygame.Surface, game: Game, prev: Game | None, alpha
             pc = prev_others[i] if i < len(prev_others) else None
             chars.append((c, pc))
     chars.append((game.kid, prev.kid if prev else None))
-    sprite = _shadow_sprite(40, 10)
+    sprite = _shadow_sprite(px(44), px(10))
     for c, pc in chars:
         if c.action in _AIR or c.alive >= 30:
             continue
         x, y = _lerp_char_px(pc, c, alpha)
-        surf.blit(sprite, (x - 20, y - 6))
+        surf.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
 
 
 # ---------------------------------------------------------------------------
@@ -756,9 +887,10 @@ def rewind_filter(surf: pygame.Surface, t: float) -> None:
     gray.fill((24, 14, 0), special_flags=pygame.BLEND_RGB_ADD)
     surf.blit(gray, world.topleft)
     lines = pygame.Surface(world.size, pygame.SRCALPHA)
-    off = int(t * 240) % 24
-    for y in range(-off, world.h, 24):
-        pygame.draw.line(lines, (255, 230, 180, 26), (0, y), (w, y), 2)
+    step = px(24)
+    off = int(t * 240 * LAYOUT.scale) % step
+    for y in range(-off, world.h, step):
+        pygame.draw.line(lines, (255, 230, 180, 26), (0, y), (w, y), px(2))
     surf.blit(lines, world.topleft)
 
 

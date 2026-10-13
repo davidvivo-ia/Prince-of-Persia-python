@@ -1,27 +1,35 @@
-"""Poster procedural inspirado en la portada de POP1 (1989).
+"""Póster procedural inspirado en la portada de POP1 (1989), en HD.
 
-Cinco capas en composición:
+Capas en composición:
 
-1. **Cielo nocturno** azul profundo con halo lunar.
-2. **Luna llena** crema en el centro-izquierda.
-3. **Palacio** de cúpulas y minaretes en silueta pálida sobre el cielo.
-4. **Cortinas rojas** carmesí enmarcando la escena por los dos lados,
-   con pliegues para dar volumen.
-5. **Siluetas** opcionales de los personajes (Jaffar, princesa, prince)
-   en primer plano según el nivel.
+1. **Cielo nocturno** en degradado con nebulosa tenue y estrellas que
+   titilan (alguna estrella fugaz).
+2. **Luna llena** con halo difuso.
+3. **Dunas y palacio** en dos planos de silueta (lejano y cercano) con
+   ventanas cálidas que parpadean y el filo azul de la luna.
+4. **Jirones de nube** que se desplazan despacio.
+5. **Cortinas** de terciopelo con pliegues sombreados y cordón dorado.
+6. **Personajes** del nivel en primer plano (bañados por la luna).
+7. **Título** en oro metálico con halo.
 
-Todo dibujo procedural — sin assets binarios, sin reproducir el arte
-del original (clean-room tributo).
+Las capas estáticas se cachean por tamaño; por frame sólo se mueven
+estrellas, nubes, ventanas y cortinas. Todo procedural — sin assets ni
+arte del original (tributo *clean-room*).
 """
 
 from __future__ import annotations
 
+import functools
 import math
+import random
 from dataclasses import dataclass
 
+import numpy as np
 import pygame
 
-from pop2026canon.presentation.char_atlas import CharPalette, draw_kid_frame
+from pop2026canon.presentation import fonts
+from pop2026canon.presentation.char_atlas import CharPalette, sprite
+from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
 
 RGB = tuple[int, int, int]
@@ -45,255 +53,330 @@ class PosterCast:
 
 
 # ---------------------------------------------------------------------------
-# Capas
+# Capas estáticas (cacheadas por tamaño)
 # ---------------------------------------------------------------------------
 
 
-def _draw_sky(surf: pygame.Surface, rect: pygame.Rect, t: float) -> None:
-    """Cielo nocturno con halo lunar suave. ``t`` controla parpadeo de
-    estrellas para hacerlo dinámico."""
-    # Degradado vertical del azul nocturno
-    steps = 16
-    band_h = max(1, rect.height // steps)
-    for i in range(steps):
-        k = i / max(1, steps - 1)
-        col = (
-            int(PALETTE.poster_sky[0] * (1 - k * 0.3)),
-            int(PALETTE.poster_sky[1] * (1 - k * 0.3)),
-            int(PALETTE.poster_sky[2] * (1 - k * 0.3)),
-        )
-        pygame.draw.rect(surf, col, (rect.x, rect.y + i * band_h, rect.width, band_h + 1))
-
-    # Estrellas con titileo basado en t
-    for n in range(40):
-        # Distribución pseudoaleatoria determinista
-        sx = rect.x + (n * 41) % rect.width
-        sy = rect.y + (n * 23) % (rect.height * 2 // 3)
-        phase = (n * 7) % 13
-        bright = 0.4 + 0.6 * abs(math.sin(t * 1.4 + phase))
-        c = int(220 * bright)
-        surf.set_at((sx, sy), (c, c, c))
-
-
-def _draw_moon(surf: pygame.Surface, cx: int, cy: int, radius: int) -> None:
-    """Luna llena con halo concéntrico."""
-    # Halo (cuatro círculos cada vez más transparentes)
-    for i, alpha in enumerate((30, 60, 90)):
-        halo = pygame.Surface((radius * 6, radius * 6), pygame.SRCALPHA)
+@functools.lru_cache(maxsize=2)
+def _sky(w: int, h: int) -> pygame.Surface:
+    """Cielo con degradado, nebulosa y halo lunar."""
+    ys = np.linspace(0.0, 1.0, h, dtype=np.float32)[None, :, None]
+    top = np.array((8, 10, 38), dtype=np.float32)
+    mid = np.array((26, 34, 92), dtype=np.float32)
+    low = np.array((64, 54, 104), dtype=np.float32)
+    k1 = np.clip(ys / 0.6, 0, 1)
+    k2 = np.clip((ys - 0.6) / 0.4, 0, 1)
+    arr = top * (1 - k1) + mid * k1
+    arr = arr * (1 - k2) + low * k2
+    arr = np.repeat(arr, w, axis=0)
+    rng = np.random.default_rng(1989)
+    # Nebulosa: ruido suave teñido
+    g = rng.normal(0, 1, (w // 64 + 2, h // 64 + 2)).astype(np.float32)
+    small = pygame.surfarray.make_surface(
+        np.repeat(((np.clip(g, -2, 2) + 2) * 60)[:, :, None], 3, axis=2).astype(np.uint8)
+    )
+    neb = pygame.surfarray.array3d(pygame.transform.smoothscale(small, (w, h))).astype(np.float32)
+    arr += (neb / 255.0 - 0.45) * np.array((26, 14, 40), dtype=np.float32)
+    # Halo de la luna
+    mx, my = w * 0.3, h * 0.24
+    xx = np.arange(w, dtype=np.float32)[:, None]
+    yy = np.arange(h, dtype=np.float32)[None, :]
+    d = np.sqrt((xx - mx) ** 2 + (yy - my) ** 2) / (h * 0.45)
+    halo = np.clip(1.0 - d, 0, 1) ** 2.2
+    arr += halo[:, :, None] * np.array((70, 80, 120), dtype=np.float32)
+    arr += rng.normal(0, 1.6, (w, h, 1)).astype(np.float32)
+    surf = pygame.Surface((w, h))
+    pygame.surfarray.blit_array(surf, np.clip(arr, 0, 255).astype(np.uint8))
+    # Luna con mares y borde suave
+    r = max(px(24), h // 13)
+    cx, cy = int(mx), int(my)
+    glow = pygame.Surface((r * 6, r * 6), pygame.SRCALPHA)
+    pygame.draw.circle(glow, (200, 210, 255, 60), (r * 3, r * 3), int(r * 1.6))
+    glow = pygame.transform.box_blur(glow, r // 2)
+    surf.blit(glow, (cx - r * 3, cy - r * 3))
+    pygame.draw.circle(surf, PALETTE.poster_moon, (cx, cy), r)
+    mrng = random.Random(7)
+    for _ in range(7):
+        a = mrng.uniform(0, math.tau)
+        dd = mrng.uniform(0, r * 0.6)
+        rr = mrng.uniform(r * 0.12, r * 0.3)
         pygame.draw.circle(
-            halo,
-            (*PALETTE.poster_sky_light, alpha),
-            (radius * 3, radius * 3),
-            radius * 2 - i * 8,
-        )
-        surf.blit(halo, (cx - radius * 3, cy - radius * 3))
-    # Luna
-    pygame.draw.circle(surf, PALETTE.poster_moon, (cx, cy), radius)
-    # Sombra de cráter sutil (no realista, evocador)
-    pygame.draw.circle(
-        surf,
-        (
-            int(PALETTE.poster_moon[0] * 0.85),
-            int(PALETTE.poster_moon[1] * 0.85),
-            int(PALETTE.poster_moon[2] * 0.85),
-        ),
-        (cx + 2, cy - 2),
-        radius - 4,
-    )
-
-
-def _draw_palace(surf: pygame.Surface, rect: pygame.Rect) -> None:
-    """Silueta de palacio con varios minaretes + cúpula central."""
-    # Base — bloque del palacio
-    base_y = rect.y + rect.height * 3 // 5
-    base_h = rect.height - (base_y - rect.y)
-    base_rect = pygame.Rect(rect.x + 8, base_y, rect.width - 16, base_h)
-    pygame.draw.rect(surf, PALETTE.poster_palace_dark, base_rect)
-
-    # Minaretes (4 — dos a cada lado)
-    minaret_w = max(8, rect.width // 16)
-    minaret_xs = (
-        rect.x + 12,
-        rect.x + rect.width // 3 - minaret_w,
-        rect.x + rect.width * 2 // 3,
-        rect.x + rect.width - 12 - minaret_w,
-    )
-    for mx in minaret_xs:
-        mh = rect.height // 2
-        mtop = base_y - mh
-        pygame.draw.rect(surf, PALETTE.poster_palace, (mx, mtop, minaret_w, mh))
-        # Cúpula bulbosa
-        pygame.draw.ellipse(
             surf,
-            PALETTE.poster_palace,
-            (mx - 2, mtop - minaret_w, minaret_w + 4, minaret_w * 2),
+            (214, 206, 182),
+            (int(cx + math.cos(a) * dd), int(cy + math.sin(a) * dd)),
+            int(rr),
         )
-        # Aguja
+    shade = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+    pygame.draw.circle(shade, (40, 40, 90, 70), (r + r // 3, r + r // 4), r)
+    mask = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+    pygame.draw.circle(mask, (255, 255, 255, 255), (r, r), r)
+    shade.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surf.blit(shade, (cx - r, cy - r))
+    return surf
+
+
+def _skyline(
+    w: int, h: int, *, near: bool
+) -> tuple[pygame.Surface, list[tuple[int, int, int, int]]]:
+    """Silueta del palacio (lejano o cercano) y sus ventanas (x, y, w, h)."""
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    rng = random.Random(14 if near else 4)
+    col = (30, 30, 62) if near else (58, 60, 108)
+    rim = (120, 140, 210) if near else (110, 120, 180)
+    base_y = int(h * (0.74 if near else 0.66))
+    windows: list[tuple[int, int, int, int]] = []
+    # Dunas / muralla
+    pts = [(0, h)]
+    for x in range(0, w + px(40), px(40)):
+        pts.append((x, base_y + int(math.sin(x * 0.01 + (1 if near else 0)) * px(6))))
+    pts.append((w, h))
+    pygame.draw.polygon(surf, col, pts)
+    # Edificios
+    x = int(w * 0.12)
+    while x < w * 0.9:
+        bw = rng.randint(px(30), px(70)) if near else rng.randint(px(20), px(46))
+        bh = rng.randint(px(30), px(90)) if near else rng.randint(px(40), px(110))
+        top = base_y - bh
+        pygame.draw.rect(surf, col, (x, top, bw, bh + px(4)))
+        pygame.draw.line(surf, rim, (x, top), (x, base_y), 1)
+        kind = rng.random()
+        if kind < 0.45:
+            # Cúpula bulbosa con aguja
+            dw = bw + px(6)
+            pygame.draw.ellipse(surf, col, (x - px(3), top - dw * 2 // 3, dw, dw))
+            pygame.draw.arc(
+                surf, rim, (x - px(3), top - dw * 2 // 3, dw, dw), 1.6, 3.1, max(1, px(1))
+            )
+            tip = top - dw * 2 // 3
+            pygame.draw.line(
+                surf,
+                PALETTE.poster_gold if near else rim,
+                (x + bw // 2, tip + px(2)),
+                (x + bw // 2, tip - px(12)),
+                max(1, px(1)),
+            )
+        elif kind < 0.7:
+            # Minarete
+            mw = max(px(8), bw // 4)
+            mx = x + bw // 2 - mw // 2
+            mh = rng.randint(px(50), px(110))
+            pygame.draw.rect(surf, col, (mx, top - mh, mw, mh))
+            pygame.draw.ellipse(surf, col, (mx - px(3), top - mh - mw, mw + px(6), mw * 2))
+            pygame.draw.line(surf, rim, (mx, top - mh), (mx, top), 1)
+            pygame.draw.rect(surf, col, (mx - px(4), top - mh // 2, mw + px(8), px(4)))
+        if near:
+            for _ in range(rng.randint(1, 3)):
+                wx = x + rng.randint(px(4), max(px(5), bw - px(10)))
+                wy = top + rng.randint(px(8), max(px(9), bh - px(14)))
+                windows.append((wx, wy, px(4), px(7)))
+        x += bw + rng.randint(px(4), px(24))
+    # Cúpula central grande (plano cercano)
+    if near:
+        dw = int(w * 0.22)
+        dx = w // 2 - dw // 2
+        top = base_y - px(60)
+        pygame.draw.rect(surf, col, (dx + px(10), top, dw - px(20), px(64)))
+        pygame.draw.ellipse(surf, col, (dx, top - dw * 3 // 5, dw, dw))
+        pygame.draw.arc(surf, rim, (dx, top - dw * 3 // 5, dw, dw), 1.7, 3.0, px(2))
         pygame.draw.line(
             surf,
             PALETTE.poster_gold,
-            (mx + minaret_w // 2, mtop - minaret_w + 2),
-            (mx + minaret_w // 2, mtop - minaret_w - 8),
-            2,
+            (w // 2, top - dw * 3 // 5),
+            (w // 2, top - dw * 3 // 5 - px(24)),
+            px(2),
         )
+        pygame.draw.circle(surf, PALETTE.poster_gold, (w // 2, top - dw * 3 // 5 - px(26)), px(3))
+        for k in range(5):
+            windows.append((dx + px(20) + k * (dw - px(40)) // 4, top + px(20), px(5), px(10)))
+    return surf, windows
 
-    # Cúpula central grande
-    dome_w = rect.width // 3
-    dome_x = rect.x + rect.width // 2 - dome_w // 2
-    dome_top = base_y - dome_w // 2
-    pygame.draw.ellipse(surf, PALETTE.poster_palace, (dome_x, dome_top - 10, dome_w, dome_w))
-    pygame.draw.ellipse(
-        surf,
-        PALETTE.poster_palace_dark,
-        (dome_x, dome_top - 10, dome_w, dome_w),
-        2,
-    )
-    # Aguja central
-    pygame.draw.line(
-        surf,
-        PALETTE.poster_gold,
-        (rect.x + rect.width // 2, dome_top - 8),
-        (rect.x + rect.width // 2, dome_top - 22),
-        3,
-    )
 
-    # Ventanas iluminadas (puntos cálidos)
-    for n in range(8):
-        wx = base_rect.x + 12 + (n * (base_rect.width - 24) // 7)
-        wy = base_rect.y + 14
-        pygame.draw.rect(surf, PALETTE.poster_gold, (wx, wy, 3, 6))
+@functools.lru_cache(maxsize=2)
+def _skylines(
+    w: int, h: int
+) -> tuple[pygame.Surface, pygame.Surface, tuple[tuple[int, int, int, int], ...]]:
+    far, _ = _skyline(w, h, near=False)
+    near, win = _skyline(w, h, near=True)
+    return far, near, tuple(win)
+
+
+@functools.lru_cache(maxsize=2)
+def _clouds(w: int, h: int) -> pygame.Surface:
+    surf = pygame.Surface((w * 2, h // 2), pygame.SRCALPHA)
+    rng = random.Random(33)
+    for _ in range(14):
+        cw = rng.randint(w // 8, w // 3)
+        ch = rng.randint(px(8), px(22))
+        x = rng.randint(0, w * 2 - cw)
+        y = rng.randint(0, h // 2 - ch)
+        pygame.draw.ellipse(surf, (150, 150, 200, rng.randint(14, 34)), (x, y, cw, ch))
+    return pygame.transform.box_blur(surf, px(6))
+
+
+@functools.lru_cache(maxsize=2)
+def _stars(w: int, h: int) -> tuple[tuple[int, int, float, float], ...]:
+    rng = random.Random(1989)
+    out = []
+    for _ in range(170):
+        out.append(
+            (
+                rng.randrange(w),
+                rng.randrange(int(h * 0.62)),
+                rng.uniform(0, math.tau),
+                rng.uniform(0.6, 2.4),
+            )
+        )
+    return tuple(out)
+
+
+@functools.lru_cache(maxsize=2)
+def _curtain(w: int, h: int) -> pygame.Surface:
+    """Cortina de terciopelo (lado izquierdo) con pliegues sombreados."""
+    cw = int(w * 0.36)
+    xs = np.arange(cw, dtype=np.float32)[:, None]
+    ys = np.arange(h, dtype=np.float32)[None, :]
+    folds = 0.62 + 0.38 * np.sin(xs * (math.tau / (cw / 4.6)) + ys * 0.002) ** 2
+    edge = np.clip((cw - xs) / (cw * 0.15), 0.35, 1.0)
+    shade = folds * edge * (0.75 + 0.25 * (1 - ys / h))
+    base = np.array(PALETTE.poster_curtain, dtype=np.float32)
+    arr = shade[:, :, None] * base[None, None, :]
+    arr += (np.clip(folds - 0.92, 0, 1) * 600)[:, :, None] * np.array(
+        (1.0, 0.5, 0.5), dtype=np.float32
+    )
+    surf = pygame.Surface((cw, h), pygame.SRCALPHA)
+    rgb = np.clip(arr, 0, 255).astype(np.uint8)
+    pygame.surfarray.blit_array(surf, rgb)
+    alpha = pygame.surfarray.pixels_alpha(surf)
+    alpha[:] = 255
+    del alpha
+    # Borde inferior ondulado
+    for x in range(cw):
+        cut = int(px(10) * (0.5 + 0.5 * math.sin(x * 0.08)))
+        pygame.draw.line(surf, (0, 0, 0, 0), (x, h - cut), (x, h))
+    # Galón dorado en el borde interior
+    pygame.draw.line(surf, PALETTE.poster_gold_dark, (cw - px(5), 0), (cw - px(5), h), px(4))
+    pygame.draw.line(surf, PALETTE.poster_gold, (cw - px(4), 0), (cw - px(4), h), px(2))
+    return surf
+
+
+# ---------------------------------------------------------------------------
+# Capas animadas
+# ---------------------------------------------------------------------------
+
+
+def _draw_sky(surf: pygame.Surface, t: float) -> None:
+    w, h = surf.get_size()
+    surf.blit(_sky(w, h), (0, 0))
+    for x, y, ph, sp in _stars(w, h):
+        b = 0.35 + 0.65 * abs(math.sin(t * sp + ph))
+        c = int(90 + 165 * b)
+        if b > 0.9:
+            surf.fill((c, c, 255), (x - 1, y, 3, 1))
+            surf.fill((c, c, 255), (x, y - 1, 1, 3))
+        else:
+            surf.fill((c, c, min(255, c + 20)), (x, y, max(1, px(1)), max(1, px(1))))
+    # Estrella fugaz cada ~7 s
+    k = (t % 7.0) / 0.6
+    if k < 1.0:
+        sx, sy = w * 0.65 + k * w * 0.18, h * 0.08 + k * h * 0.1
+        for i in range(12):
+            a = (1 - i / 12) * (1 - k)
+            pygame.draw.circle(
+                surf,
+                (int(255 * a), int(255 * a), int(255 * a)),
+                (int(sx - i * px(4)), int(sy - i * px(2))),
+                max(1, px(1)),
+            )
+
+
+def _draw_palace(surf: pygame.Surface, t: float) -> None:
+    w, h = surf.get_size()
+    far, near, windows = _skylines(w, h)
+    clouds = _clouds(w, h)
+    off = int((t * px(6)) % w)
+    surf.blit(clouds, (-off, int(h * 0.12)))
+    surf.blit(clouds, (w * 2 - off - w, int(h * 0.12)))
+    surf.blit(far, (0, 0))
+    surf.blit(near, (0, 0))
+    for i, (x, y, ww, hh) in enumerate(windows):
+        flick = 0.75 + 0.25 * math.sin(t * (2.0 + i % 3) + i)
+        col = (int(255 * flick), int(190 * flick), int(90 * flick))
+        surf.fill(col, (x, y, ww, hh))
 
 
 def _draw_curtains(surf: pygame.Surface, rect: pygame.Rect, openness: float = 1.0) -> None:
-    """Cortinas rojas a izquierda y derecha. ``openness`` 0..1 controla
-    cuánto se separan del centro (1 = totalmente abiertas)."""
-    w = rect.width
-    h = rect.height
-    side_w = int(w * 0.18 * (2 - openness))  # más anchas si cerradas
-    # Cortina izquierda
-    left_pts = [
-        (rect.x, rect.y),
-        (rect.x + side_w, rect.y),
-        (rect.x + side_w - 8, rect.y + h),
-        (rect.x, rect.y + h),
-    ]
-    pygame.draw.polygon(surf, PALETTE.poster_curtain, left_pts)
-    # Pliegues verticales
-    for i in range(4):
-        px = rect.x + (i + 1) * side_w // 5
-        pygame.draw.line(
-            surf,
-            PALETTE.poster_curtain_dark,
-            (px, rect.y),
-            (px - 4, rect.y + h),
-            2,
-        )
-    # Cortina derecha
-    right_pts = [
-        (rect.x + w - side_w, rect.y),
-        (rect.x + w, rect.y),
-        (rect.x + w, rect.y + h),
-        (rect.x + w - side_w + 8, rect.y + h),
-    ]
-    pygame.draw.polygon(surf, PALETTE.poster_curtain, right_pts)
-    for i in range(4):
-        px = rect.x + w - side_w + (i + 1) * side_w // 5
-        pygame.draw.line(
-            surf,
-            PALETTE.poster_curtain_dark,
-            (px, rect.y),
-            (px + 4, rect.y + h),
-            2,
-        )
-    # Cordones de oro
-    pygame.draw.line(
-        surf,
-        PALETTE.poster_gold,
-        (rect.x + side_w - 6, rect.y + h // 2),
-        (rect.x + side_w + 12, rect.y + h // 2 + 14),
-        2,
-    )
-    pygame.draw.line(
-        surf,
-        PALETTE.poster_gold,
-        (rect.x + w - side_w + 6, rect.y + h // 2),
-        (rect.x + w - side_w - 12, rect.y + h // 2 + 14),
-        2,
-    )
+    w, h = rect.size
+    cur = _curtain(w, h)
+    cw = cur.get_width()
+    # Abiertas: asoma ~50 % de cada cortina; cerradas: se tocan en el centro
+    visible = int(cw * (0.5 + 0.9 * (1 - openness)))
+    visible = min(visible, w // 2 + px(4))
+    surf.blit(cur, (rect.x + visible - cw, rect.y))
+    surf.blit(pygame.transform.flip(cur, True, False), (rect.right - visible, rect.y))
+    # Cordones con borla
+    for side in (-1, 1):
+        x = rect.x + visible - px(10) if side < 0 else rect.right - visible + px(10)
+        y = rect.y + h // 2
+        pygame.draw.line(surf, PALETTE.poster_gold, (x, y), (x - side * px(18), y + px(18)), px(3))
+        pygame.draw.circle(surf, PALETTE.poster_gold, (x - side * px(18), y + px(20)), px(5))
+        for k in range(-2, 3):
+            fx = x - side * px(18) + k * px(2)
+            pygame.draw.line(surf, PALETTE.poster_gold_dark, (fx, y + px(24)), (fx, y + px(36)), 1)
 
 
 def _draw_title(
-    surf: pygame.Surface, rect: pygame.Rect, font_big: pygame.font.Font, t: float
+    surf: pygame.Surface, rect: pygame.Rect, font_big: pygame.font.Font | None, t: float
 ) -> None:
-    """Logo PRINCE OF PERSIA en oro con sombra dorada."""
-    pulse = 0.85 + 0.15 * abs(math.sin(t * 1.2))
-    main = (
-        int(PALETTE.poster_gold[0] * pulse),
-        int(PALETTE.poster_gold[1] * pulse),
-        int(PALETTE.poster_gold[2] * pulse),
-    )
-    # Sombra
-    shadow = font_big.render("PRINCE OF PERSIA", True, PALETTE.poster_gold_dark)
-    title = font_big.render("PRINCE OF PERSIA", True, main)
-    cx = rect.x + rect.width // 2
-    surf.blit(shadow, shadow.get_rect(center=(cx + 3, rect.y + rect.height // 8 + 3)))
-    surf.blit(title, title.get_rect(center=(cx, rect.y + rect.height // 8)))
+    """Logo PRINCE OF PERSIA en oro metálico con halo que respira."""
+    _ = font_big
+    title = fonts.gold_title("PRINCE OF PERSIA", 46, glow=7)
+    pulse = 0.88 + 0.12 * abs(math.sin(t * 1.2))
+    img = title.copy()
+    img.set_alpha(int(255 * min(1.0, pulse + 0.1)))
+    surf.blit(img, img.get_rect(center=(rect.centerx, rect.y + rect.height // 8)))
+
+
+def _actor(
+    surf: pygame.Surface,
+    frame: int,
+    palette: CharPalette,
+    facing: int,
+    x: int,
+    y: int,
+    scale: float,
+) -> None:
+    img, (ax, ay) = sprite(frame, palette, facing)
+    if scale != 1.0:
+        img = pygame.transform.smoothscale(
+            img, (int(img.get_width() * scale), int(img.get_height() * scale))
+        )
+        ax, ay = int(ax * scale), int(ay * scale)
+    else:
+        img = img.copy()
+    img.fill((150, 156, 210), special_flags=pygame.BLEND_RGB_MULT)
+    surf.blit(img, (x - ax, y - ay))
 
 
 def _draw_silhouettes(surf: pygame.Surface, rect: pygame.Rect, cast: PosterCast) -> None:
-    """Personajes en primer plano usando el atlas del kid con paletas."""
-    base_y = rect.y + rect.height - 16
-
-    # Jaffar arriba-derecha en grande
+    """Personajes en primer plano, bañados por la luz de la luna."""
+    base_y = rect.y + rect.height - px(14)
+    # Suelo de terraza
+    floor = pygame.Rect(rect.x, base_y - px(4), rect.width, rect.bottom - base_y + px(4))
+    pygame.draw.rect(surf, (22, 18, 40), floor)
+    pygame.draw.line(surf, (90, 96, 150), floor.topleft, floor.topright, px(1))
     if cast.vizier:
-        draw_kid_frame(
-            surf,
-            frame_id=15,
-            px_x=rect.x + rect.width * 3 // 4,
-            px_y=rect.y + rect.height * 3 // 5,
-            facing=-1,
-            palette=CharPalette.VIZIER,
-        )
-        # "Aura" amenazante: rectángulo translúcido alrededor
-        aura = pygame.Surface((90, 110), pygame.SRCALPHA)
-        pygame.draw.ellipse(aura, (*PALETTE.error, 40), aura.get_rect())
-        surf.blit(
-            aura,
-            (rect.x + rect.width * 3 // 4 - 45, rect.y + rect.height * 3 // 5 - 95),
-        )
-
-    # Princesa abajo-izquierda
+        aura = pygame.Surface((px(110), px(130)), pygame.SRCALPHA)
+        pygame.draw.ellipse(aura, (*PALETTE.error, 50), aura.get_rect())
+        aura = pygame.transform.box_blur(aura, px(10))
+        vx, vy = rect.x + rect.width * 3 // 4, rect.y + rect.height * 3 // 5
+        surf.blit(aura, (vx - aura.get_width() // 2, vy - px(110)))
+        _actor(surf, 15, CharPalette.VIZIER, -1, vx, vy, 1.3)
     if cast.princess:
-        draw_kid_frame(
-            surf,
-            frame_id=15,
-            px_x=rect.x + rect.width // 5,
-            px_y=base_y,
-            facing=0,
-            palette=CharPalette.PRINCESS,
-        )
-
-    # Prince en el centro-bajo, frame de strike para dinamismo
+        _actor(surf, 15, CharPalette.PRINCESS, 0, rect.x + rect.width // 5, base_y, 1.2)
     if cast.prince:
-        draw_kid_frame(
-            surf,
-            frame_id=166,
-            px_x=rect.x + rect.width // 2,
-            px_y=base_y,
-            facing=0,
-            palette=CharPalette.KID,
-        )
-
-    # Guard a la derecha (opcional)
+        _actor(surf, 158, CharPalette.KID, 0, rect.x + rect.width // 2, base_y, 1.35)
     if cast.guard:
-        draw_kid_frame(
-            surf,
-            frame_id=15,
-            px_x=rect.x + rect.width * 9 // 10,
-            px_y=base_y,
-            facing=-1,
-            palette=CharPalette.GUARD,
-        )
+        _actor(surf, 158, CharPalette.GUARD, -1, rect.x + rect.width * 4 // 5, base_y, 1.2)
 
 
 # ---------------------------------------------------------------------------
@@ -303,44 +386,31 @@ def _draw_silhouettes(surf: pygame.Surface, rect: pygame.Rect, cast: PosterCast)
 
 def draw_poster(
     surf: pygame.Surface,
-    font_big: pygame.font.Font,
+    font_big: pygame.font.Font | None = None,
     *,
     t: float = 0.0,
     cast: PosterCast | None = None,
     curtain_openness: float = 1.0,
     show_title: bool = True,
 ) -> None:
-    """Pinta el poster canon sobre toda la superficie.
+    """Pinta el póster sobre toda la superficie.
 
     Args:
-        surf: superficie destino (full screen).
-        font_big: fuente grande para el título PRINCE OF PERSIA.
-        t: tiempo en segundos (para titileo de estrellas y pulso oro).
-        cast: qué personajes incluir. ``None`` → cast por defecto
-            (princess+vizier+prince, sin guard).
-        curtain_openness: 0 cortinas cerradas, 1 abiertas. Útil para
-            animar la apertura como cinemática inicial.
+        surf: superficie destino (pantalla completa).
+        font_big: obsoleto (el título usa ``fonts.gold_title``).
+        t: tiempo en segundos (estrellas, nubes, ventanas, pulso del oro).
+        cast: personajes a incluir (``None`` → princesa, visir y príncipe).
+        curtain_openness: 0 cortinas cerradas, 1 abiertas.
         show_title: si dibujar el logo PRINCE OF PERSIA.
     """
     if cast is None:
         cast = PosterCast()
-
     w, h = surf.get_size()
     full = pygame.Rect(0, 0, w, h)
-
-    # Capa 1: cielo
-    inner = pygame.Rect(int(w * 0.1), 0, int(w * 0.8), h)
-    _draw_sky(surf, inner, t)
-    # Capa 2: luna
-    _draw_moon(surf, inner.x + inner.width // 4, inner.y + h // 4, max(24, h // 14))
-    # Capa 3: palacio
-    palace_rect = pygame.Rect(inner.x, inner.y + h // 5, inner.width, h * 2 // 3)
-    _draw_palace(surf, palace_rect)
-    # Capa 4: cortinas
-    _draw_curtains(surf, full, openness=curtain_openness)
-    # Capa 5: siluetas
+    _draw_sky(surf, t)
+    _draw_palace(surf, t)
     _draw_silhouettes(surf, full, cast)
-    # Capa 6: título
+    _draw_curtains(surf, full, openness=curtain_openness)
     if show_title:
         _draw_title(surf, full, font_big, t)
 

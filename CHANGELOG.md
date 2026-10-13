@@ -6,6 +6,60 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.19.0] — 2026-10-13
+
+### Gráficos 2026: lienzo HD, personajes con esqueleto, tiles con volumen y post-proceso
+
+La lógica canon no cambia; todo el arte sigue siendo procedural (sin
+assets ni gráficos del original).
+
+- **Lienzo HD 1280x852** (el canon a 4x): todo se pinta nítido a la
+  resolución final. La interfaz se diseña en la escala clásica y pasa
+  por ``layout.px``; las fuentes escalan solas. La ventana "2x" de los
+  ajustes es el lienzo a 1:1 y el escalado por defecto pasa a *suave*
+  (llena la pantalla completa sin bandas).
+- **Personajes nuevos** (``poses.py`` + ``char_atlas.py``): esqueleto 2D
+  con una pose por cada frame canon — carrera, arranque y frenada,
+  giro con escorzo, saltos parado y con carrerilla, caídas,
+  aterrizajes, agacharse, colgarse (las manos agarran la cornisa por
+  IK), trepar, guardia, estocada, parada, herido, muertes (pinchos,
+  cuchillas, desplome), beber y desenvainar. Miembros cónicos con tres
+  tonos, contorno, supermuestreo x2 y vestuario por personaje (kid,
+  guardia con turbante y chaleco, visir con túnica y turbante alto,
+  princesa, esqueleto de huesos, sombra con ojos que brillan, ratón).
+  Sprites cacheados por (frame, paleta, dirección) y pre-pintados poco a
+  poco al empezar cada nivel.
+- **Tiles con volumen** (``tile_atlas.py``): losas con cara superior y
+  frontal biseladas, juntas, desgaste, sombra proyectada y cantos al
+  aire; columnas cilíndricas con basa y capitel que se pintan *por
+  delante* del personaje; rastrillo de hierro remachado; pinchos y
+  cuchillas metálicos (con sangre); frascos de vidrio con líquido y
+  brillo; puerta de salida con dovelas, escalera y hoja que sube;
+  espejo, balcón con cielo nocturno, celosías, esqueleto y espada.
+  Llamas de antorcha animadas en tres capas. Los pies pisan el centro
+  de la losa.
+- **Pared de fondo HD** generada con numpy: sillares con color propio,
+  bisel, grano y manchas, humedad y musgo, regueros, cadenas y
+  argollas; en el palacio, friso de azulejos, hornacinas lobuladas y
+  tapices.
+- **Post-proceso**: *bloom* (resplandor de llamas, pociones y chispas,
+  ~2 ms), rayos de luz volumétricos, niebla que se arrastra por el
+  suelo, filo de luz en el borde de las plataformas, gradación de color
+  y luz de antorcha más cálida. Nueva opción "Resplandor".
+- **Interfaz HD**: HUD con gemas de vida facetadas y franja de
+  terciopelo, rótulos con sombra, paneles de vidrio con filo dorado,
+  título y rótulos en oro metálico con halo; el menú de opciones
+  siempre cabe en pantalla.
+- **Póster del título** rehecho: cielo con nebulosa y estrellas que
+  titilan (y fugaces), luna con halo, palacio en dos planos con
+  ventanas que parpadean, nubes, cortinas de terciopelo y personajes
+  bañados por la luna.
+- Rendimiento: la pared y los tiles se componen una vez por cambio de
+  estado; ~8 ms por frame en el lienzo HD con todos los efectos.
+- 278 tests nuevos (``test_graphics_hd.py``): pose finita para cada
+  frame de ``seqtbl``, pies en el suelo, manos en la cornisa al colgar y
+  trepar, sprites espejados, los 31 tiles en ambos estilos, *bloom*.
+
 ## [canon-0.18.0] — 2026-10-13
 
 ### Edición 2026: presentación, audio, controles y ayudas modernas
