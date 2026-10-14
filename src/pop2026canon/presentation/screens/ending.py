@@ -110,6 +110,8 @@ def draw_level_complete(
     t: float,
     *,
     pad: bool = False,
+    medals: tuple[str, ...] = (),
+    new_medals: tuple[str, ...] = (),
 ) -> None:
     """Resumen del nivel: tiempo, muertes, enemigos, pociones, salas."""
     w, h = surf.get_size()
@@ -141,6 +143,25 @@ def draw_level_complete(
         vt.set_alpha(int(255 * appear))
         surf.blit(lt, lt.get_rect(midleft=(w // 2 - px(170), y)))
         surf.blit(vt, vt.get_rect(midright=(w // 2 + px(170), y)))
+    if medals:
+        from pop2026canon.presentation.screens.levels import MEDAL_COLORS, MEDAL_NAMES
+
+        shown = [m for m in medals if m != "completed"]
+        base_y = top + px(len(rows) * 28 + 16)
+        for i, m in enumerate(shown):
+            appear = min(1.0, max(0.0, (t - 1.2 - i * 0.25) / 0.3))
+            if appear <= 0:
+                continue
+            cx = w // 2 + (i - (len(shown) - 1) / 2) * px(150)
+            r = int(px(12) * (1.6 - 0.6 * appear))
+            col = MEDAL_COLORS[m]
+            pts = [(cx, base_y - r), (cx + r, base_y), (cx, base_y + r), (cx - r, base_y)]
+            pygame.draw.polygon(surf, col, pts)
+            pygame.draw.polygon(surf, (16, 10, 22), pts, 1)
+            label = MEDAL_NAMES[m] + ("  ¡nueva!" if m in new_medals else "")
+            txt = fonts.render(label, 17, col if m in new_medals else PALETTE.primary_dark)
+            txt.set_alpha(int(255 * appear))
+            surf.blit(txt, txt.get_rect(midtop=(int(cx), base_y + px(16))))
     if t > 1.0:
         hint = fonts.render(("A" if pad else "Enter") + " para continuar", 20, _blink(t))
-        surf.blit(hint, hint.get_rect(center=(w // 2, h - px(40))))
+        surf.blit(hint, hint.get_rect(center=(w // 2, h - px(22))))

@@ -23,6 +23,8 @@ from typing import Any
 
 GAME_MODES: tuple[str, ...] = ("modern", "classic")
 SCALE_MODES: tuple[str, ...] = ("pixel", "smooth")
+DIFFICULTIES: tuple[str, ...] = ("normal", "hard")
+LANGUAGES: tuple[str, ...] = ("es", "en")
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +49,9 @@ class Settings:
     bloom: bool = True
     """Resplandor de llamas, pociones y chispas (post-proceso)."""
     game_mode: str = "modern"
+    difficulty: str = "normal"
+    """``hard``: guardias dos puntos más diestros y 45 minutos de reloj."""
+    language: str = "es"
     hints: bool = True
     """Pistas contextuales para los verbos del original."""
     always_show_timer: bool = False
@@ -56,6 +61,10 @@ class Settings:
     @property
     def modern(self) -> bool:
         return self.game_mode == "modern"
+
+    @property
+    def hard(self) -> bool:
+        return self.difficulty == "hard"
 
     def with_(self, **changes: Any) -> Settings:
         return replace(self, **changes).validated()
@@ -74,6 +83,8 @@ class Settings:
             window_scale=int(min(4, max(1, int(self.window_scale)))),
             scale_mode=self.scale_mode if self.scale_mode in SCALE_MODES else "smooth",
             game_mode=self.game_mode if self.game_mode in GAME_MODES else "modern",
+            difficulty=self.difficulty if self.difficulty in DIFFICULTIES else "normal",
+            language=self.language if self.language in LANGUAGES else "es",
             seen_hints=tuple(dict.fromkeys(str(h) for h in self.seen_hints)),
         )
 

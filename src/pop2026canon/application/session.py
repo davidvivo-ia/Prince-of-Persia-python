@@ -16,11 +16,26 @@ Replica la estructura del juego original:
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Any
 
 from pop2026canon.domain.game import Game, GameStatus, TimeRemaining, new_game
 from pop2026canon.domain.levels_canon import CANON_LEVELS
 
 FINAL_LEVEL = 14
+HARD_SKILL_BONUS = 2
+HARD_MAX_SKILL = 11
+HARD_MINUTES = 45
+
+
+def new_session(
+    level_number: int = 1, *, hard: bool = False, levels: tuple[Any, ...] = CANON_LEVELS
+) -> Session:
+    """Sesión nueva en ``level_number``: vida y espada de campaña
+    (3 + una poción grande cada dos niveles), reloj completo (45 min en
+    modo difícil)."""
+    hp = min(10, 3 + (level_number - 1) // 2)
+    time = TimeRemaining(minutes=HARD_MINUTES) if hard else TimeRemaining()
+    return Session(level_number=level_number, hp_max=hp, time=time, levels=levels, hard=hard)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +54,8 @@ class Session:
     has_sword: bool = False
     """La espada se consigue en L1 y se conserva toda la campaña."""
     levels: tuple = CANON_LEVELS  # type: ignore[type-arg]
+    hard: bool = False
+    """Modo difícil: guardias dos puntos más diestros."""
 
     @property
     def kid_has_sword(self) -> bool:
@@ -49,6 +66,14 @@ class Session:
         """Construye el ``Game`` del nivel actual con el estado heredado."""
         level = self.levels[self.level_number - 1]
         game = new_game(level, starting_hp=self.hp_max, has_sword=self.kid_has_sword)
+        if self.hard:
+            game = replace(
+                game,
+                others=tuple(
+                    replace(c, skill=min(HARD_MAX_SKILL, c.skill + HARD_SKILL_BONUS))
+                    for c in game.others
+                ),
+            )
         return replace(game, time=self.time)
 
     def after_tick(self, game: Game) -> Session:

@@ -14,6 +14,7 @@ interpolación; el rebobinado recorre el pasado a 30 ticks/s.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,11 +24,12 @@ from pop2026canon.application.assist import RoomCheckpoint, TimeRewind
 from pop2026canon.application.audio_bridge import play_transitions
 from pop2026canon.application.controller import Command
 from pop2026canon.application.hints import HINTS, detect_hint
-from pop2026canon.application.session import Session, resolve_transition
+from pop2026canon.application.session import Session, new_session, resolve_transition
 from pop2026canon.application.stats import LevelStats
 from pop2026canon.application.tick import advance
 from pop2026canon.domain.combat import char_opp_dist, is_hostile
 from pop2026canon.domain.game import Game, GameStatus
+from pop2026canon.infrastructure import progress as progress_io
 from pop2026canon.infrastructure import savegame
 from pop2026canon.infrastructure import settings as settings_io
 from pop2026canon.infrastructure.audio import SND_REWIND, SND_UI_MOVE, SND_UI_SELECT, AudioEngine
@@ -47,8 +49,10 @@ from pop2026canon.presentation.menu import (
     pause_menu,
 )
 from pop2026canon.presentation.minimap import draw_minimap
+from pop2026canon.presentation.poster import draw_poster
 from pop2026canon.presentation.scene import Scene
 from pop2026canon.presentation.screens import cutscene, ending, title
+from pop2026canon.presentation.screens.levels import LevelSelect, draw_level_select
 
 FRAMES_PER_TICK = 5
 """60 fps / 12 ticks lógicos."""
@@ -75,9 +79,14 @@ class GameApp:
     max_frames: int = 0
     settings_path: Path | None = None
     save_path: Path = field(default_factory=savegame.default_save_path)
+    progress_path: Path | None = None
 
     def __post_init__(self) -> None:
         self.settings: Settings = settings_io.load(self.settings_path)
+        self.progress = progress_io.load(self.progress_path)
+        self.levels_ui: LevelSelect | None = None
+        self.last_medals: tuple[str, ...] = ()
+        self.new_medals: tuple[str, ...] = ()
         self.display = Display(self.settings)
         self.canvas = self.display.canvas
         self.input = InputHub()
@@ -99,7 +108,7 @@ class GameApp:
         self.frames_since_tick = 0
         self.rewind_frames = 0
         self.rewinding = False
-        self.menu: Menu = main_menu(self._has_save())
+        self.menu: Menu = self._main_menu()
         self.overlay: _Overlay | None = None
         self.quit = False
         self._map_from_play = False
@@ -110,6 +119,16 @@ class GameApp:
 
     def _has_save(self) -> bool:
         return self.autosave_enabled and self.save_path.exists()
+
+    def _main_menu(self) -> Menu:
+        return main_menu(self._has_save(), self.progress.any_completed)
+
+    def _save_progress(self) -> None:
+        with contextlib.suppress(OSError):
+            progress_io.save(self.progress, self.progress_path)
+
+    def _level_names(self) -> dict[int, str]:
+        return {lv.number: lv.name for lv in self.campaign_levels}
 
     def _set_caption(self) -> None:
         lvl = self.game.level
@@ -237,18 +256,48 @@ class GameApp:
                 self._set_caption()
                 self._goto("card")
             except (ValueError, OSError):
-                self.menu = main_menu(False)
+                self.menu = main_menu(False, self.progress.any_completed)
         elif key == "new":
-            self.session = Session(level_number=1, levels=self.campaign_levels)
+            self.session = new_session(1, hard=self.settings.hard, levels=self.campaign_levels)
             self.game = self.session.start_game()
             self._set_caption()
             self._goto("card")
+        elif key == "levels":
+            self.levels_ui = LevelSelect(self.progress, index=min(13, self.progress.unlocked - 1))
+            self._goto("levels")
         elif key == "options":
             self.overlay = _Overlay("options", "title", options_menu())
         elif key == "controls":
             self.overlay = _Overlay("controls", "title")
         elif key == "quit":
             self.quit = True
+
+    def _levels(self, actions: list[UiAction]) -> None:
+        ui = self.levels_ui
+        if ui is None:
+            self._goto("title")
+            return
+        for a in actions:
+            result = ui.handle(a)
+            if result == "_move":
+                self.audio.play(SND_UI_MOVE, volume=0.6)
+            elif result == "start":
+                self.audio.play(SND_UI_SELECT, volume=0.7)
+                self.session = new_session(
+                    ui.level, hard=self.settings.hard, levels=self.campaign_levels
+                )
+                self.game = self.session.start_game()
+                self._set_caption()
+                self._goto("card")
+                return
+            elif result == "locked":
+                self.audio.play(SND_UI_MOVE, volume=0.4)
+            elif result == "back":
+                self.audio.play(SND_UI_SELECT, volume=0.7)
+                self.menu = self._main_menu()
+                self._goto("title")
+                self.phase_t0 = self.now - title.INTRO_DURATION
+                return
 
     def _card(self, actions: list[UiAction]) -> None:
         if any(a in (UiAction.CONFIRM, UiAction.PAUSE) for a in actions) or self.phase_t > 6.0:
@@ -287,7 +336,7 @@ class GameApp:
             elif result == "title":
                 self.audio.duck(0.0)
                 self.audio.music("dungeon")
-                self.menu = main_menu(self._has_save())
+                self.menu = self._main_menu()
                 self._goto("title")
                 self.phase_t0 = self.now - title.INTRO_DURATION
 
@@ -374,10 +423,16 @@ class GameApp:
         status = self.game.status
         self.audio.combat(False)
         if status is GameStatus.WON_LEVEL:
+            self.progress, self.last_medals, self.new_medals = progress_io.record_level(
+                self.progress, self.stats, len(self.game.level.rooms)
+            )
+            self._save_progress()
             self._goto("level_done")
         elif status is GameStatus.WON_GAME:
             if self.autosave_enabled and self.save_path.exists():
                 self.save_path.unlink()
+            self.progress = progress_io.record_campaign_won(self.progress)
+            self._save_progress()
             self.audio.music("palace")
             self._goto("victory")
         elif status is GameStatus.LOST_TIMEOUT or self.game.time.is_zero():
@@ -435,9 +490,9 @@ class GameApp:
         if self.phase_t < 1.0:
             return
         if any(a in (UiAction.CONFIRM, UiAction.PAUSE) for a in actions):
-            self.session = Session(level_number=1, levels=self.campaign_levels)
+            self.session = new_session(1, hard=self.settings.hard, levels=self.campaign_levels)
             self.game = self.session.start_game()
-            self.menu = main_menu(self._has_save())
+            self.menu = self._main_menu()
             self.audio.music("dungeon")
             self._goto("title")
             self.phase_t0 = self.now - title.INTRO_DURATION
@@ -482,6 +537,11 @@ class GameApp:
                         pad,
                         pad.get_rect(bottomright=(c.get_width() - px(8), c.get_height() - px(6))),
                     )
+        elif p == "levels":
+            draw_poster(c, t=self.now, show_title=False)
+            dim(c, 170)
+            if self.levels_ui is not None:
+                draw_level_select(c, self.levels_ui, self._level_names(), self.now)
         elif p == "card":
             cutscene.draw_level_card(
                 c, self.game.level, self.font_big, self.font_small, self.phase_t
@@ -525,6 +585,8 @@ class GameApp:
                 len(self.game.level.rooms),
                 self.phase_t,
                 pad=self.input.pad_connected,
+                medals=self.last_medals,
+                new_medals=self.new_medals,
             )
         elif p == "victory":
             t = self.session.time
@@ -559,6 +621,7 @@ class GameApp:
             if not self._update_overlay(actions):
                 handler = {
                     "title": self._title,
+                    "levels": self._levels,
                     "card": self._card,
                     "playing": self._playing,
                     "paused": self._paused,

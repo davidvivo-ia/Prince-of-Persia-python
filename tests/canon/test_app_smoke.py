@@ -44,6 +44,7 @@ def app_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignor
             max_frames=frames,
             settings_path=tmp_path / "settings.json",
             save_path=tmp_path / "save.json",
+            progress_path=tmp_path / "progress.json",
         )
         spy.phases = phases  # type: ignore[attr-defined]
         return spy
@@ -61,17 +62,7 @@ def test_full_menu_flow(app_factory, tmp_path: Path) -> None:  # type: ignore[no
         120: [k.K_ESCAPE],  # pausa
         125: [k.K_DOWN, k.K_DOWN, k.K_DOWN],  # Opciones
         128: [k.K_RETURN],
-        132: [
-            k.K_DOWN,
-            k.K_DOWN,
-            k.K_DOWN,
-            k.K_DOWN,
-            k.K_DOWN,
-            k.K_DOWN,
-            k.K_DOWN,
-            k.K_DOWN,
-            k.K_DOWN,
-        ],
+        132: [k.K_DOWN] * 10,
         135: [k.K_RETURN],  # Filtro CRT → SÍ
         140: [k.K_BACKSPACE],  # volver (guarda ajustes)
         145: [k.K_UP, k.K_UP, k.K_UP],

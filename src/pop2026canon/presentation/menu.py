@@ -99,12 +99,14 @@ def _adjust(item: MenuItem, settings: Settings, delta: int) -> Settings:
 # ---------------------------------------------------------------------------
 
 
-def main_menu(has_save: bool) -> Menu:
+def main_menu(has_save: bool, has_progress: bool = False) -> Menu:
     items = []
     if has_save:
         items.append(MenuItem("continue", "Continuar"))
+    items.append(MenuItem("new", "Nueva partida"))
+    if has_progress:
+        items.append(MenuItem("levels", "Niveles"))
     items += [
-        MenuItem("new", "Nueva partida"),
         MenuItem("options", "Opciones"),
         MenuItem("controls", "Controles"),
         MenuItem("quit", "Salir"),
@@ -137,6 +139,13 @@ def options_menu() -> Menu:
                 "choice",
                 (("modern", "MODERNO"), ("classic", "CLÁSICO 1989")),
                 "Moderno: rebobinar y reaparecer en la sala. Clásico: reglas de 1989.",
+            ),
+            MenuItem(
+                "difficulty",
+                "Dificultad",
+                "choice",
+                (("normal", "NORMAL"), ("hard", "DIFÍCIL")),
+                "Difícil: guardias más diestros y 45 minutos. Vale para partidas nuevas.",
             ),
             MenuItem("master_volume", "Volumen general", "slider"),
             MenuItem("music_volume", "Música", "slider"),
