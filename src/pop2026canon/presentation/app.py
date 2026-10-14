@@ -2,11 +2,13 @@
 
 Fases::
 
-    title ─▶ card ─▶ playing ⇄ paused ⇄ (options | controls | map)
+    title ─▶ intro ─▶ card ─▶ playing ⇄ paused ⇄ (options | controls | map)
+      └─▶ levels ─▶ card
                         │
                         ├─▶ dead ─▶ playing (rebobinar / reaparecer)
                         ├─▶ level_done ─▶ card
-                        └─▶ victory | defeat ─▶ title
+                        ├─▶ reunion ─▶ victory ─▶ title
+                        └─▶ defeat ─▶ title
 
 La lógica corre a 12 ticks/s (canon) y el dibujo a 60 fps con
 interpolación; el rebobinado recorre el pasado a 30 ticks/s.
@@ -37,6 +39,7 @@ from pop2026canon.infrastructure.settings import Settings
 from pop2026canon.presentation import fonts
 from pop2026canon.presentation.display import Display
 from pop2026canon.presentation.fx import FxEvent, FxKind, level_is_palace
+from pop2026canon.presentation.i18n import set_language, tr
 from pop2026canon.presentation.input_device import InputHub, UiAction
 from pop2026canon.presentation.layout import LAYOUT, px
 from pop2026canon.presentation.menu import (
@@ -51,7 +54,7 @@ from pop2026canon.presentation.menu import (
 from pop2026canon.presentation.minimap import draw_minimap
 from pop2026canon.presentation.poster import draw_poster
 from pop2026canon.presentation.scene import Scene
-from pop2026canon.presentation.screens import cutscene, ending, title
+from pop2026canon.presentation.screens import cinematic, cutscene, ending, title
 from pop2026canon.presentation.screens.levels import LevelSelect, draw_level_select
 from pop2026canon.presentation.themes import theme_for
 
@@ -84,6 +87,7 @@ class GameApp:
 
     def __post_init__(self) -> None:
         self.settings: Settings = settings_io.load(self.settings_path)
+        set_language(self.settings.language)
         self.progress = progress_io.load(self.progress_path)
         self.levels_ui: LevelSelect | None = None
         self.last_medals: tuple[str, ...] = ()
@@ -153,6 +157,7 @@ class GameApp:
         if new == self.settings:
             return
         self.settings = new
+        set_language(new.language)
         self.display.apply(new)
         self.scene.settings = new
         self.audio.set_volumes(new.effective_sfx, new.effective_music)
@@ -264,7 +269,8 @@ class GameApp:
             self.session = new_session(1, hard=self.settings.hard, levels=self.campaign_levels)
             self.game = self.session.start_game()
             self._set_caption()
-            self._goto("card")
+            self.audio.ambience(None)
+            self._goto("intro")
         elif key == "levels":
             self.levels_ui = LevelSelect(self.progress, index=min(13, self.progress.unlocked - 1))
             self._goto("levels")
@@ -301,6 +307,16 @@ class GameApp:
                 self._goto("title")
                 self.phase_t0 = self.now - title.INTRO_DURATION
                 return
+
+    def _intro(self, actions: list[UiAction]) -> None:
+        skip = any(a in (UiAction.CONFIRM, UiAction.PAUSE) for a in actions)
+        if skip or self.phase_t >= cinematic.INTRO_DURATION:
+            self._goto("card")
+
+    def _reunion(self, actions: list[UiAction]) -> None:
+        skip = self.phase_t >= 1.0 and any(a in (UiAction.CONFIRM, UiAction.PAUSE) for a in actions)
+        if skip or self.phase_t >= cinematic.ENDING_DURATION + 1.5:
+            self._goto("victory")
 
     def _card(self, actions: list[UiAction]) -> None:
         if any(a in (UiAction.CONFIRM, UiAction.PAUSE) for a in actions) or self.phase_t > 6.0:
@@ -349,7 +365,7 @@ class GameApp:
         if not s.hints or key in s.seen_hints or self.scene.hud.toast_t > 0:
             return
         hint = HINTS[key]
-        self.scene.hud.show_toast(hint.pad_text if self.input.pad_connected else hint.text)
+        self.scene.hud.show_toast(tr(hint.pad_text if self.input.pad_connected else hint.text))
         self._apply_settings(s.with_(seen_hints=(*s.seen_hints, key)))
         self._save_settings()
 
@@ -460,7 +476,8 @@ class GameApp:
             self.progress = progress_io.record_campaign_won(self.progress)
             self._save_progress()
             self.audio.music("palace")
-            self._goto("victory")
+            self.audio.ambience("garden")
+            self._goto("reunion")
         elif status is GameStatus.LOST_TIMEOUT or self.game.time.is_zero():
             self._goto("defeat")
         else:
@@ -559,7 +576,7 @@ class GameApp:
                     width=260,
                 )
                 if self.input.pad_connected:
-                    pad = fonts.render("Mando conectado", 16, (150, 200, 150))
+                    pad = fonts.render(tr("Mando conectado"), 16, (150, 200, 150))
                     c.blit(
                         pad,
                         pad.get_rect(bottomright=(c.get_width() - px(8), c.get_height() - px(6))),
@@ -569,6 +586,10 @@ class GameApp:
             dim(c, 170)
             if self.levels_ui is not None:
                 draw_level_select(c, self.levels_ui, self._level_names(), self.now)
+        elif p == "intro":
+            cinematic.draw_intro(c, self.phase_t)
+        elif p == "reunion":
+            cinematic.draw_ending(c, self.phase_t)
         elif p == "card":
             cutscene.draw_level_card(
                 c, self.game.level, self.font_big, self.font_small, self.phase_t
@@ -587,9 +608,11 @@ class GameApp:
                     fonts.font(16),
                     self.now,
                 )
-                t1 = fonts.render(f"MAPA · {self.game.level.name}", 28, (232, 192, 64), bold=True)
+                t1 = fonts.render(
+                    f"{tr('MAPA')} · {self.game.level.name}", 28, (232, 192, 64), bold=True
+                )
                 c.blit(t1, t1.get_rect(midtop=(c.get_width() // 2, LAYOUT.hud_top + px(8))))
-                t2 = fonts.render("Enter / B para volver", 18, (92, 76, 108))
+                t2 = fonts.render(tr("Enter / B para volver"), 18, (92, 76, 108))
                 c.blit(t2, t2.get_rect(midbottom=(c.get_width() // 2, c.get_height() - px(8))))
             elif self.overlay is None:
                 draw_menu(c, self.menu, self.settings, self.now)
@@ -649,6 +672,8 @@ class GameApp:
                 handler = {
                     "title": self._title,
                     "levels": self._levels,
+                    "intro": self._intro,
+                    "reunion": self._reunion,
                     "card": self._card,
                     "playing": self._playing,
                     "paused": self._paused,

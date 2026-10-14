@@ -57,12 +57,13 @@ def test_full_menu_flow(app_factory, tmp_path: Path) -> None:  # type: ignore[no
     k = pygame
     script = {
         3: [k.K_RETURN],  # salta la intro
-        10: [k.K_RETURN],  # Nueva partida
+        10: [k.K_RETURN],  # Nueva partida → intro
+        15: [k.K_RETURN],  # salta la intro → card
         20: [k.K_RETURN],  # card → jugar
         120: [k.K_ESCAPE],  # pausa
         125: [k.K_DOWN, k.K_DOWN, k.K_DOWN],  # Opciones
         128: [k.K_RETURN],
-        132: [k.K_DOWN] * 10,
+        132: [k.K_DOWN] * 11,
         135: [k.K_RETURN],  # Filtro CRT → SÍ
         140: [k.K_BACKSPACE],  # volver (guarda ajustes)
         145: [k.K_UP, k.K_UP, k.K_UP],
@@ -71,7 +72,7 @@ def test_full_menu_flow(app_factory, tmp_path: Path) -> None:  # type: ignore[no
     app = app_factory(script, 220)
     assert app.run() == 0
     seen = list(dict.fromkeys(app.phases))
-    assert seen[:4] == ["title", "card", "playing", "paused"]
+    assert seen[:5] == ["title", "intro", "card", "playing", "paused"]
     assert app.phases[-1] == "playing"
     assert load(tmp_path / "settings.json").crt_filter is True
     assert (tmp_path / "save.json").exists(), "autosave al empezar el nivel"

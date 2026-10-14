@@ -9,6 +9,7 @@ import pygame
 
 from pop2026canon.application.stats import LevelStats
 from pop2026canon.presentation import fonts
+from pop2026canon.presentation.i18n import tr
 from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
 
@@ -35,15 +36,15 @@ def draw_victory(
     """Final victorioso: reunión con la princesa."""
     surf.fill(PALETTE.bg)
     w, h = surf.get_size()
-    title = fonts.gold_title("VICTORIA", 60, glow=8)
+    title = fonts.gold_title(tr("VICTORIA"), 60, glow=8)
     surf.blit(title, title.get_rect(center=(w // 2, h // 3)))
-    lines = ["La princesa está a salvo.", "Jaffar ha caído."]
+    lines = [tr("La princesa está a salvo."), tr("Jaffar ha caído.")]
     if time_left:
-        lines.append(f"Tiempo restante: {time_left}  ·  Muertes: {deaths}")
+        lines.append(tr("Tiempo restante: {t}  ·  Muertes: {d}").format(t=time_left, d=deaths))
     for i, line in enumerate(lines):
         txt = fonts.render(line, 24, PALETTE.primary)
         surf.blit(txt, txt.get_rect(center=(w // 2, h // 2 + px(i * 28))))
-    hint = fonts.render("Enter para volver al título", 20, _blink(t))
+    hint = fonts.render(tr("Enter para volver al título"), 20, _blink(t))
     surf.blit(hint, hint.get_rect(center=(w // 2, h * 5 // 6)))
 
 
@@ -58,14 +59,14 @@ def draw_defeat(
     """Game over definitivo (timeout de los 60 minutos)."""
     surf.fill(PALETTE.bg)
     w, h = surf.get_size()
-    msg = "TIEMPO AGOTADO" if timeout else "HAS MUERTO"
+    msg = tr("TIEMPO AGOTADO") if timeout else tr("HAS MUERTO")
     color = PALETTE.warning if timeout else PALETTE.error
     title = fonts.render(msg, 56, color, bold=True)
     surf.blit(title, title.get_rect(center=(w // 2, h // 3)))
-    sub = "La princesa ha muerto." if timeout else "El visir gana."
+    sub = tr("La princesa ha muerto.") if timeout else tr("El visir gana.")
     line = fonts.render(sub, 24, PALETTE.primary_dark)
     surf.blit(line, line.get_rect(center=(w // 2, h // 2)))
-    hint = fonts.render("Enter para volver al título", 20, _blink(t))
+    hint = fonts.render(tr("Enter para volver al título"), 20, _blink(t))
     surf.blit(hint, hint.get_rect(center=(w // 2, h * 3 // 4)))
 
 
@@ -83,18 +84,20 @@ def draw_death_overlay(
     """Velo de muerte sobre el nivel: el reloj sigue corriendo (canon)."""
     w, h = surf.get_size()
     _veil(surf, (30, 0, 0), 150)
-    title = fonts.render("HAS MUERTO", 56, PALETTE.error, bold=True)
+    title = fonts.render(tr("HAS MUERTO"), 56, PALETTE.error, bold=True)
     surf.blit(title, title.get_rect(center=(w // 2, h // 3)))
-    line = fonts.render(f"Muertes: {deaths} · el tiempo sigue corriendo", 22, PALETTE.primary)
+    line = fonts.render(
+        tr("Muertes: {n} · el tiempo sigue corriendo").format(n=deaths), 22, PALETTE.primary
+    )
     surf.blit(line, line.get_rect(center=(w // 2, h // 2)))
     hints = []
     if can_rewind:
-        hints.append(("Mantén LB" if pad else "Mantén R") + " para rebobinar el tiempo")
+        hints.append(tr("Mantén LB" if pad else "Mantén R") + tr(" para rebobinar el tiempo"))
     confirm = "A" if pad else "Enter"
     hints.append(
-        f"{confirm} para reaparecer en esta sala"
-        if modern
-        else f"{confirm} para reintentar el nivel"
+        tr("{c} para reaparecer en esta sala" if modern else "{c} para reintentar el nivel").format(
+            c=confirm
+        )
     )
     for i, hint in enumerate(hints):
         col = _blink(t) if i == len(hints) - 1 else PALETTE.poster_gold
@@ -117,20 +120,20 @@ def draw_level_complete(
     w, h = surf.get_size()
     _veil(surf, (6, 4, 14), 175)
     k = min(1.0, t / 0.5)
-    title = fonts.gold_title("NIVEL SUPERADO", 44, glow=6).copy()
+    title = fonts.gold_title(tr("NIVEL SUPERADO"), 44, glow=6).copy()
     title.set_alpha(int(255 * k))
     surf.blit(title, title.get_rect(center=(w // 2, h // 4)))
     name = fonts.render(f"{stats.level} · {level_name}", 24, PALETTE.primary)
     surf.blit(name, name.get_rect(center=(w // 2, h // 4 + px(40))))
     rows = [
-        ("Tiempo", stats.clock),
-        ("Muertes", str(stats.deaths)),
-        ("Enemigos derrotados", str(stats.guards_defeated)),
-        ("Pociones", str(stats.potions)),
-        ("Salas exploradas", f"{len(stats.visited)}/{rooms_total}"),
+        (tr("Tiempo"), stats.clock),
+        (tr("Muertes"), str(stats.deaths)),
+        (tr("Enemigos derrotados"), str(stats.guards_defeated)),
+        (tr("Pociones"), str(stats.potions)),
+        (tr("Salas exploradas"), f"{len(stats.visited)}/{rooms_total}"),
     ]
     if stats.rewound_ticks:
-        rows.append(("Tiempo rebobinado", f"{stats.rewound_ticks / 12:.1f} s"))
+        rows.append((tr("Tiempo rebobinado"), f"{stats.rewound_ticks / 12:.1f} s"))
     top = h // 2 - px(20)
     for i, (label, value) in enumerate(rows):
         appear = min(1.0, max(0.0, (t - 0.3 - i * 0.12) / 0.25))
@@ -158,10 +161,10 @@ def draw_level_complete(
             pts = [(cx, base_y - r), (cx + r, base_y), (cx, base_y + r), (cx - r, base_y)]
             pygame.draw.polygon(surf, col, pts)
             pygame.draw.polygon(surf, (16, 10, 22), pts, 1)
-            label = MEDAL_NAMES[m] + ("  ¡nueva!" if m in new_medals else "")
+            label = tr(MEDAL_NAMES[m]) + ("  " + tr("¡nueva!") if m in new_medals else "")
             txt = fonts.render(label, 17, col if m in new_medals else PALETTE.primary_dark)
             txt.set_alpha(int(255 * appear))
             surf.blit(txt, txt.get_rect(midtop=(int(cx), base_y + px(16))))
     if t > 1.0:
-        hint = fonts.render(("A" if pad else "Enter") + " para continuar", 20, _blink(t))
+        hint = fonts.render(("A" if pad else "Enter") + tr(" para continuar"), 20, _blink(t))
         surf.blit(hint, hint.get_rect(center=(w // 2, h - px(22))))

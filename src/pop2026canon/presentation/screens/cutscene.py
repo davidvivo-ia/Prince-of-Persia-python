@@ -16,6 +16,7 @@ import pygame
 
 from pop2026canon.domain.level import Level
 from pop2026canon.presentation import fonts
+from pop2026canon.presentation.i18n import tr
 from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
 from pop2026canon.presentation.poster import cast_for_level, draw_poster
@@ -77,15 +78,15 @@ def draw_level_card(
     title = fonts.gold_title(level.name, 34, glow=4)
     surf.blit(title, title.get_rect(center=(w // 2, panel_rect.y + px(34))))
 
-    sub = font_small.render(f"NIVEL {level.number} de 14", True, PALETTE.primary)
+    sub = font_small.render(tr("NIVEL {n} de 14").format(n=level.number), True, PALETTE.primary)
     surf.blit(sub, sub.get_rect(center=(w // 2, panel_rect.y + px(68))))
 
-    tagline = LEVEL_TAGLINES.get(level.number, "")
+    tagline = tr(LEVEL_TAGLINES.get(level.number, ""))
     if tagline:
         text = font_small.render(tagline, True, PALETTE.primary_dark)
         surf.blit(text, text.get_rect(center=(w // 2, panel_rect.y + px(102))))
 
     blink = abs(math.sin(t * 2.5)) > 0.3
     hint_col = PALETTE.warning if blink else PALETTE.poster_gold_dark
-    hint = font_small.render("Pulsa ENTER", True, hint_col)
+    hint = font_small.render(tr("Pulsa ENTER"), True, hint_col)
     surf.blit(hint, hint.get_rect(center=(w // 2, panel_rect.y + panel_h - px(24))))

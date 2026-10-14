@@ -55,6 +55,13 @@ uv run pop2026canon --levels-dat RUTA  # con los niveles de tu copia original
 - **Interfaz**: menú principal, pausa, opciones persistentes, controles,
   mapa de salas exploradas, estadísticas por nivel, pistas contextuales
   la primera vez que hace falta cada verbo.
+- **Historia**: cinemática de introducción (Jaffar, la princesa y el
+  reloj de arena) y reencuentro final; guardias vestidos según el nivel;
+  muerte a cámara lenta; ambiente sonoro por nivel; vibración del mando.
+- **Progreso y medallas**: selección de nivel con mejores tiempos,
+  medallas (Completado, Sin un rasguño, Veloz, Explorador) y dificultad
+  normal / difícil.
+- **Idioma**: español o inglés, desde opciones.
 - **Pantalla**: ventana redimensionable, pantalla completa (F11), escala
   suave o entera nítida, filtro CRT y resplandor opcionales.
 - **Accesibilidad**: sacudida y destellos desactivables, reloj siempre

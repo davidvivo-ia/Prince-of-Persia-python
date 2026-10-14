@@ -442,3 +442,10 @@ refleja la situación narrativa de ese nivel."""
 def cast_for_level(level_number: int) -> PosterCast:
     """Devuelve el cast del poster para ``level_number`` (1..14)."""
     return LEVEL_CASTS.get(level_number, PosterCast())
+
+
+def draw_backdrop(surf: pygame.Surface, t: float) -> None:
+    """Sólo el fondo del póster (cielo, estrellas, nubes y palacio), sin
+    personajes ni cortinas: lo usan las cinemáticas."""
+    _draw_sky(surf, t)
+    _draw_palace(surf, t)

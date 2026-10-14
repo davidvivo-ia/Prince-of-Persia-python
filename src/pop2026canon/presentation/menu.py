@@ -17,6 +17,7 @@ import pygame
 
 from pop2026canon.infrastructure.settings import Settings
 from pop2026canon.presentation import fonts
+from pop2026canon.presentation.i18n import LANGUAGE_NAMES, LANGUAGES, tr
 from pop2026canon.presentation.input_device import UiAction
 from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
@@ -71,12 +72,12 @@ class Menu:
             return ""
         value = getattr(settings, item.key)
         if item.kind == "toggle":
-            return "SÍ" if value else "NO"
+            return tr("SÍ") if value else tr("NO")
         if item.kind == "slider":
             return f"{round(float(value) * 100):d}%"
         for v, label in item.choices:
             if v == value:
-                return label
+                return tr(label)
         return str(value)
 
 
@@ -146,6 +147,12 @@ def options_menu() -> Menu:
                 "choice",
                 (("normal", "NORMAL"), ("hard", "DIFÍCIL")),
                 "Difícil: guardias más diestros y 45 minutos. Vale para partidas nuevas.",
+            ),
+            MenuItem(
+                "language",
+                "Idioma",
+                "choice",
+                tuple((code, LANGUAGE_NAMES[code]) for code in LANGUAGES),
             ),
             MenuItem("master_volume", "Volumen general", "slider"),
             MenuItem("music_volume", "Música", "slider"),
@@ -281,7 +288,7 @@ def draw_menu(
     rect.clamp_ip(pygame.Rect(0, px(6), w, h - px(12)))
     surf.blit(_panel(rect.w, rect.h), rect)
     if menu.title:
-        title = fonts.render(menu.title, 34, PALETTE.poster_gold, bold=True)
+        title = fonts.render(tr(menu.title), 34, PALETTE.poster_gold, bold=True)
         surf.blit(title, title.get_rect(midtop=(rect.centerx, rect.top + px(10))))
     size = 22 if row_h >= px(24) else (20 if row_h >= px(20) else 18)
     y = rect.top + title_h + px(4)
@@ -299,7 +306,7 @@ def draw_menu(
             pygame.draw.line(surf, PALETTE.poster_gold, row.topleft, row.bottomleft, px(2))
             _flame_marker(surf, row.left + px(6), row.centery, t)
         col = PALETTE.primary if sel else PALETTE.primary_dark
-        label = fonts.render(item.label, size, col)
+        label = fonts.render(tr(item.label), size, col)
         surf.blit(label, label.get_rect(midleft=(row.left + px(18), row.centery)))
         value = menu.value_text(item, settings)
         if value:
@@ -324,7 +331,7 @@ def draw_menu(
         y += row_h
     hint = menu.items[menu.index].hint if menu.items else ""
     if hint:
-        ht = fonts.render(hint, 18, PALETTE.muted)
+        ht = fonts.render(tr(hint), 18, PALETTE.muted)
         limit = rect.w - px(20)
         if ht.get_width() > limit:
             ht = pygame.transform.smoothscale(
@@ -339,11 +346,12 @@ def draw_controls(surf: pygame.Surface, t: float, pad: bool) -> None:
     rect = pygame.Rect(0, 0, w - px(60), px(46 + 22 * len(CONTROLS) + 40))
     rect.center = (w // 2, h // 2)
     surf.blit(_panel(rect.w, rect.h, 235), rect)
-    title = fonts.render("CONTROLES", 34, PALETTE.poster_gold, bold=True)
+    title = fonts.render(tr("CONTROLES"), 34, PALETTE.poster_gold, bold=True)
     surf.blit(title, title.get_rect(midtop=(rect.centerx, rect.top + px(10))))
     head_y = rect.top + px(44)
     cols = (rect.left + px(20), rect.left + rect.w * 0.45, rect.left + rect.w * 0.73)
-    for x, label in zip(cols, ("Acción", "Teclado", "Mando" + (" ✓" if pad else "")), strict=True):
+    heads = (tr("Acción"), tr("Teclado"), tr("Mando") + (" ✓" if pad else ""))
+    for x, label in zip(cols, heads, strict=True):
         surf.blit(fonts.render(label, 19, PALETTE.warning), (int(x), head_y))
     pygame.draw.line(
         surf,
@@ -360,12 +368,12 @@ def draw_controls(surf: pygame.Surface, t: float, pad: bool) -> None:
             surf.blit(stripe, (rect.left + px(12), y - px(1)))
         for x, txt, c in zip(
             cols,
-            (action, kb, gp),
+            (tr(action), tr(kb), tr(gp)),
             (PALETTE.primary, PALETTE.primary_dark, PALETTE.primary_dark),
             strict=True,
         ):
             surf.blit(fonts.render(txt, 20, c), (int(x), y))
-    foot = fonts.render("Enter / B para volver", 18, PALETTE.muted)
+    foot = fonts.render(tr("Enter / B para volver"), 18, PALETTE.muted)
     surf.blit(foot, foot.get_rect(midbottom=(rect.centerx, rect.bottom - px(8))))
 
 

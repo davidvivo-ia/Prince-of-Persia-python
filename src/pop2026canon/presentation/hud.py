@@ -18,6 +18,7 @@ from pop2026canon.domain.chars import CharId
 from pop2026canon.domain.combat import is_hostile
 from pop2026canon.domain.game import Game
 from pop2026canon.presentation import fonts
+from pop2026canon.presentation.i18n import tr
 from pop2026canon.presentation.layout import LAYOUT, px
 from pop2026canon.presentation.palette import PALETTE
 
@@ -241,7 +242,7 @@ def draw_hud(
         (c for c in game.others if is_hostile(c) and c.room == kid.room and c.alive < 0), None
     )
     if enemy is not None:
-        name = ENEMY_NAMES.get(enemy.charid, "ENEMIGO")
+        name = tr(ENEMY_NAMES.get(enemy.charid, "ENEMIGO"))
         n = _shadowed(name, 18, (150, 170, 230))
         right = w - px(14)
         for i in range(enemy.hp_max):
@@ -278,7 +279,7 @@ def draw_banner(surf: pygame.Surface, game: Game, state: HudState) -> None:
     k = state.banner_t / state.BANNER_TIME
     a = min(1.0, (1 - k) * 4, k * 3)
     w = surf.get_width()
-    big = _shadowed(f"NIVEL {game.level.number}", 48, PALETTE.poster_gold, bold=True)
+    big = _shadowed(f"{tr('NIVEL')} {game.level.number}", 48, PALETTE.poster_gold, bold=True)
     small = _shadowed(game.level.name, 26, PALETTE.primary)
     panel = _banner_panel(w, px(92)).copy()
     panel.set_alpha(int(255 * a))

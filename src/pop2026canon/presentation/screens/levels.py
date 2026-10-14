@@ -15,6 +15,7 @@ import pygame
 
 from pop2026canon.infrastructure.progress import MEDALS, Progress
 from pop2026canon.presentation import fonts
+from pop2026canon.presentation.i18n import tr
 from pop2026canon.presentation.input_device import UiAction
 from pop2026canon.presentation.layout import px
 from pop2026canon.presentation.palette import PALETTE
@@ -89,7 +90,7 @@ def draw_level_select(
     t: float,
 ) -> None:
     w, h = surf.get_size()
-    title = fonts.gold_title("NIVELES", 38, glow=5)
+    title = fonts.gold_title(tr("NIVELES"), 38, glow=5)
     surf.blit(title, title.get_rect(midtop=(w // 2, px(14))))
     margin = px(18)
     gap = px(8)
@@ -167,18 +168,20 @@ def draw_level_select(
     rec = sel.progress.record(n)
     foot_y = top + ROWS * (ch + gap) + px(10)
     if sel.unlocked(n):
-        line = f"{n} · {level_names.get(n, '')} — {th.title}"
-        got = [MEDAL_NAMES[m] for m in MEDALS if m in rec.medals]
-        sub = ("Medallas: " + ", ".join(got)) if got else "Sin medallas todavía"
+        line = f"{n} · {level_names.get(n, '')} — {tr(th.title)}"
+        got = [tr(MEDAL_NAMES[m]) for m in MEDALS if m in rec.medals]
+        sub = (tr("Medallas: ") + ", ".join(got)) if got else tr("Sin medallas todavía")
     else:
         line = f"{n} · {level_names.get(n, '')}"
-        sub = "Completa el nivel anterior para desbloquearlo"
+        sub = tr("Completa el nivel anterior para desbloquearlo")
     l1 = fonts.render(line, 22, PALETTE.primary)
     l2 = fonts.render(sub, 18, PALETTE.primary_dark)
     surf.blit(l1, l1.get_rect(midtop=(w // 2, foot_y)))
     surf.blit(l2, l2.get_rect(midtop=(w // 2, foot_y + px(26))))
     total = sel.progress.medal_count
-    tm = fonts.render(f"{total} / {4 * 13} medallas", 16, PALETTE.poster_gold)
+    tm = fonts.render(
+        tr("{n} / {total} medallas").format(n=total, total=4 * 13), 16, PALETTE.poster_gold
+    )
     surf.blit(tm, tm.get_rect(midtop=(w // 2, foot_y + px(50))))
-    hint = fonts.render("Enter / A: jugar · Esc / B: volver", 16, PALETTE.muted)
+    hint = fonts.render(tr("Enter / A: jugar · Esc / B: volver"), 16, PALETTE.muted)
     surf.blit(hint, hint.get_rect(midbottom=(w // 2, h - px(8))))

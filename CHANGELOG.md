@@ -6,6 +6,38 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.22.0] — 2026-10-14
+
+### Vitaminado: progreso, cinemáticas, idioma y más vida
+
+- **Progreso persistente** (`~/.local/share/pop2026canon/progress.json`):
+  niveles desbloqueados, mejor tiempo y menos muertes por nivel, y
+  **medallas** — Completado, Sin un rasguño (sin morir ni rebobinar),
+  Veloz (bajo el tiempo de referencia) y Explorador (todas las salas).
+  La pantalla de nivel superado enseña las medallas y marca las nuevas.
+- **Selección de nivel** en el menú principal (aparece al completar el
+  primero): tarjeta por nivel con su ambiente, tiempo, muertes, medallas
+  y candado en los que faltan.
+- **Dificultad** normal/difícil (guardias dos puntos más diestros y 45
+  minutos de reloj) en opciones; vale para partidas nuevas.
+- **Cinemática de introducción** al empezar partida (el palacio bajo la
+  luna, Jaffar y el reloj de arena en los aposentos, el joven arrojado a
+  la mazmorra) y **reencuentro final** antes de la pantalla de victoria.
+  Ambas se saltan con Enter / A.
+- **Idioma español / inglés** en opciones: menús, controles, HUD,
+  pistas, tarjetas de nivel, medallas, pantallas de fin y subtítulos de
+  las cinemáticas (`presentation/i18n.py`; el español es la fuente y
+  cualquier texto sin traducir sale tal cual).
+- **Guardias vestidos por nivel**: camisa, pantalón, chaleco y turbante
+  cambian con el ambiente de cada nivel (carceleros, guardia de palacio,
+  esbirros del visir...).
+- **Muerte a cámara lenta** con el mundo desaturándose; matar a un
+  guardia da un instante de cámara lenta y un destello frío.
+- **Ambiente sonoro por nivel** en bucle (goteras, viento, tumba, cueva,
+  fuego, retumbar, jardín) mezclado bajo la música.
+- **Vibración del mando** al recibir daño, morir, caer fuerte y chocar
+  espadas (se desactiva con la sacudida de cámara).
+
 ## [canon-0.21.0] — 2026-10-14
 
 ### Niveles con puzles de verdad
