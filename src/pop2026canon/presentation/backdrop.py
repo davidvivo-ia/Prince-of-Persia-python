@@ -162,8 +162,12 @@ def decor_spots(room_id: int, theme_key: str, name: str) -> tuple[tuple[int, int
     lo, hi = counts.get(name, (1, 3))
     n = rng.randint(lo, hi)
     cols = rng.sample(range(LAYOUT.room_cols), k=min(n, LAYOUT.room_cols))
+    top_row = 1 if name in ("windows", "banners", "tapestry") else 2
     return tuple(
-        (c * LAYOUT.tile_w + LAYOUT.tile_w // 2 + rng.randint(-px(10), px(10)), rng.randint(0, 2))
+        (
+            c * LAYOUT.tile_w + LAYOUT.tile_w // 2 + rng.randint(-px(10), px(10)),
+            rng.randint(0, top_row),
+        )
         for c in sorted(cols)
     )
 
@@ -620,15 +624,20 @@ def _glyphs(surf: pygame.Surface, th: LevelTheme, room: int, rng: random.Random)
 def _rubble(surf: pygame.Surface, th: LevelTheme, room: int, rng: random.Random) -> None:
     """Pared que se desmorona: boquetes oscuros y piedras sueltas."""
     w, h = surf.get_size()
-    for _ in range(rng.randint(1, 3)):
+    for _ in range(rng.randint(1, 2)):
+        # Boquete: hueco oscuro, borde de sillares rotos iluminado arriba
         cx, cy = rng.randint(px(30), w - px(30)), rng.randint(px(30), h - px(70))
         pts = []
-        for k in range(9):
-            a = k / 9 * math.tau
-            r = rng.randint(px(8), px(20))
-            pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r * 0.7))
-        pygame.draw.polygon(surf, (14, 10, 10), pts)
-        pygame.draw.lines(surf, th.hi, True, pts, 1)
+        for k in range(11):
+            a = k / 11 * math.tau
+            r = rng.randint(px(10), px(18))
+            pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r * 0.75))
+        rim = [(x + (x - cx) * 0.18, y + (y - cy) * 0.18) for x, y in pts]
+        pygame.draw.polygon(surf, tuple(int(c * 0.55) for c in th.stone), rim)
+        pygame.draw.polygon(surf, (10, 6, 6), pts)
+        upper = [p for p in pts if p[1] <= cy]
+        if len(upper) > 1:
+            pygame.draw.lines(surf, th.hi, False, sorted(upper), max(1, px(1)))
     for floor in range(3):
         base = (floor + 1) * LAYOUT.tile_h - LAYOUT.floor_face - LAYOUT.floor_top
         for _ in range(rng.randint(2, 5)):

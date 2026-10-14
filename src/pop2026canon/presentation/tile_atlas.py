@@ -681,30 +681,41 @@ def _torch_base(s: pygame.Surface, c: Ctx) -> None:
 
 
 def _wall(s: pygame.Surface, c: Ctx) -> None:
-    """Bloque de sillería que ocupa la celda; su cara superior queda a la
+    """Bloque macizo de sillería (más claro que la pared del fondo, como
+    en el original) que ocupa la celda; su cara superior queda a la
     altura del suelo de la fila de arriba."""
     tw = c.tw
     pal = c.pal
+    stone = _mix(pal.face, pal.top, 0.32 if c.palace else 0.5)
     top_y = c.oy - LAYOUT.floor_face - LAYOUT.floor_top
     body = pygame.Rect(c.ox, top_y + LAYOUT.floor_top, tw, c.bottom - top_y - LAYOUT.floor_top)
-    _vgrad(s, body, pal.face, _shade(pal.face, 0.78))
+    pygame.draw.rect(s, pal.joint, body)
     rng = random.Random(c.variant * 13 + 5)
     course = px(21)
+    bev = max(1, px(1))
     y = body.y
     row = 0
     while y < body.bottom:
         h = min(course, body.bottom - y)
-        x = c.ox - (rng.randint(0, tw // 2) if row % 2 else 0)
+        x = c.ox - (rng.randint(px(8), tw // 2) if row % 2 else 0)
         while x < c.ox + tw:
             bw = rng.randint(tw // 3, tw * 2 // 3)
-            r = pygame.Rect(x, y, bw, h).clip(body)
-            if r.w > 0:
-                col = _shade(pal.face, rng.uniform(0.85, 1.12))
-                pygame.draw.rect(s, col, r.inflate(-px(1), -px(1)))
-                pygame.draw.line(s, _shade(col, 1.2), r.topleft, (r.right - 1, r.top), 1)
+            r = pygame.Rect(x, y, bw, h).clip(body).inflate(-bev, -bev)
+            if r.w > 2 and r.h > 2:
+                col = _shade(stone, rng.uniform(0.86, 1.1))
+                _vgrad(s, r, _shade(col, 1.06), _shade(col, 0.86))
+                pygame.draw.line(s, _shade(col, 1.3), r.topleft, (r.right - 1, r.top), bev)
+                pygame.draw.line(s, _shade(col, 1.15), r.topleft, (r.left, r.bottom - 1), bev)
                 pygame.draw.line(
-                    s, _shade(col, 0.6), (r.left, r.bottom - 1), (r.right - 1, r.bottom - 1), 1
+                    s, _shade(col, 0.55), (r.left, r.bottom - 1), (r.right - 1, r.bottom - 1), bev
                 )
+                pygame.draw.line(
+                    s, _shade(col, 0.7), (r.right - 1, r.top), (r.right - 1, r.bottom - 1), bev
+                )
+                for _ in range(3):
+                    mx = rng.randrange(r.left, r.right)
+                    my = rng.randrange(r.top, r.bottom)
+                    s.fill(_shade(col, rng.uniform(0.8, 1.15)), (mx, my, px(2), px(1)))
             x += bw
         y += course
         row += 1
@@ -712,11 +723,14 @@ def _wall(s: pygame.Surface, c: Ctx) -> None:
     _vgrad(s, top, _shade(pal.top, 0.7), pal.top)
     pygame.draw.line(s, pal.top_hi, (c.ox, top.bottom - 1), (c.ox + tw - 1, top.bottom - 1), px(1))
     if c.left_open:
-        pygame.draw.line(s, _shade(pal.face, 1.25), (c.ox, top_y), (c.ox, c.bottom), px(2))
+        pygame.draw.line(s, _shade(stone, 1.35), (c.ox, top_y), (c.ox, c.bottom), px(2))
     if c.right_open:
-        pygame.draw.line(
-            s, pal.face_dark, (c.ox + tw - px(2), top_y), (c.ox + tw - px(2), c.bottom), px(3)
-        )
+        shade = pygame.Surface((px(12), c.bottom - top_y), pygame.SRCALPHA)
+        for i in range(px(12)):
+            pygame.draw.line(
+                shade, (0, 0, 0, int(140 * (i / px(12)) ** 1.5)), (i, 0), (i, shade.get_height())
+            )
+        s.blit(shade, (c.ox + tw - px(12), top_y))
 
 
 def _skeleton(s: pygame.Surface, c: Ctx) -> None:

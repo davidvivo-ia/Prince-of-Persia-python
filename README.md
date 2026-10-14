@@ -36,6 +36,11 @@ uv run pop2026canon --levels-dat RUTA  # con los niveles de tu copia original
   volumen (losas biseladas, columnas por delante del personaje, rejas
   de hierro, frascos de vidrio, llamas animadas) y pared de piedra
   generada por sala. Todo procedural, sin assets del original.
+- **Cada nivel, su mundo**: los 14 niveles tienen salas rediseñadas que
+  usan toda la altura (cornisas, plataformas, muros macizos) y un tema
+  visual propio — mazmorra con goteras, osario con telarañas, galería de
+  mármol a la luz de la luna, cavernas con cristales, tumba con
+  jeroglíficos, torre al alba, dominios del visir, aposentos con rosas.
 - **Luz y ambiente**: antorchas que iluminan la piedra, mazmorra fría y
   palacio cálido, *bloom*, rayos de luz, niebla baja, partículas
   (polvo, chispas, sangre, cascotes, ascuas), viñeta, sacudida de

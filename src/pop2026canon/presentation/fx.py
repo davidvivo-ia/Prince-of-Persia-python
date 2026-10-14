@@ -930,7 +930,7 @@ def draw_atmosphere(surf: pygame.Surface, game: Game, t: float) -> None:
         surf.blit(fog, (fw - off, y), special_flags=pygame.BLEND_ADD)
 
 
-def bloom(surf: pygame.Surface, rect: pygame.Rect, *, threshold: int = 185, gain: int = 4) -> None:
+def bloom(surf: pygame.Surface, rect: pygame.Rect, *, threshold: int = 200, gain: int = 5) -> None:
     """Resplandor: lo que supera ``threshold`` de LUMINANCIA se difumina a
     1/8 de resolución y se suma con su color (llamas, pociones, chispas,
     destellos). El umbral por luminancia evita que una pared cálida bien

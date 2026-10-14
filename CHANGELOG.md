@@ -6,6 +6,37 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.20.0] — 2026-10-14
+
+### Los 14 niveles, uno a uno: diseño de salas, identidad visual y pruebas
+
+- **Salas rediseñadas** en ASCII (``_ascii``: tres filas de diez tiles
+  con leyenda) usando toda la altura: muros macizos, cornisas que se
+  trepan, plataformas elevadas con pociones o con la espada, pasarelas
+  altas, dinteles y columnas. Se conservan la ruta, los eventos canon
+  (esqueleto, espejo, robo, salto de la sombra, ratón, fusión, visir,
+  princesa), las placas y rejas, los guardias y las caídas de cada
+  nivel. Novedades: L1 pone la espada en una cornisa; L3 tiene una
+  cripta secreta bajo la sala 17; en L4 las salas 19-20, antes
+  inaccesibles, se alcanzan por una losa suelta.
+- **Un tema visual por nivel** (``themes.py``): paleta y mampostería
+  (sillares, roca viva, mármol con vetas, ladrillo), luz ambiente y de
+  antorcha, niebla, rayos de luz, cielo de las ventanas, partículas
+  (goteras, arena, pétalos, esporas, ceniza, ascuas, polillas) y
+  decoración (telarañas, calaveras, estalactitas, cristales luminosos,
+  ventanas, estandartes del visir, velas, jeroglíficos, cascotes,
+  rosas). La decoración luminosa ilumina donde está dibujada.
+- **Muros macizos** más claros que la pared del fondo, con bisel y
+  sombra lateral (como los bloques del original); oclusión sobre cada
+  losa y filo de luz en su cara superior.
+- **Pruebas**: el bot completa los 14 niveles y los replays humanos de
+  L1-L13 se han regenerado con el solucionador A*;
+  ``test_level_design.py`` (ninguna sala plana ni repetida, cornisas
+  trepables, nadie cae dentro de un muro, los bordes de las salas
+  encajan) y ``test_level_visuals.py`` (tema único, cada sala legible,
+  partículas del tema). Un test encontró una losa de L2 que caía sobre
+  un muro: corregido.
+
 ## [canon-0.19.0] — 2026-10-13
 
 ### Gráficos 2026: lienzo HD, personajes con esqueleto, tiles con volumen y post-proceso
