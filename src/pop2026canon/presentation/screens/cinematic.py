@@ -27,7 +27,7 @@ import random
 
 import pygame
 
-from pop2026canon.presentation import fonts
+from pop2026canon.presentation import fonts, poses
 from pop2026canon.presentation.char_atlas import CharPalette, sprite
 from pop2026canon.presentation.i18n import tr
 from pop2026canon.presentation.layout import px
@@ -131,6 +131,23 @@ def _actor(
 
 def _run_frame(t: float, speed: float = 14.0) -> int:
     return 121 + int(t * speed) % 12
+
+
+def _vizier_frame(s: float) -> int:
+    """Jaffar en los aposentos: entra con paso solemne (0..3 s), señala a
+    la princesa, alza los brazos para conjurar el reloj de arena y se
+    queda con las manos juntas."""
+    if s < 3.0:
+        return poses.VIZIER_STRIDE_FIRST + int(s * 8) % 12
+    if s < 3.4:
+        return poses.VIZIER_POINT
+    if s < 4.4:
+        k = (s - 3.4) / 1.0
+        span = poses.VIZIER_SUMMON_LAST - poses.VIZIER_SUMMON_FIRST
+        return poses.VIZIER_SUMMON_FIRST + min(span, int(k * (span + 1)))
+    if s < 6.0:
+        return poses.VIZIER_SUMMON_LAST
+    return poses.VIZIER_GLOAT
 
 
 # ---------------------------------------------------------------------------
@@ -475,13 +492,13 @@ def draw_intro(surf: pygame.Surface, t: float) -> None:
         vx_end, vx_start = int(w * 0.66), int(w + px(60))
         if s < 3.0:
             vx = int(vx_start + (vx_end - vx_start) * _ease(s / 3.0))
-            _actor(surf, _run_frame(s, 10), CharPalette.VIZIER, -1, vx, floor_y)
+            _actor(surf, _vizier_frame(s), CharPalette.VIZIER, -1, vx, floor_y)
         else:
-            _actor(surf, 15, CharPalette.VIZIER, -1, vx_end, floor_y)
-        # El reloj de arena aparece (3.2 s) y la arena empieza a correr
-        if s >= 3.2:
-            appear = _ease((s - 3.2) / 0.8)
-            sand = 1.0 - _clamp01((s - 4.0) / 60.0)
+            _actor(surf, _vizier_frame(s), CharPalette.VIZIER, -1, vx_end, floor_y)
+        # El reloj de arena aparece al conjurarlo (3.8 s) y la arena corre
+        if s >= 3.8:
+            appear = _ease((s - 3.8) / 0.8)
+            sand = 1.0 - _clamp01((s - 4.6) / 60.0)
             draw_hourglass(
                 surf,
                 w // 2,

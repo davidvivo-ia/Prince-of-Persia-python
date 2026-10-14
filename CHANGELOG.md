@@ -23,7 +23,8 @@ versionado sigue [SemVer].
 - **Cinemática de introducción** al empezar partida (el palacio bajo la
   luna, Jaffar y el reloj de arena en los aposentos, el joven arrojado a
   la mazmorra) y **reencuentro final** antes de la pantalla de victoria.
-  Ambas se saltan con Enter / A.
+  Jaffar tiene poses propias (paso solemne con la mano al pecho, señalar,
+  conjurar el reloj de arena, regodearse). Ambas se saltan con Enter / A.
 - **Idioma español / inglés** en opciones: menús, controles, HUD,
   pistas, tarjetas de nivel, medallas, pantallas de fin y subtítulos de
   las cinemáticas (`presentation/i18n.py`; el español es la fuente y

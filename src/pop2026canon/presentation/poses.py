@@ -650,7 +650,46 @@ def pose_for(frame: int) -> Pose:
         sheathe = replace(STAND, uarm_n=-10.0, farm_n=24.0, blade=-160.0)
         p = blend(ENGARDE, sheathe, k)
         return replace(p, blade=None) if f >= 238 else p
+    if VIZIER_STRIDE_FIRST <= f <= VIZIER_GLOAT:
+        return _vizier(f)
     return STAND
+
+
+# ---------------------------------------------------------------------------
+# Poses del visir para las cinemáticas (frames 241..259, fuera del rango
+# canon): paso solemne con la mano al pecho, señalar, conjurar el reloj
+# de arena y regodearse con las manos juntas.
+# ---------------------------------------------------------------------------
+
+VIZIER_STRIDE_FIRST = 241
+VIZIER_STRIDE_LAST = 252
+VIZIER_POINT = 253
+VIZIER_SUMMON_FIRST = 254
+VIZIER_SUMMON_LAST = 258
+VIZIER_GLOAT = 259
+
+
+VIZIER_POINT_POSE = Pose(lean=-4.0, head=6.0, uarm_n=92.0, farm_n=94.0, uarm_f=-24.0, farm_f=-10.0)
+VIZIER_SUMMON_POSE = Pose(
+    lean=-10.0, head=-18.0, uarm_n=142.0, farm_n=168.0, uarm_f=128.0, farm_f=160.0
+)
+VIZIER_GLOAT_POSE = Pose(lean=-2.0, head=4.0, uarm_n=28.0, farm_n=96.0, uarm_f=26.0, farm_f=92.0)
+
+
+def _vizier(f: int) -> Pose:
+    if f <= VIZIER_STRIDE_LAST:
+        phi = (f - VIZIER_STRIDE_FIRST) / 12 * 2 * math.pi
+        p = run_pose(phi, 0.42)
+        # Mano cercana al pecho (bajo la barba), la otra caída a la espalda
+        return replace(
+            p, lean=-3.0, head=2.0, uarm_n=34.0, farm_n=118.0, uarm_f=-26.0, farm_f=-12.0
+        )
+    if f == VIZIER_POINT:
+        return VIZIER_POINT_POSE
+    if f <= VIZIER_SUMMON_LAST:
+        k = (f - VIZIER_SUMMON_FIRST) / (VIZIER_SUMMON_LAST - VIZIER_SUMMON_FIRST)
+        return blend(VIZIER_POINT_POSE, VIZIER_SUMMON_POSE, k)
+    return VIZIER_GLOAT_POSE
 
 
 def _standing_jump(f: int) -> Pose:

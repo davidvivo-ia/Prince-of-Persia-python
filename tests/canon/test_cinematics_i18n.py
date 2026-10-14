@@ -127,6 +127,26 @@ class TestCinematics:
             cinematic.draw_hourglass(canvas, 600, 500, 120, sand, 0.0)
             assert _mean(canvas) > 0
 
+    def test_vizier_has_his_own_poses(self, canvas: pygame.Surface) -> None:
+        from pop2026canon.presentation import poses
+        from pop2026canon.presentation.char_atlas import CharPalette, sprite
+
+        frames = range(poses.VIZIER_STRIDE_FIRST, poses.VIZIER_GLOAT + 1)
+        for f in frames:
+            assert poses.pose_for(f) != poses.STAND
+            img, _ = sprite(f, CharPalette.VIZIER, -1)
+            assert img.get_width() > 0
+        # Señalar, conjurar y regodearse son poses distintas entre sí
+        distinct = {
+            poses.pose_for(f)
+            for f in (poses.VIZIER_POINT, poses.VIZIER_SUMMON_LAST, poses.VIZIER_GLOAT)
+        }
+        assert len(distinct) == 3
+        # Los brazos del conjuro están en alto (ambos hacia delante y arriba)
+        summon = poses.pose_for(poses.VIZIER_SUMMON_LAST)
+        assert summon.uarm_n > 90
+        assert summon.uarm_f > 90
+
     def test_subtitles_are_translated(self, canvas: pygame.Surface) -> None:
         """La intro en inglés pinta píxeles distintos a la intro en español
         (los subtítulos cambian)."""
