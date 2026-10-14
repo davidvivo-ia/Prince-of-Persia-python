@@ -36,12 +36,14 @@ from pop2026canon.domain.game import Game, GameStatus, new_game
 from pop2026canon.domain.level import Level
 from pop2026canon.domain.levels_canon import CANON_LEVELS
 from pop2026canon.domain.tiles import Tile
+from tests.canon.routes import OPEN_EXIT, ROUTE_HINTS
 from tests.canon.test_completability import (
     _MACROS,
     _NOOP,
     ROOM_COST_TICKS,
     _exit_goal,
     _link_gates,
+    _priority_to_room,
     _room_distances_to_goal,
     _room_distances_to_goal_rooms,
     _settle,
@@ -55,6 +57,8 @@ _SHIFT = Command(shift=True)
 _UP = Command(up=True)
 _R = Command(right=True)
 _L = Command(left=True)
+_RU = Command(right=True, up=True)
+_LU = Command(left=True, up=True)
 # En guardia y tres estocadas espaciadas — lo que hace un jugador novato.
 _FIGHT = [(_SHIFT, 1), (_STRIKE, 1), (_NOOP, 6), (_STRIKE, 1), (_NOOP, 6), (_STRIKE, 1), (_NOOP, 8)]
 # Parada (ARRIBA en guardia) y contraataque — lo que aprende cualquier
@@ -169,6 +173,10 @@ def _nearest_enemy(game: Game) -> Char | None:
     return best
 
 
+_PARRY_AT: tuple[int, ...] = (152, 153)
+"""Frames de la estocada rival en los que se pulsa ARRIBA para parar."""
+
+
 def _duel_policy(game: Game) -> Command | None:
     """Lo que hace un jugador en un duelo: para cuando el guard lanza la
     estocada (frames 152/153), pincha cuando está a distancia de hoja
@@ -179,7 +187,11 @@ def _duel_policy(game: Game) -> Command | None:
     if enemy is None:
         return None
     if k.sword != SwordStatus.DRAWN:
-        return _NOOP  # control_standing desenvaina solo al verle
+        return Command(up=True, shift=True)  # desenvainar al verle
+    if k.curr_seq_id == int(Seq.STAND):
+        return _SHIFT  # en guardia ANTES de que llegue: si no, su primera
+        # estocada te alcanza de pie (y en el borde de la sala te empuja a
+        # la anterior, donde el duelo se enreda)
     d = char_opp_dist(k, enemy)
     # Acaba de parar: réplica inmediata (canon blocktostrike) — es la
     # única forma de alcanzar a un rival que bloquea siempre (el visir).
@@ -187,9 +199,9 @@ def _duel_policy(game: Game) -> Command | None:
         return _STRIKE
     if k.curr_seq_id != int(Seq.ENGARDE) or k.frame not in READY_FRAMES:
         return _NOOP
-    if enemy.frame in (152, 153):
+    if enemy.frame in _PARRY_AT:
         return _UP
-    if enemy.frame in (168, 151):
+    if enemy.frame in (168, 151, 152, 153):
         return _NOOP
     if d < 0:
         return _L if k.direction == 0 else _R  # el rival a la espalda: girarse
@@ -203,10 +215,22 @@ def _duel_policy(game: Game) -> Command | None:
 
 
 _DUEL: list[tuple[Policy, int]] = [(_duel_policy, 48)]
+_DUEL_FULL: list[tuple[Policy, int]] = [(_duel_policy, 600)]
+"""El duelo entero de una vez (la política termina sola cuando no queda
+rival): un jugador no deja un combate a medias para dar un paso, y así
+la búsqueda no se pierde entre miles de posturas intermedias."""
 
-_COMBAT_MACROS: list[list[tuple[Command | Policy, int]]] = [_DUEL, *_MACROS]
-"""Con un enemigo armado a la vista: batirse, o moverse (huir, saltar,
-pasar de largo — imprescindible ante el esqueleto, que no muere)."""
+_COMBAT_MACROS: list[list[tuple[Command | Policy, int]]] = [
+    _DUEL_FULL,
+    [(_R, 22)],
+    [(_L, 22)],
+    [(_R, 7), (_RU, 3), (_R, 14)],
+    [(_L, 7), (_LU, 3), (_L, 14)],
+]
+"""Con un enemigo armado a la vista: batirse hasta el final, o huir
+(correr, saltar, pasar de largo — imprescindible ante el esqueleto, que
+no muere). Sin pasitos ni esperas: con el rival encima cada postura es
+un estado distinto y la búsqueda se perdería entre miles de ellas."""
 
 
 def _in_combat(game: Game) -> bool:
@@ -229,6 +253,7 @@ def _with_hp_cost(priority: Callable[[Game], int]) -> Callable[[Game], int]:
 
 _HUMAN_MACROS: list[list[tuple[Command | Policy, int]]] = [
     *_MACROS,
+    _DUEL_FULL,
     _DUEL,
     [(_R, 22)],
     [(_L, 22)],
@@ -381,14 +406,45 @@ def solve_level_human_trace(
         if _won(armed):
             return trace
         start = armed
-    if exit_coord is not None and plate_coord is not None:
+    door_done = exit_coord is None or plate_coord is None
 
-        def _door_open(game: Game) -> bool:
-            return _won(game) or exit_coord in game.state.open_gates
+    def _door_open(game: Game) -> bool:
+        return _won(game) or exit_coord in game.state.open_gates
 
-        opened, trace, budget = _search_trace(
-            start, trace, priority=priority, goal=_door_open, budget=budget
+    def _open_door(
+        start: Game, trace: list[Command], budget: int
+    ) -> tuple[Game | None, list[Command], int]:
+        return _search_trace(start, trace, priority=priority, goal=_door_open, budget=budget)
+
+    for room in ROUTE_HINTS.get(level.number, ()):
+        if room == OPEN_EXIT:
+            if door_done:
+                continue
+            opened, trace, budget = _open_door(start, trace, budget)
+            if opened is None:
+                return None
+            if _won(opened):
+                return trace
+            start, door_done = opened, True
+            continue
+
+        def _reached(game: Game, room: int = room) -> bool:
+            return _won(game) or game.kid.room == room
+
+        reached, trace, budget = _search_trace(
+            start,
+            trace,
+            priority=_with_hp_cost(_priority_to_room(level, room)),
+            goal=_reached,
+            budget=budget,
         )
+        if reached is None:
+            return None
+        if _won(reached):
+            return trace
+        start = reached
+    if not door_done:
+        opened, trace, budget = _open_door(start, trace, budget)
         if opened is None:
             return None
         if _won(opened):

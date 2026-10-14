@@ -22,13 +22,13 @@ class TestDoorLinkModel:
         assert link.gate_coord == (2, 3, 1)
 
     def test_level_gates_for_plate(self) -> None:
-        # L6 plate (3, 7, 2) abre gate (2, 3, 2) — fila del suelo (canon)
-        gates = LEVEL_6.gates_for_plate((3, 7, 2))
-        assert (2, 3, 2) in gates
+        # L6: la placa de la sala 11 (col 5) abre la reja de la sala 8
+        gates = LEVEL_6.gates_for_plate((11, 5, 2))
+        assert (8, 5, 2) in gates
 
     def test_level_plates_for_gate(self) -> None:
-        plates = LEVEL_6.plates_for_gate((2, 3, 2))
-        assert (3, 7, 2) in plates
+        plates = LEVEL_6.plates_for_gate((8, 5, 2))
+        assert (11, 5, 2) in plates
 
     def test_unmapped_plate_returns_empty(self) -> None:
         assert LEVEL_6.gates_for_plate((9, 9, 9)) == ()
@@ -37,27 +37,30 @@ class TestDoorLinkModel:
 
 class TestL6PlateGateLink:
     def test_l6_has_doorlinks(self) -> None:
-        # Canon expandido: L6 puede tener varios doorlinks. La gate de
-        # la sala 2 tiene una plate en su lado de aproximación (sala 2)
-        # y otra al otro lado (sala 3).
-        assert len(LEVEL_6.doorlinks) >= 2
+        # La reja de la sala 2 tiene una placa que la abre (col 2) y una
+        # placa de cierre entre medias (col 5) que hay que saltar; la
+        # reja de la 8 la abre la placa de la 11 (bajo la losa de la 6).
+        assert len(LEVEL_6.doorlinks) >= 3
         plate_coords = {link.plate_coord for link in LEVEL_6.doorlinks}
         gate_coords = {link.gate_coord for link in LEVEL_6.doorlinks}
-        assert (2, 1, 2) in plate_coords
-        assert (3, 7, 2) in plate_coords
-        assert (2, 3, 2) in gate_coords
+        assert (2, 2, 2) in plate_coords
+        assert (2, 5, 2) in plate_coords
+        assert (11, 5, 2) in plate_coords
+        assert (2, 7, 2) in gate_coords
+        assert (8, 5, 2) in gate_coords
 
     def test_plate_pressed_opens_gate(self) -> None:
-        """Al pisar la plate (sala 3 col 7 row 1) la gate (sala 2 col 3
-        row 1) acaba abriéndose."""
+        """Al pisar la placa (sala 2 col 2) la reja (sala 2 col 7) acaba
+        abriéndose; al pisar la de cierre (col 5) se cierra."""
         game = new_game(LEVEL_6)
-        game = replace(
-            game,
-            kid=replace(game.kid, room=3, curr_col=7, curr_row=2),
-        )
+        game = replace(game, kid=replace(game.kid, room=2, curr_col=2, curr_row=2))
         for _ in range(20):
             game = advance(game, Command())
-        assert (2, 3, 2) in game.state.open_gates
+        assert (2, 7, 2) in game.state.open_gates
+        game = replace(game, kid=replace(game.kid, curr_col=5))
+        for _ in range(3):
+            game = advance(game, Command())
+        assert (2, 7, 2) not in game.state.open_gates
 
 
 class TestL11SelfRoomDoor:
@@ -70,8 +73,8 @@ class TestL11SelfRoomDoor:
 class TestL8MouseOpensGate:
     def test_l8_mouse_event_opens_unlinked_gate(self) -> None:
         """L8 sala 10 tiene gate sin doorlink — sólo el mouse la abre."""
-        # Buscar la gate de exit en L8 (sala 10 col 2 row 1)
-        gate_coord = (10, 2, 2)
+        # La reja de la salida de L8 (sala 10 col 7) no tiene placa.
+        gate_coord = (10, 7, 2)
         assert LEVEL_8.plates_for_gate(gate_coord) == ()
         game = new_game(LEVEL_8)
         game = replace(game, kid=replace(game.kid, room=10))

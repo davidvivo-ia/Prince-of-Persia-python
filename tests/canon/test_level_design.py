@@ -116,3 +116,103 @@ class TestAsciiRooms:
             _ascii("___", "..........", "__________")
         with pytest.raises(ValueError, match="desconocido"):
             _ascii("____Q_____", "..........", "__________")
+
+
+# ---------------------------------------------------------------------------
+# Puzles: lo que convierte una sala en un nivel
+# ---------------------------------------------------------------------------
+
+
+def _room_hops(level: Level, a: int, b: int) -> int:
+    """Salas que hay que cruzar para ir de ``a`` a ``b`` (por enlaces)."""
+    from collections import deque
+
+    seen = {a: 0}
+    q = deque([a])
+    while q:
+        r = q.popleft()
+        rm = level.room(r)
+        for nb in (rm.link_n, rm.link_s, rm.link_e, rm.link_w):
+            if 1 <= nb <= len(level.rooms) and nb not in seen:
+                seen[nb] = seen[r] + 1
+                q.append(nb)
+    return seen.get(b, 99)
+
+
+PLAYABLE = [lv for lv in LEVELS if lv.number < 14]
+_PIDS = _IDS[:13]
+
+
+@pytest.mark.parametrize("level", PLAYABLE, ids=_PIDS)
+def test_exit_door_needs_a_far_plate(level: Level) -> None:
+    """La puerta de salida está cerrada: la abre una placa a varias salas
+    de distancia (hay que buscarla y volver), como en el original."""
+    exits = [
+        (rm.id, c, r)
+        for rm in level.rooms
+        for r in range(3)
+        for c in range(10)
+        if rm.tile_at(c, r)[0] is Tile.LEVEL_DOOR_LEFT
+    ]
+    assert exits, f"L{level.number}: sin puerta de salida"
+    plates = level.plates_for_gate(exits[0])
+    assert plates, f"L{level.number}: la puerta de salida no tiene placa"
+    hops = _room_hops(level, plates[0][0], exits[0][0])
+    assert hops >= 2, f"L{level.number}: la placa de la salida está demasiado cerca ({hops})"
+
+
+@pytest.mark.parametrize("level", PLAYABLE, ids=_PIDS)
+def test_levels_have_a_gate_puzzle(level: Level) -> None:
+    """Además de la salida, cada nivel tiene al menos una reja con su
+    mecanismo (placa, placa de cierre o losa que cae sobre la placa), o
+    la reja que abre el ratón (L8)."""
+    from pop2026canon.domain.level import EventKind
+
+    gates = [
+        (rm.id, c, r)
+        for rm in level.rooms
+        for r in range(3)
+        for c in range(10)
+        if rm.tile_at(c, r)[0] is Tile.GATE
+    ]
+    assert gates, f"L{level.number}: sin rejas"
+    linked = [g for g in gates if level.plates_for_gate(g)]
+    mouse = any(e.kind is EventKind.MOUSE_APPEAR for e in level.events)
+    assert linked or mouse, f"L{level.number}: ninguna reja tiene mecanismo"
+
+
+@pytest.mark.parametrize("level", PLAYABLE, ids=_PIDS)
+def test_levels_have_traps_and_rewards(level: Level) -> None:
+    traps = sum(
+        1
+        for rm in level.rooms
+        for b in rm.fg
+        if Tile(b & 0x1F) in (Tile.SPIKE, Tile.CHOMPER, Tile.LOOSE)
+    )
+    potions = sum(1 for rm in level.rooms for b in rm.fg if Tile(b & 0x1F) is Tile.POTION)
+    assert traps >= 5, f"L{level.number}: sólo {traps} trampas"
+    assert potions >= 1, f"L{level.number}: sin pociones"
+
+
+def test_closer_plates_and_loose_on_plates_exist() -> None:
+    """Los dos mecanismos clásicos aparecen en la campaña: placas de
+    cierre que hay que saltar y losas que caen sobre una placa."""
+    closers = 0
+    loose_on_plate = 0
+    for level in PLAYABLE:
+        for rm in level.rooms:
+            for r in range(3):
+                for c in range(10):
+                    t = rm.tile_at(c, r)[0]
+                    if t is Tile.CLOSER and level.gates_for_plate((rm.id, c, r)):
+                        closers += 1
+                    if t is Tile.LOOSE and r == 2 and 1 <= rm.link_s <= len(level.rooms):
+                        south = level.room(rm.link_s)
+                        if (
+                            south.tile_at(c, 0)[0] is Tile.EMPTY
+                            and south.tile_at(c, 1)[0] is Tile.EMPTY
+                            and south.tile_at(c, 2)[0] is Tile.OPENER
+                        ):
+                            loose_on_plate += 1
+    assert closers >= 4
+    assert loose_on_plate >= 3

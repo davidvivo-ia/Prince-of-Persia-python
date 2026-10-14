@@ -29,6 +29,7 @@ from pop2026canon.domain.level import Level
 from pop2026canon.domain.levels_canon import CANON_LEVELS
 from pop2026canon.domain.room import Room
 from pop2026canon.domain.tiles import Tile, encode_tile
+from tests.canon.routes import OPEN_EXIT, ROUTE_HINTS
 
 _NOOP = Command()
 _MAX_SETTLE = 90
@@ -325,6 +326,16 @@ def _search(
     return None, budget
 
 
+def _priority_to_room(level: Level, room: int) -> Callable[[Game], int]:
+    """f = ticks + distancia en salas hasta ``room`` (un tramo de ruta)."""
+    dist = _room_distances_to_goal_rooms(level, {room})
+
+    def _f(game: Game) -> int:
+        return game.tick_count + ROOM_COST_TICKS * dist.get(game.kid.room, 30)
+
+    return _f
+
+
 def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
     """``True`` si el bot cruza la exit door jugando ticks reales.
 
@@ -344,11 +355,35 @@ def solve_level(level: Level, *, max_macros: int = 30000) -> bool:
         return game.status is GameStatus.WON_LEVEL
 
     budget = max_macros
-    if exit_coord is not None and plate_coord is not None:
+    door_done = exit_coord is None or plate_coord is None
 
-        def _door_open(game: Game) -> bool:
-            return _won(game) or exit_coord in game.state.open_gates
+    def _door_open(game: Game) -> bool:
+        return _won(game) or exit_coord in game.state.open_gates
 
+    for room in ROUTE_HINTS.get(level.number, ()):
+        if room == OPEN_EXIT:
+            if door_done:
+                continue
+            opened, budget = _search(settled, priority=priority, goal=_door_open, budget=budget)
+            if opened is None:
+                return False
+            if _won(opened):
+                return True
+            settled, door_done = opened, True
+            continue
+
+        def _reached(game: Game, room: int = room) -> bool:
+            return _won(game) or game.kid.room == room
+
+        reached, budget = _search(
+            settled, priority=_priority_to_room(stripped, room), goal=_reached, budget=budget
+        )
+        if reached is None:
+            return False
+        if _won(reached):
+            return True
+        settled = reached
+    if not door_done:
         opened, budget = _search(settled, priority=priority, goal=_door_open, budget=budget)
         if opened is None:
             return False

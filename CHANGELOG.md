@@ -6,6 +6,39 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.21.0] — 2026-10-14
+
+### Niveles con puzles de verdad
+
+Hasta ahora cada nivel se terminaba en menos de un minuto corriendo en
+línea recta por la mitad de sus salas; ninguna puerta de salida exigía
+placa y las trampas eran decoración. Los trece niveles jugables se han
+rediseñado como laberintos con las mecánicas del original:
+
+- **La puerta de salida está cerrada en todos los niveles**: la abre una
+  placa a varias salas de distancia (siempre hay que ir a buscarla y
+  volver). Rutas en bucle por varios pisos que visitan la mayoría de las
+  salas, con callejones que guardan pociones (y algún frasco envenenado).
+- **Rejas con mecanismo**: placas que abren una reja que se cierra sola
+  a los 18 segundos (hay que correr), placas de cierre en el camino que
+  hay que saltar (L2, L4, L6, L9, L12), losas sueltas que caen sobre una
+  placa y la dejan accionada para siempre (L2, L3, L6, L11); en L8 la
+  reja de la salida la abre el ratón.
+- **Trampas en la ruta**: pasillos de cuchillas, camas de pinchos, fosos
+  que se saltan con carrerilla, losas sobre el vacío, pozos de tres pisos
+  (en L7, con la poción de pluma justo antes), torre que se baja de
+  cornisa en cornisa (L10). Escaleras de cornisas para volver a subir
+  entre pisos.
+- Los eventos canon siguen en su sitio: esqueleto (L3), espejo (L4),
+  robo de la sombra (L5), salto de la sombra (L6), ratón (L8), fusión y
+  visir (L12), princesa (L14).
+- **Pruebas**: el bot (sin guardias) y el solucionador humano (con
+  guardias y combate) juegan cada nivel por tramos de la ruta prevista
+  (``tests/canon/routes.py``) con el motor real; replays regenerados.
+  ``test_level_design`` exige además que la placa de la salida esté
+  lejos, que cada nivel tenga rejas con mecanismo, trampas y pociones, y
+  que existan placas de cierre y losas sobre placas en la campaña.
+
 ## [canon-0.20.0] — 2026-10-14
 
 ### Los 14 niveles, uno a uno: diseño de salas, identidad visual y pruebas
