@@ -226,6 +226,7 @@ def _palette_for(charid: CharId) -> CharPalette:
         CharId.KID: CharPalette.KID,
         CharId.SHADOW: CharPalette.SHADOW,
         CharId.GUARD: CharPalette.GUARD,
+        CharId.GUARD_VARIANT: CharPalette.GUARD,
         CharId.SKELETON: CharPalette.SKELETON,
         CharId.PRINCESS: CharPalette.PRINCESS,
         CharId.VIZIER: CharPalette.VIZIER,
@@ -248,7 +249,13 @@ def _draw_chars(
             prev_char = prev_others[i]
         px_x, px_y = _lerp_char_px(prev_char, char, alpha)
         draw_kid_frame(
-            surf, char.frame or 15, px_x, px_y, char.direction, _palette_for(char.charid)
+            surf,
+            char.frame or 15,
+            px_x,
+            px_y,
+            char.direction,
+            _palette_for(char.charid),
+            game.level.number,
         )
     # Kid en primer plano
     prev_kid = prev.kid if prev is not None else None

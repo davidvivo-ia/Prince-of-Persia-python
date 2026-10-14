@@ -1077,6 +1077,17 @@ class PostFx:
             surf.blit(veil, world.topleft)
 
 
+def desaturate(surf: pygame.Surface, amount: float) -> None:
+    """Funde el mundo a gris (``amount`` 0..1) con un tinte frío: la
+    muerte vista a cámara lenta."""
+    w, h = surf.get_size()
+    world = pygame.Rect(0, LAYOUT.hud_top, w, h - LAYOUT.hud_top)
+    gray = pygame.transform.grayscale(surf.subsurface(world))
+    gray.fill((214, 220, 236), special_flags=pygame.BLEND_RGB_MULT)
+    gray.set_alpha(int(255 * max(0.0, min(1.0, amount))))
+    surf.blit(gray, world.topleft)
+
+
 def rewind_filter(surf: pygame.Surface, t: float) -> None:
     """Sepia desaturado con líneas que suben: el tiempo va hacia atrás."""
     w, h = surf.get_size()

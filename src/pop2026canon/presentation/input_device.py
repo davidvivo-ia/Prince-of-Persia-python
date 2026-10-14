@@ -215,6 +215,12 @@ class InputHub:
             return [UiAction.UP if edge < 0 else UiAction.DOWN]
         return []
 
+    def rumble(self, low: float, high: float, ms: int) -> None:
+        """Vibración del mando (si lo hay y la soporta)."""
+        for pad in self._pads.values():
+            with contextlib.suppress(Exception):
+                pad.rumble(max(0.0, min(1.0, low)), max(0.0, min(1.0, high)), ms)  # type: ignore[attr-defined]
+
     def _pad_state(self) -> PadState | None:
         if not self._pads:
             return None

@@ -36,7 +36,7 @@ from pop2026canon.infrastructure.audio import SND_REWIND, SND_UI_MOVE, SND_UI_SE
 from pop2026canon.infrastructure.settings import Settings
 from pop2026canon.presentation import fonts
 from pop2026canon.presentation.display import Display
-from pop2026canon.presentation.fx import level_is_palace
+from pop2026canon.presentation.fx import FxEvent, FxKind, level_is_palace
 from pop2026canon.presentation.input_device import InputHub, UiAction
 from pop2026canon.presentation.layout import LAYOUT, px
 from pop2026canon.presentation.menu import (
@@ -53,6 +53,7 @@ from pop2026canon.presentation.poster import draw_poster
 from pop2026canon.presentation.scene import Scene
 from pop2026canon.presentation.screens import cutscene, ending, title
 from pop2026canon.presentation.screens.levels import LevelSelect, draw_level_select
+from pop2026canon.presentation.themes import theme_for
 
 FRAMES_PER_TICK = 5
 """60 fps / 12 ticks lógicos."""
@@ -107,6 +108,7 @@ class GameApp:
         self.now = 0.0
         self.frames_since_tick = 0
         self.rewind_frames = 0
+        self.slow_frames = 0
         self.rewinding = False
         self.menu: Menu = self._main_menu()
         self.overlay: _Overlay | None = None
@@ -170,6 +172,7 @@ class GameApp:
         self.scene.on_level_start(self.game)
         self.frames_since_tick = 0
         self.audio.music(self._music_for_level())
+        self.audio.ambience(theme_for(self.game.level.number).ambience)
         self._set_caption()
 
     # --- eventos ---------------------------------------------------------
@@ -336,6 +339,7 @@ class GameApp:
             elif result == "title":
                 self.audio.duck(0.0)
                 self.audio.music("dungeon")
+                self.audio.ambience(None)
                 self.menu = self._main_menu()
                 self._goto("title")
                 self.phase_t0 = self.now - title.INTRO_DURATION
@@ -348,6 +352,21 @@ class GameApp:
         self.scene.hud.show_toast(hint.pad_text if self.input.pad_connected else hint.text)
         self._apply_settings(s.with_(seen_hints=(*s.seen_hints, key)))
         self._save_settings()
+
+    def _rumble_for(self, events: list[FxEvent]) -> None:
+        if not self.settings.screen_shake or not self.input.pad_connected:
+            return
+        for ev in events:
+            if ev.kind is FxKind.DEATH:
+                self.input.rumble(0.9, 0.9, 350)
+            elif ev.kind is FxKind.HIT and ev.on_kid:
+                self.input.rumble(0.7, 0.5, 140)
+            elif ev.kind is FxKind.BLOOD and ev.on_kid:
+                self.input.rumble(1.0, 0.8, 300)
+            elif ev.kind is FxKind.LAND and ev.on_kid and ev.strength > 1.1:
+                self.input.rumble(0.3, 0.2, 90)
+            elif ev.kind in (FxKind.PARRY, FxKind.CRASH):
+                self.input.rumble(0.2, 0.5, 70)
 
     def _combat_active(self) -> bool:
         k = self.game.kid
@@ -395,6 +414,12 @@ class GameApp:
         if self.scene.hitstop > 0:
             self.scene.hitstop -= 1
             return
+        if self.scene.slowmo > 0:
+            # Cámara lenta: la lógica avanza a la mitad de velocidad.
+            self.scene.slowmo -= 1
+            self.slow_frames += 1
+            if self.slow_frames % 2 == 0:
+                return
         self.frames_since_tick += 1
         if self.frames_since_tick < FRAMES_PER_TICK:
             return
@@ -409,6 +434,7 @@ class GameApp:
         self.game = advance(prev, cmd)
         self.scene.on_tick(prev, self.game)
         play_transitions(self.audio, prev, self.game, self.scene.last_events)
+        self._rumble_for(self.scene.last_events)
         self.session = self.session.after_tick(self.game)
         self.stats.observe(prev, self.game)
         self.checkpoint.observe(self.game)
@@ -494,6 +520,7 @@ class GameApp:
             self.game = self.session.start_game()
             self.menu = self._main_menu()
             self.audio.music("dungeon")
+            self.audio.ambience(None)
             self._goto("title")
             self.phase_t0 = self.now - title.INTRO_DURATION
 

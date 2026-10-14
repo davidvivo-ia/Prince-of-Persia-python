@@ -22,6 +22,9 @@ def level_is_palace(number: int) -> bool:
     return number in PALACE_LEVELS
 
 
+AMBIENCES: frozenset[str] = frozenset(
+    {"drips", "cave", "wind", "gale", "tomb", "fire", "rumble", "garden"}
+)
 PARTICLE_KINDS: frozenset[str] = frozenset(
     {"dust", "drips", "embers", "sand", "petals", "spores", "ash", "moths"}
 )
@@ -78,6 +81,9 @@ class LevelTheme:
     particles: tuple[str, ...]
     decor: tuple[str, ...]
     sky: str = "night"
+    ambience: str = "wind"
+    """Fondo sonoro (``audio.ambience_layer``): drips, cave, wind, gale,
+    tomb, fire, rumble, garden."""
     stone_var: int = 12
     damp: float = 0.0
     """Manchas de humedad al pie de cada piso (0 = ninguna)."""
@@ -106,6 +112,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("dust", "drips"),
         decor=("cracks", "streaks", "moss", "chains", "rings"),
         damp=0.5,
+        ambience="drips",
     ),
     2: LevelTheme(
         key="l2",
@@ -127,6 +134,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("dust", "embers"),
         decor=("cracks", "moss", "chains", "rings", "banners"),
         damp=0.35,
+        ambience="drips",
     ),
     3: LevelTheme(
         key="l3",
@@ -148,6 +156,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("dust", "moths"),
         decor=("cracks", "cobwebs", "bones", "skull_niches", "moss"),
         damp=0.6,
+        ambience="tomb",
     ),
     4: LevelTheme(
         key="l4",
@@ -169,6 +178,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("dust",),
         decor=("niches", "tile_band", "windows", "veins"),
         sky="moon",
+        ambience="wind",
     ),
     5: LevelTheme(
         key="l5",
@@ -189,6 +199,7 @@ THEMES: dict[int, LevelTheme] = {
         lift=(12, 7, 6),
         particles=("dust",),
         decor=("niches", "tile_band", "tapestry", "candles"),
+        ambience="wind",
     ),
     6: LevelTheme(
         key="l6",
@@ -210,6 +221,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("dust", "moths"),
         decor=("windows", "niches", "tile_band", "veins"),
         sky="moon",
+        ambience="wind",
     ),
     7: LevelTheme(
         key="l7",
@@ -231,6 +243,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("sand", "dust"),
         decor=("roots", "cracks", "stalactites", "rubble"),
         damp=0.2,
+        ambience="rumble",
     ),
     8: LevelTheme(
         key="l8",
@@ -252,6 +265,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("drips", "spores"),
         decor=("stalactites", "crystals", "cracks", "moss"),
         damp=0.7,
+        ambience="cave",
     ),
     9: LevelTheme(
         key="l9",
@@ -272,6 +286,7 @@ THEMES: dict[int, LevelTheme] = {
         lift=(12, 8, 4),
         particles=("sand", "dust"),
         decor=("glyphs", "skull_niches", "cobwebs", "bones", "cracks"),
+        ambience="tomb",
     ),
     10: LevelTheme(
         key="l10",
@@ -293,6 +308,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("dust",),
         decor=("windows", "tile_band", "niches"),
         sky="night",
+        ambience="gale",
     ),
     11: LevelTheme(
         key="l11",
@@ -314,6 +330,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("dust", "embers"),
         decor=("windows", "tile_band", "tapestry"),
         sky="dawn",
+        ambience="gale",
     ),
     12: LevelTheme(
         key="l12",
@@ -334,6 +351,7 @@ THEMES: dict[int, LevelTheme] = {
         lift=(12, 4, 10),
         particles=("embers", "ash"),
         decor=("banners", "candles", "cracks", "chains"),
+        ambience="fire",
     ),
     13: LevelTheme(
         key="l13",
@@ -354,6 +372,7 @@ THEMES: dict[int, LevelTheme] = {
         lift=(14, 5, 4),
         particles=("ash", "embers", "dust"),
         decor=("rubble", "cracks", "chains", "streaks"),
+        ambience="rumble",
     ),
     14: LevelTheme(
         key="l14",
@@ -375,6 +394,7 @@ THEMES: dict[int, LevelTheme] = {
         particles=("petals", "dust"),
         decor=("roses", "niches", "candles", "windows", "veins"),
         sky="dawn",
+        ambience="garden",
     ),
 }
 

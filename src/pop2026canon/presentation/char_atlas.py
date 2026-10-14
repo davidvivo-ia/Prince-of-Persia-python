@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import IntEnum
 
 import pygame
@@ -144,6 +144,35 @@ OUTFITS: dict[CharPalette, Outfit] = {
         trim=(220, 150, 160),
     ),
 }
+
+GUARD_WARDROBE: dict[int, tuple[RGB, RGB, RGB, RGB]] = {
+    1: ((64, 78, 140), (58, 62, 104), (142, 34, 38), (226, 214, 186)),
+    2: ((150, 40, 44), (96, 32, 40), (60, 66, 120), (236, 224, 200)),
+    3: ((54, 110, 70), (44, 76, 56), (120, 90, 40), (214, 206, 170)),
+    4: ((190, 110, 40), (120, 70, 36), (40, 120, 130), (240, 232, 214)),
+    5: ((110, 54, 130), (72, 40, 90), (200, 160, 60), (230, 220, 240)),
+    6: ((120, 80, 50), (84, 56, 36), (170, 60, 50), (206, 190, 160)),
+    7: ((40, 60, 110), (34, 44, 80), (150, 120, 50), (200, 206, 220)),
+    8: ((96, 100, 112), (66, 70, 80), (40, 110, 120), (216, 220, 230)),
+    9: ((190, 150, 70), (130, 100, 50), (110, 50, 40), (240, 230, 190)),
+    10: ((226, 222, 210), (160, 160, 170), (200, 160, 60), (240, 236, 220)),
+    11: ((36, 32, 40), (28, 26, 34), (160, 30, 40), (210, 200, 190)),
+    12: ((30, 26, 36), (24, 22, 30), (190, 150, 50), (120, 40, 60)),
+    13: ((64, 78, 140), (58, 62, 104), (142, 34, 38), (226, 214, 186)),
+    14: ((64, 78, 140), (58, 62, 104), (142, 34, 38), (226, 214, 186)),
+}
+"""Vestuario de los guardias por nivel: (camisa, pantalón, chaleco,
+turbante). Como en el original, cada nivel tiene sus colores."""
+
+
+def outfit_for(palette: CharPalette, variant: int = 0) -> Outfit:
+    """Vestuario de un personaje; ``variant`` es el nivel para los guardias."""
+    base = OUTFITS.get(palette, OUTFITS[CharPalette.KID])
+    if palette is CharPalette.GUARD and variant in GUARD_WARDROBE:
+        shirt, pants, vest, turban = GUARD_WARDROBE[variant]
+        return replace(base, shirt=shirt, pants=pants, vest=vest, trim=turban)
+    return base
+
 
 OUTLINE: RGB = (16, 10, 22)
 STEEL: RGB = (214, 220, 234)
@@ -636,19 +665,26 @@ def _render_mouse(frame: int, outfit: Outfit) -> tuple[pygame.Surface, tuple[int
     return small, (round(8 * k / SS), round(12 * k / SS))
 
 
-_CACHE: OrderedDict[tuple[int, int, int], tuple[pygame.Surface, tuple[int, int]]] = OrderedDict()
+_CACHE: OrderedDict[tuple[int, int, int, int], tuple[pygame.Surface, tuple[int, int]]] = (
+    OrderedDict()
+)
 _CACHE_MAX = 900
 
 
-def sprite(frame: int, palette: CharPalette, facing: int) -> tuple[pygame.Surface, tuple[int, int]]:
-    """Sprite del frame (cacheado) y el punto de los pies dentro de él."""
+def sprite(
+    frame: int, palette: CharPalette, facing: int, variant: int = 0
+) -> tuple[pygame.Surface, tuple[int, int]]:
+    """Sprite del frame (cacheado) y el punto de los pies dentro de él.
+    ``variant``: el nivel, para el vestuario de los guardias."""
     right = facing == 0
-    key = (frame, int(palette), 0 if right else 1)
+    if palette is not CharPalette.GUARD:
+        variant = 0
+    key = (frame, int(palette), 0 if right else 1, variant)
     hit = _CACHE.get(key)
     if hit is not None:
         _CACHE.move_to_end(key)
         return hit
-    outfit = OUTFITS.get(palette, OUTFITS[CharPalette.KID])
+    outfit = outfit_for(palette, variant)
     if palette is CharPalette.MOUSE:
         img, (ax, ay) = _render_mouse(frame, outfit)
         pose_sx, alpha = 1.0, 1.0
@@ -683,9 +719,10 @@ def draw_kid_frame(
     px_y: int,
     facing: int,
     palette: CharPalette = CharPalette.KID,
+    variant: int = 0,
 ) -> None:
     """Dibuja el frame del char con los pies en ``(px_x, px_y)``."""
-    img, (ax, ay) = sprite(frame_id, palette, facing)
+    img, (ax, ay) = sprite(frame_id, palette, facing, variant)
     surf.blit(img, (px_x - ax, px_y - ay))
 
 
@@ -711,5 +748,7 @@ WARM_FRAMES: tuple[int, ...] = (
 """Frames más frecuentes: se pre-pintan poco a poco al empezar un nivel."""
 
 
-def is_cached(frame: int, palette: CharPalette, facing: int) -> bool:
-    return (frame, int(palette), 0 if facing == 0 else 1) in _CACHE
+def is_cached(frame: int, palette: CharPalette, facing: int, variant: int = 0) -> bool:
+    if palette is not CharPalette.GUARD:
+        variant = 0
+    return (frame, int(palette), 0 if facing == 0 else 1, variant) in _CACHE

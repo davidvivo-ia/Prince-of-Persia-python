@@ -8,6 +8,7 @@ queda quieto.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import pygame
@@ -25,6 +26,7 @@ from pop2026canon.presentation.fx import (
     PostFx,
     RoomTransition,
     bloom,
+    desaturate,
     detect_fx_events,
     draw_atmosphere,
     draw_char_shadows,
@@ -61,8 +63,6 @@ class Shake:
 
 
 def _noise(x: float) -> float:
-    import math
-
     return math.sin(x) * 0.6 + math.sin(x * 2.3 + 1.7) * 0.4
 
 
@@ -81,7 +81,12 @@ class Scene:
         self._last_frame = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
         self._base = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
         self._base_key: tuple[object, ...] | None = None
-        self._warm: list[tuple[int, CharPalette, int]] = []
+        self._warm: list[tuple[int, CharPalette, int, int]] = []
+        self.slowmo = 0
+        """Frames restantes a cámara lenta (muerte, golpe mortal)."""
+        self.desat = 0.0
+        """Desaturación del mundo (0..1): sube al morir."""
+        self.desat_target = 0.0
         self.last_events: list[FxEvent] = []
 
     # --- ciclo de vida -------------------------------------------------
@@ -89,6 +94,9 @@ class Scene:
     def on_level_start(self, game: Game) -> None:
         self.particles.clear()
         self.transition.old = None
+        self.slowmo = 0
+        self.desat = 0.0
+        self.desat_target = 0.0
         self.hud.shown_hp = float(game.kid.hp_curr)
         self.hud.show_banner()
         # Pre-pintado gradual de las poses más usadas (kid y enemigos del
@@ -99,17 +107,20 @@ class Scene:
             if pal not in palettes:
                 palettes.append(pal)
         self._warm = [
-            (f, pal, facing)
+            (f, pal, facing, game.level.number)
             for pal in palettes
             for f in WARM_FRAMES
             for facing in (0, -1)
-            if not is_cached(f, pal, facing)
+            if not is_cached(f, pal, facing, game.level.number)
         ]
         self._warm.reverse()
 
     def on_respawn(self, game: Game) -> None:
         self.particles.clear()
         self.transition.old = None
+        self.slowmo = 0
+        self.desat = 0.0
+        self.desat_target = 0.0
         self.hud.shown_hp = float(game.kid.hp_curr)
 
     def on_tick(self, prev: Game, now: Game) -> None:
@@ -137,6 +148,8 @@ class Scene:
             elif k is FxKind.DEATH:
                 self._shake(10)
                 self.post.damage_flash((120, 0, 0), 1.0)
+                self.slowmo = 40
+                self.desat_target = 0.75
             elif k is FxKind.BLOOD and ev.on_kid:
                 self.post.damage_flash((255, 0, 0), 1.0)
                 self._shake(8)
@@ -149,6 +162,20 @@ class Scene:
                 self._shake(2)
         if now.kid.hp_curr < prev.kid.hp_curr and not any(e.on_kid for e in events):
             self.post.damage_flash((255, 30, 30), 0.8)
+        # Golpe mortal a un enemigo: un instante a cámara lenta y un
+        # destello frío sobre él.
+        for i, c in enumerate(now.others):
+            if (
+                i < len(prev.others)
+                and prev.others[i].alive < 0 <= c.alive
+                and c.room == now.kid.room
+            ):
+                from pop2026canon.domain.combat import is_hostile
+
+                if is_hostile(c):
+                    self.slowmo = max(self.slowmo, 14)
+                    ex, ey = renderer._char_px(c)
+                    self.lighting.flash(ex, ey - px(40), px(110), (200, 220, 255))
         direction = transition_direction(prev, now)
         if direction is not None:
             # La sala que sale se pinta SIN personajes: el kid ya está en
@@ -163,8 +190,10 @@ class Scene:
 
     def update(self, dt: float, game: Game, t: float) -> None:
         if self._warm:
-            f, pal, facing = self._warm.pop()
-            sprite(f, pal, facing)
+            f, pal, facing, variant = self._warm.pop()
+            sprite(f, pal, facing, variant)
+        k = 1.0 - math.exp(-dt * (6.0 if self.desat_target > self.desat else 3.0))
+        self.desat += (self.desat_target - self.desat) * k
         self.particles.update(dt)
         if self.settings.particles and not self.transition.active:
             self.particles.ambient(game, dt, t)
@@ -247,6 +276,8 @@ class Scene:
         self.transition.compose(world)
         if rewinding:
             rewind_filter(world, t)
+        elif self.desat > 0.02:
+            desaturate(world, self.desat)
         self._last_frame.blit(world, (0, 0))
 
         ox, oy = self.shake.offset(t)

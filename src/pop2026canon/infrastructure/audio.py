@@ -423,6 +423,110 @@ def _to_stereo_bytes(x: Any, width_ms: float = 0.0) -> bytes:
 
 MUSIC_CHANNELS = (0, 1)
 LOOP_CHANNEL = 2
+AMBIENCE_CHANNEL = 3
+AMBIENCE_GAIN = 0.45
+
+
+# ---------------------------------------------------------------------------
+# Ambiente por tema (bucles largos, muy por debajo de la música)
+# ---------------------------------------------------------------------------
+
+AMBIENCE_SECONDS = 9.0
+
+
+def _lfo(n: int, hz: float, lo: float, hi: float, phase: float = 0.0) -> Any:
+    t = _time(n)
+    return (lo + (hi - lo) * (0.5 + 0.5 * np.sin(2 * np.pi * hz * t + phase))).astype(np.float32)
+
+
+def _wind(n: int, seed: int, *, width: int, lo: float, hi: float, hz: float) -> Any:
+    w = lowpass(noise(n / SR, seed), width) * _lfo(n, hz, lo, hi) * _lfo(n, hz * 2.7, 0.6, 1.0, 1.3)
+    return w.astype(np.float32)
+
+
+def _loopable(x: Any) -> Any:
+    """Cruce suave entre el final y el principio para que el bucle no
+    haga clic."""
+    n = min(len(x) // 8, _n(0.4))
+    if n < 2:
+        return x
+    x = x.copy()
+    fade = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    x[:n] = x[:n] * fade + x[-n:] * (1.0 - fade)
+    return x[:-n]
+
+
+def _drops(n: int, seed: int, rate: float, *, bright: bool, echo: float) -> Any:
+    """Goteras: pings sinusoidales esparcidos con un eco corto."""
+    rng = _rng(seed)
+    out = np.zeros(n, dtype=np.float32)
+    count = max(1, int(rate * n / SR))
+    for _ in range(count):
+        i = int(rng.uniform(0, n - SR // 4))
+        f = rng.uniform(1400.0, 2600.0) if bright else rng.uniform(700.0, 1500.0)
+        d = rng.uniform(0.05, 0.14)
+        ping = sine(f, 0.25) * env_exp(_n(0.25), d) * rng.uniform(0.25, 0.6)
+        out[i : i + len(ping)] += ping[: max(0, n - i)]
+    if echo > 0:
+        delay = _n(0.19)
+        echoed = np.zeros_like(out)
+        echoed[delay:] = out[:-delay] * echo
+        delay2 = _n(0.41)
+        echoed[delay2:] += out[:-delay2] * echo * 0.5
+        out = out + echoed
+    return out
+
+
+def ambience_layer(kind: str) -> Any:
+    """Bucle de ambiente mono de ~9 s para un tema de nivel."""
+    n = _n(AMBIENCE_SECONDS)
+    seed = sum(ord(c) for c in kind)
+    if kind == "drips":
+        rumble = _wind(n, seed, width=400, lo=0.05, hi=0.12, hz=0.09)
+        x = mix(rumble, _drops(n, seed, 1.6, bright=True, echo=0.35))
+    elif kind == "cave":
+        rumble = _wind(n, seed, width=600, lo=0.08, hi=0.16, hz=0.07)
+        x = mix(rumble, _drops(n, seed, 1.1, bright=False, echo=0.55))
+    elif kind == "wind":
+        x = _wind(n, seed, width=90, lo=0.06, hi=0.2, hz=0.13)
+    elif kind == "gale":
+        x = mix(
+            _wind(n, seed, width=40, lo=0.1, hi=0.32, hz=0.17),
+            _wind(n, seed + 1, width=12, lo=0.0, hi=0.12, hz=0.31),
+        )
+    elif kind == "tomb":
+        whisper = highpass(lowpass(noise(n / SR, seed + 2), 6), 40) * _lfo(n, 0.05, 0.0, 0.09, 2.0)
+        x = mix(_wind(n, seed, width=700, lo=0.1, hi=0.18, hz=0.05), whisper)
+    elif kind == "fire":
+        rng = _rng(seed)
+        crackle = np.zeros(n, dtype=np.float32)
+        for _ in range(int(n / SR * 14)):
+            i = int(rng.uniform(0, n - 400))
+            pop = (
+                noise(0.012, int(rng.uniform(0, 9999)))
+                * env_exp(_n(0.012), 0.004)
+                * rng.uniform(0.2, 0.7)
+            )
+            crackle[i : i + len(pop)] += pop
+        hiss = lowpass(noise(n / SR, seed + 3), 5) * _lfo(n, 0.4, 0.05, 0.1)
+        x = mix(crackle, hiss)
+    elif kind == "rumble":
+        x = mix(
+            _wind(n, seed, width=900, lo=0.12, hi=0.26, hz=0.06),
+            _drops(n, seed, 0.3, bright=False, echo=0.4) * 0.5,
+        )
+    elif kind == "garden":
+        rng = _rng(seed)
+        chimes = np.zeros(n, dtype=np.float32)
+        for _ in range(5):
+            i = int(rng.uniform(0, n - SR))
+            f = float(rng.choice([1318.0, 1568.0, 1760.0, 2093.0]))
+            c = partials(f, 0.9, [(1.0, 0.25, 0.5), (2.76, 0.08, 0.25)])
+            chimes[i : i + len(c)] += c[: max(0, n - i)]
+        x = mix(_wind(n, seed, width=150, lo=0.04, hi=0.14, hz=0.11), chimes)
+    else:
+        x = _wind(n, seed, width=90, lo=0.06, hi=0.2, hz=0.13)
+    return _loopable(normalize(x, 0.5))
 
 
 class AudioEngine:
@@ -441,6 +545,8 @@ class AudioEngine:
         self._combat_target = 0.0
         self._fade = 1.0
         self._loop_id: int | None = None
+        self._ambience: dict[str, pygame.mixer.Sound] = {}
+        self._ambience_kind: str | None = None
         self.ok = False
         if mute:
             return
@@ -456,7 +562,7 @@ class AudioEngine:
             init = pygame.mixer.get_init()
             if init and init[2] == 2 and init[0] == SR:
                 pygame.mixer.set_num_channels(24)
-                pygame.mixer.set_reserved(3)
+                pygame.mixer.set_reserved(4)
                 for sid, buf in _sfx_recipes().items():
                     self._sounds[sid] = pygame.mixer.Sound(buffer=_to_stereo_bytes(buf))
                 self.ok = True
@@ -490,6 +596,25 @@ class AudioEngine:
                 if snd is not None:
                     ch.play(snd, loops=-1, fade_ms=60)
                     ch.set_volume(0.6 * self.sfx_volume)
+
+    # --- ambiente --------------------------------------------------------
+
+    def ambience(self, kind: str | None) -> None:
+        """Fondo sonoro del nivel (goteras, viento, fuego...). ``None`` lo para."""
+        if not self.ok or kind == self._ambience_kind:
+            return
+        self._ambience_kind = kind
+        with contextlib.suppress(pygame.error):
+            ch = pygame.mixer.Channel(AMBIENCE_CHANNEL)
+            if kind is None:
+                ch.fadeout(800)
+                return
+            if kind not in self._ambience:
+                self._ambience[kind] = pygame.mixer.Sound(
+                    buffer=_to_stereo_bytes(ambience_layer(kind), 9)
+                )
+            ch.play(self._ambience[kind], loops=-1, fade_ms=1200)
+            ch.set_volume(AMBIENCE_GAIN * self.sfx_volume)
 
     # --- música --------------------------------------------------------
 
@@ -529,6 +654,9 @@ class AudioEngine:
         self.sfx_volume = sfx
         self.music_volume = music
         self._apply_music_volume()
+        if self.ok and self._ambience_kind is not None:
+            with contextlib.suppress(pygame.error):
+                pygame.mixer.Channel(AMBIENCE_CHANNEL).set_volume(AMBIENCE_GAIN * sfx)
 
     def update(self, dt: float) -> None:
         if not self.ok:
