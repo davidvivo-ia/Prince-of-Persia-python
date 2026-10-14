@@ -23,16 +23,16 @@ import pygame
 
 from pop2026canon.domain.tiles import PotionType
 from pop2026canon.presentation.layout import LAYOUT, px
+from pop2026canon.presentation.themes import (
+    PALACE_LEVELS,
+    LevelTheme,
+    level_is_palace,
+    theme_by_key,
+)
+
+__all__ = ["PALACE_LEVELS", "level_is_palace"]
 
 RGB = tuple[int, int, int]
-
-PALACE_LEVELS: frozenset[int] = frozenset({4, 5, 6, 10, 11, 14})
-"""Canon ``tbl_level_type``: 1 = palacio, 0 = mazmorra."""
-
-
-def level_is_palace(number: int) -> bool:
-    return number in PALACE_LEVELS
-
 
 POTION_COLORS: dict[int, RGB] = {
     int(PotionType.HEAL): (255, 70, 60),
@@ -179,6 +179,18 @@ def _new_sprite() -> pygame.Surface:
 # ---------------------------------------------------------------------------
 
 
+_AO_H = px(26)
+
+
+@functools.lru_cache(maxsize=2)
+def _ao_strip(w: int) -> pygame.Surface:
+    strip = pygame.Surface((w, _AO_H), pygame.SRCALPHA)
+    for i in range(_AO_H):
+        a = int(120 * (i / _AO_H) ** 1.8)
+        pygame.draw.line(strip, (0, 0, 0, a), (0, i), (w, i))
+    return strip
+
+
 def _slab(s: pygame.Surface, c: Ctx, x: int, top_y: int, *, cracked: bool = False) -> None:
     """Losa completa (cara superior + frontal) con su esquina superior
     izquierda de la cara superior en ``(x, top_y)``."""
@@ -193,6 +205,9 @@ def _slab(s: pygame.Surface, c: Ctx, x: int, top_y: int, *, cracked: bool = Fals
         a = int(130 * (1 - i / EXT_BOT) ** 1.6)
         pygame.draw.line(shadow, (0, 0, 0, a), (0, i), (tw, i))
     s.blit(shadow, (x, face_y + f))
+    # Oclusión ambiental: la pared se oscurece justo encima de la losa
+    # (asienta el suelo y lo separa de la pared iluminada).
+    s.blit(_ao_strip(tw), (x, top_y - _AO_H))
     # Cara frontal: dos hiladas de sillares con juntas alternas
     face = pygame.Rect(x, face_y, tw, f)
     _vgrad(s, face, pal.face, _shade(pal.face, 0.72))
@@ -850,17 +865,50 @@ def _paint(tile: int, modifier: int, c: Ctx) -> pygame.Surface:
     return s
 
 
-@functools.lru_cache(maxsize=1024)
+def _tint(c: RGB, t: RGB) -> RGB:
+    return (c[0] * t[0] // 255, c[1] * t[1] // 255, c[2] * t[2] // 255)
+
+
+@functools.lru_cache(maxsize=32)
+def style_ctx(style: str) -> tuple[StonePal, bool]:
+    """Paleta de piedra y tipo (palacio o no) de un estilo: ``dungeon``,
+    ``palace`` o la clave de un tema de nivel (tinta la paleta base)."""
+    if style == "dungeon":
+        return DUNGEON, False
+    if style == "palace":
+        return PALACE, True
+    theme: LevelTheme = theme_by_key(style)
+    base = PALACE if theme.palace else DUNGEON
+    t = theme.tile_tint
+    pal = StonePal(
+        top=_tint(base.top, t),
+        top_hi=_tint(base.top_hi, t),
+        face=_tint(base.face, t),
+        face_dark=_tint(base.face_dark, t),
+        joint=_tint(base.joint, t),
+        column=_tint(base.column, t),
+        trim=base.trim,
+    )
+    return pal, theme.palace
+
+
+def _style(palace: bool, theme: str | None) -> str:
+    return theme if theme is not None else ("palace" if palace else "dungeon")
+
+
+@functools.lru_cache(maxsize=1536)
 def _sprite(
-    tile: int, modifier: int, palace: bool, variant: int, edges: tuple[bool, bool]
+    tile: int, modifier: int, style: str, variant: int, edges: tuple[bool, bool]
 ) -> pygame.Surface:
-    c = Ctx(PALACE if palace else DUNGEON, palace, variant, edges[0], edges[1])
+    pal, palace = style_ctx(style)
+    c = Ctx(pal, palace, variant, edges[0], edges[1])
     return _paint(tile, modifier, c)
 
 
-@functools.lru_cache(maxsize=64)
-def _front_sprite(tile: int, palace: bool) -> pygame.Surface:
-    c = Ctx(PALACE if palace else DUNGEON, palace, 0, False, False)
+@functools.lru_cache(maxsize=128)
+def _front_sprite(tile: int, style: str) -> pygame.Surface:
+    pal, palace = style_ctx(style)
+    c = Ctx(pal, palace, 0, False, False)
     s = _new_sprite()
     if tile == 3:
         _pillar_front(s, c)
@@ -890,26 +938,38 @@ def draw_tile(
     palace: bool = False,
     variant: int = 0,
     edges: tuple[bool, bool] = (False, False),
+    theme: str | None = None,
 ) -> None:
     """Pinta el tile con la esquina superior izquierda de su celda en
-    ``(x, y)``. ``edges``: (izquierda, derecha) sin suelo al lado."""
+    ``(x, y)``. ``edges``: (izquierda, derecha) sin suelo al lado;
+    ``theme``: clave del tema del nivel (si no, mazmorra/palacio)."""
     if tile_value == 0:
         return
-    img = _sprite(tile_value, mod_key(tile_value, modifier), palace, variant % 8, edges)
+    img = _sprite(
+        tile_value, mod_key(tile_value, modifier), _style(palace, theme), variant % 8, edges
+    )
     surf.blit(img, (x - PADX, y - EXT_TOP))
 
 
 def draw_tile_front(
-    surf: pygame.Surface, tile_value: int, x: int, y: int, *, palace: bool = False
+    surf: pygame.Surface,
+    tile_value: int,
+    x: int,
+    y: int,
+    *,
+    palace: bool = False,
+    theme: str | None = None,
 ) -> None:
     """Capa delantera (fustes de columnas), tras los personajes."""
     if tile_value in FRONT_TILES:
-        surf.blit(_front_sprite(tile_value, palace), (x - PADX, y - EXT_TOP))
+        surf.blit(_front_sprite(tile_value, _style(palace, theme)), (x - PADX, y - EXT_TOP))
 
 
-def draw_falling_slab(surf: pygame.Surface, x: int, top: int, *, palace: bool = False) -> None:
+def draw_falling_slab(
+    surf: pygame.Surface, x: int, top: int, *, palace: bool = False, theme: str | None = None
+) -> None:
     """Losa suelta cayendo: sólo la losa, con su cara superior en ``top``."""
-    img = _sprite(1, 0, palace, 3, (True, True))
+    img = _sprite(1, 0, _style(palace, theme), 3, (True, True))
     c_top = EXT_TOP + LAYOUT.tile_h - LAYOUT.floor_face - LAYOUT.floor_top
     h = LAYOUT.floor_top + LAYOUT.floor_face + EXT_BOT // 2
     surf.blit(img, (x - PADX, top), pygame.Rect(0, c_top, img.get_width(), h))

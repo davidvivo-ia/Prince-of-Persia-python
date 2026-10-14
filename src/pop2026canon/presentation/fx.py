@@ -32,8 +32,10 @@ from pop2026canon.domain.actions import Action, Seq
 from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.game import Game
 from pop2026canon.domain.tiles import Tile
+from pop2026canon.presentation.backdrop import decor_lights, decor_spots
 from pop2026canon.presentation.layout import LAYOUT, px
 from pop2026canon.presentation.renderer import _char_px, _lerp_char_px
+from pop2026canon.presentation.themes import LevelTheme, theme_for
 from pop2026canon.presentation.tile_atlas import (
     PALACE_LEVELS,
     POTION_COLORS,
@@ -205,6 +207,13 @@ class Particle:
     drag: float = 0.0
     glow: bool = False
     floor_y: float | None = None
+    sway: float = 0.0
+    """Vaivén horizontal (px/s) — pétalos, ceniza, esporas, polillas."""
+    phase: float = 0.0
+    shape: str = "dot"
+    """``dot`` | ``streak`` (gota) | ``petal``."""
+    splash: bool = False
+    """Al tocar el suelo desaparece salpicando."""
 
 
 @dataclass
@@ -270,6 +279,7 @@ class Particles:
 
     def update(self, dt: float) -> None:
         alive: list[Particle] = []
+        splashes: list[Particle] = []
         for p in self.items:
             p.life -= dt
             if p.life <= 0:
@@ -280,13 +290,30 @@ class Particles:
                 p.vx *= k
                 p.vy *= k
             p.x += p.vx * dt
+            if p.sway:
+                p.x += math.sin(p.phase + p.life * 2.7) * p.sway * dt
             p.y += p.vy * dt
             if p.floor_y is not None and p.y > p.floor_y:
+                if p.splash:
+                    splashes.append(p)
+                    continue
                 p.y = p.floor_y
                 p.vy *= -0.3
                 p.vx *= 0.6
             alive.append(p)
         self.items = alive
+        for p in splashes:
+            self.burst(
+                p.x,
+                p.y - 1,
+                3,
+                p.color,
+                speed=(15, 45),
+                angle=(math.pi * 1.15, math.pi * 1.85),
+                life=(0.15, 0.3),
+                size=(0.6, 1.0),
+                gravity=260,
+            )
 
     def draw(self, surf: pygame.Surface, offset: tuple[int, int] = (0, 0)) -> None:
         ox, oy = offset
@@ -294,6 +321,17 @@ class Particles:
             t = p.life / p.max_life
             size = max(1, int(p.size * (0.5 + 0.5 * t)))
             pos = (int(p.x) + ox, int(p.y) + oy)
+            if p.shape == "streak":
+                ln = max(2, int(p.size * 3))
+                pygame.draw.line(surf, p.color, (pos[0], pos[1] - ln), pos, max(1, int(p.size)))
+                continue
+            if p.shape == "petal":
+                wob = math.sin(p.phase + p.life * 5.0)
+                pw, ph = max(2, int(p.size * 2.2 * (0.4 + 0.6 * abs(wob)))), max(2, int(p.size))
+                petal = pygame.Surface((pw, ph), pygame.SRCALPHA)
+                pygame.draw.ellipse(petal, (*p.color, int(230 * min(1.0, t * 2))), petal.get_rect())
+                surf.blit(petal, (pos[0] - pw // 2, pos[1] - ph // 2))
+                continue
             if p.glow:
                 g = _glow_sprite(size * 3, p.color, int(255 * t))
                 surf.blit(g, (pos[0] - size * 3, pos[1] - size * 3), special_flags=pygame.BLEND_ADD)
@@ -466,39 +504,185 @@ class Particles:
             )
 
     def ambient(self, game: Game, dt: float, t: float) -> None:
-        """Ascuas de antorcha y motas de polvo flotando."""
+        """Ascuas de antorcha y las partículas ambientales del tema del
+        nivel: polvo, goteras, arena, pétalos, esporas, ceniza, polillas."""
+        theme = theme_for(game.level.number)
         room = game.level.room(game.kid.room)
         r = self.rng
+        torches: list[tuple[int, int]] = []
         for row in range(3):
             for col in range(10):
                 piece = room.tile_at(col, row)[0]
-                if piece in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS) and r.random() < dt * 2.2:
-                    cx, cy = _torch_flame_px(col, row)
-                    self.burst(
-                        cx,
-                        cy - px(6),
-                        1,
-                        (255, 170, 60),
-                        speed=(8, 25),
-                        angle=(math.pi * 1.3, math.pi * 1.7),
-                        life=(0.6, 1.4),
-                        size=(1, 1.6),
-                        gravity=-20,
-                        glow=True,
-                    )
-        if r.random() < dt * 1.5:
-            x = r.uniform(0, LAYOUT.window_w)
-            y = r.uniform(LAYOUT.hud_top + px(10), LAYOUT.window_h - px(10))
+                if piece in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
+                    torches.append((col, row))
+                    if r.random() < dt * 2.2:
+                        cx, cy = _torch_flame_px(col, row)
+                        self.burst(
+                            cx,
+                            cy - px(6),
+                            1,
+                            (255, 170, 60),
+                            speed=(8, 25),
+                            angle=(math.pi * 1.3, math.pi * 1.7),
+                            life=(0.6, 1.4),
+                            size=(1, 1.6),
+                            gravity=-20,
+                            glow=True,
+                        )
+        for kind in theme.particles:
+            self._ambient_kind(kind, room.id, torches, dt)
+
+    def _emit(self, p: Particle) -> None:
+        if len(self.items) >= self.max_particles:
+            self.items.pop(0)
+        self.items.append(p)
+
+    def _ambient_kind(
+        self, kind: str, room_id: int, torches: list[tuple[int, int]], dt: float
+    ) -> None:
+        r = self.rng
+        k = LAYOUT.scale
+        top, tile_h, w = LAYOUT.hud_top, LAYOUT.tile_h, LAYOUT.window_w
+        if kind == "dust" and r.random() < dt * 1.5:
             self.burst(
-                x,
-                y,
+                r.uniform(0, w),
+                r.uniform(top + px(10), LAYOUT.window_h - px(10)),
                 1,
                 (200, 190, 170),
                 speed=(2, 8),
                 life=(2.5, 4.5),
                 size=(0.8, 1.3),
                 gravity=-1,
-                glow=False,
+            )
+        elif kind == "drips" and r.random() < dt * 0.9:
+            row = r.randrange(3)
+            x = r.uniform(px(20), w - px(20))
+            floor_y = top + (row + 1) * tile_h - LAYOUT.foot_lift
+            self._emit(
+                Particle(
+                    x,
+                    top + row * tile_h + px(4),
+                    0.0,
+                    20.0 * k,
+                    3.0,
+                    3.0,
+                    (150, 184, 226),
+                    1.2 * k,
+                    520.0 * k,
+                    floor_y=floor_y,
+                    shape="streak",
+                    splash=True,
+                )
+            )
+        elif kind == "sand":
+            # Hilos de arena que caen siempre por las mismas grietas
+            srng = random.Random(room_id * 977 + 3)
+            for _ in range(srng.randint(1, 2)):
+                x = srng.uniform(px(40), w - px(40))
+                row = srng.randrange(3)
+                if r.random() < dt * 22:
+                    floor_y = top + (row + 1) * tile_h - LAYOUT.foot_lift
+                    self._emit(
+                        Particle(
+                            x + r.uniform(-1.5, 1.5) * k,
+                            top + row * tile_h + px(2),
+                            r.uniform(-4, 4),
+                            30.0 * k,
+                            3.0,
+                            3.0,
+                            (196, 168, 120),
+                            0.7 * k,
+                            340.0 * k,
+                            floor_y=floor_y,
+                            splash=r.random() < 0.15,
+                        )
+                    )
+        elif kind == "petals" and r.random() < dt * 1.2:
+            self._emit(
+                Particle(
+                    r.uniform(0, w),
+                    top - px(4),
+                    r.uniform(-8, 8) * k,
+                    r.uniform(14, 26) * k,
+                    9.0,
+                    9.0,
+                    r.choice(((236, 120, 160), (250, 170, 196), (210, 70, 110))),
+                    r.uniform(2.2, 3.2) * k,
+                    0.0,
+                    sway=26.0 * k,
+                    phase=r.uniform(0, 6.3),
+                    shape="petal",
+                )
+            )
+        elif kind == "spores" and r.random() < dt * 2.0:
+            self._emit(
+                Particle(
+                    r.uniform(0, w),
+                    r.uniform(top + px(40), LAYOUT.window_h),
+                    0.0,
+                    -r.uniform(4, 10) * k,
+                    5.0,
+                    5.0,
+                    (90, 230, 220),
+                    r.uniform(0.8, 1.4) * k,
+                    0.0,
+                    glow=True,
+                    sway=10.0 * k,
+                    phase=r.uniform(0, 6.3),
+                )
+            )
+        elif kind == "ash" and r.random() < dt * 3.0:
+            shade = r.randint(90, 150)
+            self._emit(
+                Particle(
+                    r.uniform(0, w),
+                    top - px(2),
+                    r.uniform(-6, 6) * k,
+                    r.uniform(10, 22) * k,
+                    7.0,
+                    7.0,
+                    (shade, shade - 6, shade - 10),
+                    r.uniform(0.8, 1.6) * k,
+                    0.0,
+                    sway=14.0 * k,
+                    phase=r.uniform(0, 6.3),
+                )
+            )
+        elif kind == "embers" and r.random() < dt * 1.6:
+            self._emit(
+                Particle(
+                    r.uniform(0, w),
+                    LAYOUT.window_h + px(2),
+                    r.uniform(-5, 5) * k,
+                    -r.uniform(16, 34) * k,
+                    6.0,
+                    6.0,
+                    (255, 150, 60),
+                    r.uniform(0.8, 1.3) * k,
+                    0.0,
+                    glow=True,
+                    sway=12.0 * k,
+                    phase=r.uniform(0, 6.3),
+                )
+            )
+        elif kind == "moths" and torches and r.random() < dt * 0.8:
+            col, row = r.choice(torches)
+            cx, cy = _torch_flame_px(col, row)
+            self._emit(
+                Particle(
+                    cx + r.uniform(-px(30), px(30)),
+                    cy + r.uniform(-px(30), px(10)),
+                    r.uniform(-20, 20) * k,
+                    r.uniform(-12, 12) * k,
+                    2.5,
+                    2.5,
+                    (230, 220, 190),
+                    1.1 * k,
+                    0.0,
+                    drag=0.5,
+                    sway=60.0 * k,
+                    phase=r.uniform(0, 6.3),
+                )
             )
 
 
@@ -541,8 +725,8 @@ def _light_texture(radius: int, color: tuple[int, int, int]) -> pygame.Surface:
     return surf
 
 
-DUNGEON_AMBIENT = (84, 88, 124)
-PALACE_AMBIENT = (122, 106, 110)
+DUNGEON_AMBIENT = theme_for(1).ambient
+PALACE_AMBIENT = theme_for(4).ambient
 
 
 class Lighting:
@@ -570,10 +754,10 @@ class Lighting:
         *,
         offset: tuple[int, int] = (0, 0),
     ) -> None:
-        palace = level_is_palace(game.level.number)
+        theme = theme_for(game.level.number)
         lm = self.lightmap
         gm = self.glowmap
-        lm.fill(PALACE_AMBIENT if palace else DUNGEON_AMBIENT)
+        lm.fill(theme.ambient)
         gm.fill((0, 0, 0))
         top = LAYOUT.hud_top
         room = game.level.room(game.kid.room)
@@ -598,7 +782,7 @@ class Lighting:
                         + math.sin(t * 7.3 + col * 0.9) * 0.5
                     )
                     radius = px(175 + 14 * flick)
-                    add(cx, cy, radius, (255, 168, 64), glow=0.3)
+                    add(cx, cy, radius, theme.torch, glow=0.3)
                     torches.append((cx, cy, px(4 * flick)))
                 elif tile is Tile.POTION and (room.id, col, row) not in game.state.consumed_potions:
                     x, y = _cell_px(col, row)
@@ -611,15 +795,22 @@ class Lighting:
                     add(x, y - px(40), px(120), (170, 130, 60), glow=0.3)
         # Filo de luz en el borde de cada losa: las plataformas se leen
         # incluso en la penumbra (como el *rim light* de un juego actual).
-        rim = (30, 32, 50) if not palace else (44, 36, 28)
+        # Luces de la decoración del tema (velas, cristales, ventanas)
+        for i, (dx, dy, dr, dcol) in enumerate(decor_lights(room.id, theme.key)):
+            wob = 0.9 + 0.1 * math.sin(t * 9.0 + i * 1.9)
+            add(dx, dy + top, int(dr * wob), dcol, glow=0.22)
+        rim = theme.rim
+        rim_top = (rim[0] * 3 // 5, rim[1] * 3 // 5, rim[2] * 3 // 5)
         lip_w = max(1, px(1))
         for row in range(3):
             lip_y = (row + 1) * LAYOUT.tile_h - LAYOUT.floor_face - lip_w
+            top_y = lip_y + lip_w - LAYOUT.floor_top
             for col in range(10):
                 tile = room.tile_at(col, row)[0]
                 if not has_floor(int(tile)) or (room.id, col, row) in game.state.fallen_floors:
                     continue
                 x0 = col * LAYOUT.tile_w
+                gm.fill(rim_top, (x0, top_y, LAYOUT.tile_w, LAYOUT.floor_top - lip_w))
                 gm.fill(rim, (x0, lip_y, LAYOUT.tile_w, lip_w * 2))
         kx, ky = kid_px
         add(kx, ky - px(40), px(120), (80, 78, 86))
@@ -705,33 +896,41 @@ def _fog_texture(w: int, h: int, color: tuple[int, int, int]) -> pygame.Surface:
 
 
 def draw_atmosphere(surf: pygame.Surface, game: Game, t: float) -> None:
-    """Rayos de luz que entran desde lo alto y niebla que se arrastra por
-    el suelo de cada piso (sólo luz aditiva: no tapa nada)."""
-    palace = level_is_palace(game.level.number)
+    """Rayos de luz (desde las ventanas del tema o desde lo alto) y niebla
+    que se arrastra por el suelo de cada piso (sólo luz aditiva)."""
+    theme = theme_for(game.level.number)
     room = game.kid.room
-    rng = random.Random(room * 131 + 7)
     top = LAYOUT.hud_top
-    th = LAYOUT.tile_h
-    color = (54, 62, 96) if palace else (34, 42, 62)
-    n = rng.choice((0, 1, 1, 2))
-    for i in range(n):
-        x = rng.randint(LAYOUT.tile_w, LAYOUT.window_w - LAYOUT.tile_w * 2)
-        row = rng.randint(0, 2)
+    tile_h = LAYOUT.tile_h
+    beam = _shaft_texture(px(150), px(46), -24.0, theme.shaft_color)
+    origins = [
+        (x - px(10), row * tile_h + px(40)) for x, row in decor_spots(room, theme.key, "windows")
+    ]
+    if not origins and theme.shafts:
+        rng = random.Random(room * 131 + 7)
+        n = rng.randint(0, theme.shafts)
+        origins = [
+            (
+                rng.randint(LAYOUT.tile_w, LAYOUT.window_w - LAYOUT.tile_w * 2),
+                rng.randint(0, 2) * tile_h - px(6),
+            )
+            for _ in range(n)
+        ]
+    for i, (x, y) in enumerate(origins):
         pulse = 0.75 + 0.25 * math.sin(t * 0.7 + i * 2.1 + room)
-        beam = _shaft_texture(px(150), px(46), -24.0, color)
         b = beam.copy()
         b.fill(tuple(int(255 * pulse) for _ in range(3)), special_flags=pygame.BLEND_RGB_MULT)
-        surf.blit(b, (x, top + row * th - px(6)), special_flags=pygame.BLEND_ADD)
-    fog = _fog_texture(LAYOUT.window_w, px(60), (46, 50, 66) if not palace else (52, 44, 40))
+        surf.blit(b, (x, top + y), special_flags=pygame.BLEND_ADD)
+    fog = _fog_texture(LAYOUT.window_w, px(60), theme.fog)
     fw = fog.get_width()
     for row in range(3):
-        y = top + (row + 1) * th - LAYOUT.foot_lift - px(48)
+        y = top + (row + 1) * tile_h - LAYOUT.foot_lift - px(48)
         off = int((t * px(9) * (1 + row * 0.3) + row * 300) % fw)
         surf.blit(fog, (-off, y), special_flags=pygame.BLEND_ADD)
         surf.blit(fog, (fw - off, y), special_flags=pygame.BLEND_ADD)
 
 
-def bloom(surf: pygame.Surface, rect: pygame.Rect, *, threshold: int = 170, gain: int = 4) -> None:
+def bloom(surf: pygame.Surface, rect: pygame.Rect, *, threshold: int = 185, gain: int = 4) -> None:
     """Resplandor: lo que supera ``threshold`` de LUMINANCIA se difumina a
     1/8 de resolución y se suma con su color (llamas, pociones, chispas,
     destellos). El umbral por luminancia evita que una pared cálida bien
@@ -754,11 +953,12 @@ def bloom(surf: pygame.Surface, rect: pygame.Rect, *, threshold: int = 170, gain
     surf.blit(big, rect.topleft, special_flags=pygame.BLEND_RGB_ADD)
 
 
-def grade(surf: pygame.Surface, rect: pygame.Rect, palace: bool) -> None:
-    """Gradación de color: negros levantados hacia un azul profundo (o
-    un ámbar en el palacio) — el "look" cinematográfico."""
-    lift = (6, 7, 16) if not palace else (12, 7, 6)
-    surf.fill(lift, rect, special_flags=pygame.BLEND_RGB_ADD)
+def grade(surf: pygame.Surface, rect: pygame.Rect, theme: LevelTheme | bool) -> None:
+    """Gradación de color: negros levantados hacia el tono del nivel
+    (azul profundo en la mazmorra, ámbar en el palacio...)."""
+    if isinstance(theme, bool):
+        theme = theme_for(4 if theme else 1)
+    surf.fill(theme.lift, rect, special_flags=pygame.BLEND_RGB_ADD)
 
 
 # ---------------------------------------------------------------------------

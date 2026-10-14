@@ -29,7 +29,6 @@ from pop2026canon.presentation.fx import (
     draw_atmosphere,
     draw_char_shadows,
     grade,
-    level_is_palace,
     rewind_filter,
     transition_direction,
 )
@@ -41,6 +40,7 @@ from pop2026canon.presentation.hud import (
     draw_toast,
 )
 from pop2026canon.presentation.layout import LAYOUT, px
+from pop2026canon.presentation.themes import theme_for
 
 
 @dataclass
@@ -188,7 +188,7 @@ class Scene:
     ) -> None:
         """Sala con luz, sombras, personajes y partículas (sin HUD)."""
         s = self.settings
-        palace = level_is_palace(game.level.number)
+        th = theme_for(game.level.number)
         cells = renderer.room_cells(game)
         key = (game.level.number, game.kid.room, cells)
         if key != self._base_key:
@@ -196,8 +196,8 @@ class Scene:
             # trampas, losas...). Por frame basta un blit.
             base = self._base
             base.fill((0, 0, 0))
-            base.blit(backdrop(game.kid.room, palace), (0, LAYOUT.hud_top))
-            renderer.draw_cells(base, game.kid.room, cells, palace)
+            base.blit(backdrop(game.kid.room, th.key), (0, LAYOUT.hud_top))
+            renderer.draw_cells(base, game.kid.room, cells, th.palace, th.key)
             self._base_key = key
         world.blit(self._base, (0, 0))
         renderer.draw_animated(world, game, cells, t)
@@ -216,7 +216,7 @@ class Scene:
         if s.bloom:
             bloom(world, area)
         if s.lighting:
-            grade(world, area, level_is_palace(game.level.number))
+            grade(world, area, th)
             self.post.vignette(world)
 
     def draw(

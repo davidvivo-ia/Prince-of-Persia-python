@@ -18,6 +18,7 @@ from pop2026canon.domain.game import Game
 from pop2026canon.presentation.char_atlas import CharPalette, draw_kid_frame
 from pop2026canon.presentation.layout import LAYOUT
 from pop2026canon.presentation.palette import PALETTE
+from pop2026canon.presentation.themes import theme_for
 from pop2026canon.presentation.tile_atlas import draw_tile
 
 
@@ -102,8 +103,15 @@ def room_cells(game: Game) -> tuple[Cell, ...]:
     return tuple(out)
 
 
-def draw_cells(surf: pygame.Surface, room_id: int, cells: tuple[Cell, ...], palace: bool) -> None:
-    """Parte estática de la sala: los sprites de los tiles."""
+def draw_cells(
+    surf: pygame.Surface,
+    room_id: int,
+    cells: tuple[Cell, ...],
+    palace: bool,
+    theme: str | None = None,
+) -> None:
+    """Parte estática de la sala: los sprites de los tiles (``theme``:
+    clave del tema del nivel)."""
     for c, r, tile_val, modifier, left, right in cells:
         draw_tile(
             surf,
@@ -114,6 +122,7 @@ def draw_cells(surf: pygame.Surface, room_id: int, cells: tuple[Cell, ...], pala
             palace=palace,
             variant=_room_hash(room_id, c, r) % 8,
             edges=(left, right),
+            theme=theme,
         )
 
 
@@ -131,22 +140,17 @@ def draw_animated(surf: pygame.Surface, game: Game, cells: tuple[Cell, ...], t: 
 
 def _draw_room_tiles(surf: pygame.Surface, game: Game, t: float = 0.0) -> None:
     """Pinta los 30 tiles de la sala actual (llamas animadas con ``t``)."""
-    from pop2026canon.presentation.tile_atlas import level_is_palace
-
+    th = theme_for(game.level.number)
     cells = room_cells(game)
-    draw_cells(surf, game.kid.room, cells, level_is_palace(game.level.number))
+    draw_cells(surf, game.kid.room, cells, th.palace, th.key)
     draw_animated(surf, game, cells, t)
 
 
 def _draw_front_tiles(surf: pygame.Surface, game: Game) -> None:
     """Capa delantera: fustes de columnas por delante de los personajes."""
-    from pop2026canon.presentation.tile_atlas import (
-        FRONT_TILES,
-        draw_tile_front,
-        level_is_palace,
-    )
+    from pop2026canon.presentation.tile_atlas import FRONT_TILES, draw_tile_front
 
-    palace = level_is_palace(game.level.number)
+    th = theme_for(game.level.number)
     rid = game.kid.room
     for r in range(LAYOUT.room_rows):
         for c in range(LAYOUT.room_cols):
@@ -154,15 +158,15 @@ def _draw_front_tiles(surf: pygame.Surface, game: Game) -> None:
             if tile_val in FRONT_TILES:
                 x = c * LAYOUT.tile_w
                 y = LAYOUT.hud_top + r * LAYOUT.tile_h
-                draw_tile_front(surf, tile_val, x, y, palace=palace)
+                draw_tile_front(surf, tile_val, x, y, palace=th.palace, theme=th.key)
 
 
 def _draw_falling_tiles(surf: pygame.Surface, game: Game) -> None:
     """Losas sueltas en caída (canon mobs): una losa que baja por su columna."""
     from pop2026canon.domain.constants import TILE_SIZE_Y
-    from pop2026canon.presentation.tile_atlas import draw_falling_slab, level_is_palace
+    from pop2026canon.presentation.tile_atlas import draw_falling_slab
 
-    palace = level_is_palace(game.level.number)
+    th = theme_for(game.level.number)
     slab_off = LAYOUT.tile_h - LAYOUT.floor_face - LAYOUT.floor_top
     for mob in game.state.falling_tiles:
         if mob.room != game.kid.room:
@@ -174,7 +178,7 @@ def _draw_falling_tiles(surf: pygame.Surface, game: Game) -> None:
             + (LAYOUT.tile_h * mob.y) // TILE_SIZE_Y
             + slab_off
         )
-        draw_falling_slab(surf, x, top, palace=palace)
+        draw_falling_slab(surf, x, top, palace=th.palace, theme=th.key)
 
 
 def _char_px(char: Char) -> tuple[int, int]:
@@ -269,11 +273,10 @@ def render(
     """
     from pop2026canon.presentation.backdrop import backdrop
     from pop2026canon.presentation.hud import HudState, draw_hud
-    from pop2026canon.presentation.tile_atlas import level_is_palace
 
     _ = font
     surf.fill(PALETTE.bg)
-    surf.blit(backdrop(game.kid.room, level_is_palace(game.level.number)), (0, LAYOUT.hud_top))
+    surf.blit(backdrop(game.kid.room, theme_for(game.level.number).key), (0, LAYOUT.hud_top))
     _draw_room_tiles(surf, game, pygame.time.get_ticks() / 1000.0)
     _draw_chars(surf, game, prev, alpha)
     _draw_front_tiles(surf, game)
