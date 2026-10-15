@@ -6,7 +6,7 @@
 START_HITP = 3
 MAX_HITP_ALLOWED = 10
 TBL_GUARD_HP = (4, 3, 3, 3, 3, 4, 5, 4, 4, 5, 5, 5, 4, 6, 0, 0)
-                # nivel 1..14 (15-16 = sentinelas)
+# nivel 1..14 (15-16 = sentinelas)
 ```
 
 `take_hp(char, amount)` resta y devuelve False si murió (`hp_curr <= 0`).

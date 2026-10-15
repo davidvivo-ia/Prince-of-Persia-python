@@ -30,12 +30,12 @@ encadenan FRAME → DX/DY → FRAME → DX/DY...
 ```python
 @dataclass(frozen=True, slots=True)
 class Frame:
-    id: int           # 0..255 (algunos huecos)
-    sprite: str       # nombre del slot en char_atlas
-    shift_x: int      # ajuste de origen sub-tile px
-    shift_y: int      # ajuste de origen sub-tile px
-    weight: int       # flag para colisión (HEAVY=2, NORMAL=1)
-    sound: int = 0    # sonido implícito al pintar este frame (footstep etc.)
+    id: int  # 0..255 (algunos huecos)
+    sprite: str  # nombre del slot en char_atlas
+    shift_x: int  # ajuste de origen sub-tile px
+    shift_y: int  # ajuste de origen sub-tile px
+    weight: int  # flag para colisión (HEAVY=2, NORMAL=1)
+    sound: int = 0  # sonido implícito al pintar este frame (footstep etc.)
 ```
 
 Mapping aproximado por rangos (validado en `types.h` extraído en audit):
@@ -74,20 +74,22 @@ Mapping aproximado por rangos (validado en `types.h` extraído en audit):
 
 ```python
 class ActKind(IntEnum):
-    FRAME = 0       # arg = frame id
-    DX = 1          # arg = pixels (sub-tile)
+    FRAME = 0  # arg = frame id
+    DX = 1  # arg = pixels (sub-tile)
     DY = 2
-    SND = 3         # arg = sound id
-    SET_FALL = 4    # arg = fall_x, arg2 = fall_y
-    JMP = 5         # arg = seq id destino
-    SETUP = 6       # arg = action id (e.g. set actions_4_in_freefall)
+    SND = 3  # arg = sound id
+    SET_FALL = 4  # arg = fall_x, arg2 = fall_y
+    JMP = 5  # arg = seq id destino
+    SETUP = 6  # arg = action id (e.g. set actions_4_in_freefall)
     NOP = 7
+
 
 @dataclass(frozen=True, slots=True)
 class SeqAct:
     kind: ActKind
     arg: int
     arg2: int = 0
+
 
 Sequence = tuple[SeqAct, ...]
 ```
@@ -97,7 +99,7 @@ Sequence = tuple[SeqAct, ...]
 # Cada acto es un step incremental.
 SEQ_1_START_RUN: Sequence = (
     SeqAct(ActKind.SETUP, action=0),  # action_0_stand
-    SeqAct(ActKind.FRAME, 7),         # frame 7 — windup
+    SeqAct(ActKind.FRAME, 7),  # frame 7 — windup
     SeqAct(ActKind.DX, 1),
     SeqAct(ActKind.FRAME, 8),
     SeqAct(ActKind.DX, 1),
@@ -159,13 +161,16 @@ def play_seq(char: Char, seqtbl: SeqTbl) -> Char:
 
     return replace(
         char,
-        curr_col=new_col, curr_row=new_row,
-        x=new_x, y=new_y,
+        curr_col=new_col,
+        curr_row=new_row,
+        x=new_x,
+        y=new_y,
         frame=new_frame,
         action=new_action,
         curr_seq_id=new_seq,
         curr_seq_idx=idx,
-        fall_x=fall_x, fall_y=fall_y,
+        fall_x=fall_x,
+        fall_y=fall_y,
     )
 ```
 
@@ -208,9 +213,7 @@ entradas son **funciones de dibujo** parametrizadas por:
 - Frame ID
 
 ```python
-def draw_char_frame(
-    surface, char: Char, frame: Frame, x_px: int, y_px: int, palette: Palette
-):
+def draw_char_frame(surface, char: Char, frame: Frame, x_px: int, y_px: int, palette: Palette):
     """Dibuja la silueta procedural del frame en pos píxel."""
     ...
 ```
@@ -230,7 +233,7 @@ No es 1-a-1 con los 180 sprites de POP1 pero captura la silueta.
 
 ## 8. Riesgos
 
-- **Reverso completo de seqtbl.c**: 94 secuencias × 10-50 acts cada
+- **Reverso completo de seqtbl.c**: 94 secuencias x 10-50 acts cada
   una = ~2000 acts. Extracción mecánica del C posible con script.
 - **Atlas procedural**: 180 frames procedurales son trabajo de
   ilustración. Aceptable como tributo si captura silueta.

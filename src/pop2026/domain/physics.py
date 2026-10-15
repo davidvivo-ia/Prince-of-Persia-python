@@ -1,7 +1,7 @@
 """Física continua: integrador y colisión AABB contra grid de tiles.
 
 Este módulo es **cimiento** para la migración futura del príncipe a
-coordenadas continuas (ver `plan.md` F-1). Por ahora vive en paralelo
+coordenadas continuas (ver `docs/roadmap-v2.md` F-1). Por ahora vive en paralelo
 con el FSM por celdas; no se inyecta automáticamente en `game.advance`.
 
 Convenciones:

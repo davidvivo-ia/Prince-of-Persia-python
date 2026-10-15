@@ -32,7 +32,7 @@ error/bg = 6.8:1 ✓ AA. warning/bg = 9.1:1 ✓ AAA.
 
 - UI: **JetBrains Mono** (incluida vía `pyfontstash`/fallback sistema)
   o, en su defecto, la fuente mono del sistema. Tamaño base 18px en
-  ventana 960×600.
+  ventana 960x600.
 - Texto narrativo (cinemáticas): misma familia, peso semi-bold, espaciado
   letra +1.
 - HUD numérico: tabular nums (cifras de igual anchura) para que el reloj
@@ -41,8 +41,8 @@ error/bg = 6.8:1 ✓ AA. warning/bg = 9.1:1 ✓ AAA.
 ## Espaciado
 
 Sistema basado en **8px**. Todos los gaps son múltiplos: 8, 16, 24, 32,
-48, 64. Tile lógico = **24×24 px**, ventana lógica = **40×25 tiles**
-(960×600 px), ventana real = ventana lógica × escala 1×/2× (configurable).
+48, 64. Tile lógico = **24x24 px**, ventana lógica = **40x25 tiles**
+(960x600 px), ventana real = ventana lógica x escala 1x/2x (configurable).
 
 ## Iconografía
 

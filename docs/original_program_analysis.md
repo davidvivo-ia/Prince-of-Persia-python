@@ -16,7 +16,7 @@
 | Plataforma       | Apple II / IIe / IIc (versión madre)                           |
 | Lenguaje         | Ensamblador 6502                                               |
 | Tamaño           | ~75 KB de código + dos disquetes 5.25" de datos                |
-| Resolución       | 280×192 (modo HGR doble), 6 colores                            |
+| Resolución       | 280x192 (modo HGR doble), 6 colores                            |
 | Sonido           | PC Speaker monocanal (beeper)                                  |
 | Input            | Teclado (no joystick obligatorio)                              |
 | Género           | Plataformas cinemáticas / acción-aventura                      |
@@ -100,7 +100,7 @@ Jafar.
 | `prince_facing`  | Dirección: -1 izquierda, +1 derecha                | [DATO]         |
 | `current_level`  | 1..14 (12 jugables + 2 secretos)                   | [DATO]         |
 | `room_id`        | Habitación actual dentro del nivel (1..24)         | [DATO]         |
-| `tile_grid[r,c]` | Mapa de tiles 10×3 por habitación                  | [DATO]         |
+| `tile_grid[r,c]` | Mapa de tiles 10x3 por habitación                  | [DATO]         |
 | `time_left`      | Cuenta atrás global en ticks                       | [DATO]         |
 | `guards[i]`      | Estructura por guardia: x, y, hp, action, skill    | [DATO]         |
 | `rng_seed`       | LFSR de 8 bits                                     | [INFERENCIA]   |

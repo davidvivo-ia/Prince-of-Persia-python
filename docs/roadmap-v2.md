@@ -1,4 +1,4 @@
-# PLAN — De pop2026 v1.0 a v2.0
+# docs/roadmap-v2.md — De pop2026 v1.0 a v2.0 (motor `pop2026`)
 
 > Hoja de ruta para acercar la reimplementación al "feel" del Prince of
 > Persia original (Mechner, 1989), sin reproducir su código ni sus

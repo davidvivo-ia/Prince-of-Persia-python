@@ -11,26 +11,28 @@
 class GuardSpawn:
     col: int
     row: int
-    direction: int    # -1 left, +1 right
-    skill: int        # 0..11
-    color: int        # variante visual
-    hp: int           # del tbl_guard_hp[level]
+    direction: int  # -1 left, +1 right
+    skill: int  # 0..11
+    color: int  # variante visual
+    hp: int  # del tbl_guard_hp[level]
+
 
 @dataclass(frozen=True, slots=True)
 class Room:
-    id: int           # 1..24 (0 = "no room" / wall)
-    fg: tuple[int, ...]    # 30 tiles foreground (3 filas × 10 cols)
-    bg: tuple[int, ...]    # 30 modifiers o overlays
-    link_n: int       # room id N o 0
+    id: int  # 1..24 (0 = "no room" / wall)
+    fg: tuple[int, ...]  # 30 tiles foreground (3 filas x 10 cols)
+    bg: tuple[int, ...]  # 30 modifiers o overlays
+    link_n: int  # room id N o 0
     link_s: int
     link_e: int
     link_w: int
     guards: tuple[GuardSpawn, ...]
 
+
 @dataclass(frozen=True, slots=True)
 class Level:
-    number: int                # 1..14
-    rooms: tuple[Room, ...]    # hasta 24 rooms (idx 0 = no-room sentinel)
+    number: int  # 1..14
+    rooms: tuple[Room, ...]  # hasta 24 rooms (idx 0 = no-room sentinel)
     start_room: int
     start_col: int
     start_row: int
@@ -43,8 +45,8 @@ class Level:
 ```python
 @dataclass(frozen=True, slots=True)
 class Event:
-    kind: EventKind      # SHADOW_MIRROR, SHADOW_STEAL, SHADOW_STEP,
-                         # SKELETON_WAKE, MOUSE_APPEAR, VIZIER_INIT
+    kind: EventKind  # SHADOW_MIRROR, SHADOW_STEAL, SHADOW_STEP,
+    # SKELETON_WAKE, MOUSE_APPEAR, VIZIER_INIT
     room: int
     col: int = 0
     row: int = 0
@@ -54,13 +56,13 @@ class Event:
 ## 2. Formato `levels.dat`
 
 Verificado: `sizeof(level_type) == 2305` bytes (de `types.h`). 14
-niveles. Total = 14 × 2305 = 32 270 bytes + checksum.
+niveles. Total = 14 x 2305 = 32 270 bytes + checksum.
 
 Layout aproximado por nivel (extraído de `level_type` en SDLPoP):
 
 | Offset | Bytes | Campo |
 |---|---|---|
-| 0    | 720 | `fg[720]` — foreground tiles (24 rooms × 30 tiles) |
+| 0    | 720 | `fg[720]` — foreground tiles (24 rooms x 30 tiles) |
 | 720  | 720 | `bg[720]` — modifiers / overlays |
 | 1440 | ~256 | `doorlinks_1`, `doorlinks_2` — links plate↔gate |
 | 1696 | 96  | `roomlinks[24]` — 4 bytes/room (N, S, E, W) |
@@ -105,17 +107,19 @@ def decode_tile(byte: int) -> tuple[int, int]:
 
 LEVEL_BYTES = 2305
 
+
 @dataclass(frozen=True, slots=True)
 class RawLevel:
-    fg: bytes           # 720
-    bg: bytes           # 720
+    fg: bytes  # 720
+    bg: bytes  # 720
     doorlinks: bytes
-    roomlinks: bytes    # 96
+    roomlinks: bytes  # 96
     guards_tile: bytes  # 24
     guards_dir: bytes
     guards_x: bytes
     guards_skill: bytes
     guards_color: bytes
+
 
 def load_levels_dat(path: Path) -> tuple[RawLevel, ...]:
     data = path.read_bytes()
@@ -161,24 +165,37 @@ def materialize_level(raw: RawLevel, level_number: int) -> Level:
             row = guard_tile // 10
             col = guard_tile % 10
             hp = TBL_GUARD_HP[level_number - 1]
-            guards = (GuardSpawn(
-                col=col, row=row, direction=guard_dir,
-                skill=guard_skill, color=guard_color, hp=hp,
-            ),)
-        rooms.append(Room(
-            id=room_idx + 1,
-            fg=tuple(b & 0x1F for b in fg_room),
-            bg=tuple(b for b in bg_room),
-            link_n=links[0], link_s=links[1],
-            link_e=links[2], link_w=links[3],
-            guards=guards,
-        ))
+            guards = (
+                GuardSpawn(
+                    col=col,
+                    row=row,
+                    direction=guard_dir,
+                    skill=guard_skill,
+                    color=guard_color,
+                    hp=hp,
+                ),
+            )
+        rooms.append(
+            Room(
+                id=room_idx + 1,
+                fg=tuple(b & 0x1F for b in fg_room),
+                bg=tuple(b for b in bg_room),
+                link_n=links[0],
+                link_s=links[1],
+                link_e=links[2],
+                link_w=links[3],
+                guards=guards,
+            )
+        )
     # Start position viene de un campo aparte del dat
     # (TODO: localizar el offset exacto)
     return Level(
         number=level_number,
         rooms=tuple(rooms),
-        start_room=1, start_col=2, start_row=0, start_direction=-1,
+        start_room=1,
+        start_col=2,
+        start_row=0,
+        start_direction=-1,
         events=load_events_for_level(level_number),
     )
 ```
@@ -230,19 +247,23 @@ def cross_border(char: Char, level: Level) -> Char:
     room = level.rooms[char.room - 1]  # rooms 1-indexed
     if char.curr_col < 0:
         target = room.link_w
-        if target == 0: return bumped(char)
+        if target == 0:
+            return bumped(char)
         return replace(char, room=target, curr_col=9)
     if char.curr_col > 9:
         target = room.link_e
-        if target == 0: return bumped(char)
+        if target == 0:
+            return bumped(char)
         return replace(char, room=target, curr_col=0)
     if char.curr_row < 0:
         target = room.link_n
-        if target == 0: return bumped(char)
+        if target == 0:
+            return bumped(char)
         return replace(char, room=target, curr_row=2)
     if char.curr_row > 2:
         target = room.link_s
-        if target == 0: return death_by_falling(char)  # cayó al vacío
+        if target == 0:
+            return death_by_falling(char)  # cayó al vacío
         return replace(char, room=target, curr_row=0)
     return char
 ```

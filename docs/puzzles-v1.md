@@ -1,4 +1,4 @@
-# puzzles.md — Diseño de puzzles para los 15 niveles
+# docs/puzzles-v1.md — Diseño de puzzles para los 15 niveles (motor `pop2026`)
 
 > Inspirado en la **mecánica** de los niveles del Prince of Persia
 > original (1989, J. Mechner). No copio ningún layout concreto del

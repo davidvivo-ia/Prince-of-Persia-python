@@ -1,0 +1,135 @@
+"""Tests de doorlinks plate→gate específicos.
+
+Cierra la TODO "FASE 3.5: pendiente doorlinks" sustituyendo el modelo
+"cualquier plate abre cualquier gate" por mapas explícitos por nivel.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+from pop2026canon.application.controller import Command
+from pop2026canon.application.tick import advance
+from pop2026canon.domain.game import new_game
+from pop2026canon.domain.level import DoorLink, Event, EventKind, Level
+from pop2026canon.domain.levels_canon import LEVEL_6, LEVEL_8, LEVEL_11
+
+
+class TestDoorLinkModel:
+    def test_doorlink_coords(self) -> None:
+        link = DoorLink(plate_room=3, plate_col=7, plate_row=1, gate_room=2, gate_col=3, gate_row=1)
+        assert link.plate_coord == (3, 7, 1)
+        assert link.gate_coord == (2, 3, 1)
+
+    def test_level_gates_for_plate(self) -> None:
+        # L6: la placa de la sala 11 (col 5) abre la reja de la sala 8
+        gates = LEVEL_6.gates_for_plate((11, 5, 2))
+        assert (8, 5, 2) in gates
+
+    def test_level_plates_for_gate(self) -> None:
+        plates = LEVEL_6.plates_for_gate((8, 5, 2))
+        assert (11, 5, 2) in plates
+
+    def test_unmapped_plate_returns_empty(self) -> None:
+        assert LEVEL_6.gates_for_plate((9, 9, 9)) == ()
+        assert LEVEL_6.plates_for_gate((9, 9, 9)) == ()
+
+
+class TestL6PlateGateLink:
+    def test_l6_has_doorlinks(self) -> None:
+        # La reja de la sala 2 tiene una placa que la abre (col 2) y una
+        # placa de cierre entre medias (col 5) que hay que saltar; la
+        # reja de la 8 la abre la placa de la 11 (bajo la losa de la 6).
+        assert len(LEVEL_6.doorlinks) >= 3
+        plate_coords = {link.plate_coord for link in LEVEL_6.doorlinks}
+        gate_coords = {link.gate_coord for link in LEVEL_6.doorlinks}
+        assert (2, 2, 2) in plate_coords
+        assert (2, 5, 2) in plate_coords
+        assert (11, 5, 2) in plate_coords
+        assert (2, 7, 2) in gate_coords
+        assert (8, 5, 2) in gate_coords
+
+    def test_plate_pressed_opens_gate(self) -> None:
+        """Al pisar la placa (sala 2 col 2) la reja (sala 2 col 7) acaba
+        abriéndose; al pisar la de cierre (col 5) se cierra."""
+        game = new_game(LEVEL_6)
+        game = replace(game, kid=replace(game.kid, room=2, curr_col=2, curr_row=2))
+        for _ in range(20):
+            game = advance(game, Command())
+        assert (2, 7, 2) in game.state.open_gates
+        game = replace(game, kid=replace(game.kid, curr_col=5))
+        for _ in range(3):
+            game = advance(game, Command())
+        assert (2, 7, 2) not in game.state.open_gates
+
+
+class TestL11SelfRoomDoor:
+    def test_l11_has_same_room_doorlink(self) -> None:
+        """L11 tiene al menos una plate y gate en la misma sala (puzzle local)."""
+        same_room_links = [d for d in LEVEL_11.doorlinks if d.plate_room == d.gate_room]
+        assert len(same_room_links) >= 1
+
+
+class TestL8MouseOpensGate:
+    def test_l8_mouse_event_opens_unlinked_gate(self) -> None:
+        """L8 sala 10 tiene gate sin doorlink — sólo el mouse la abre."""
+        # La reja de la salida de L8 (sala 10 col 7) no tiene placa.
+        gate_coord = (10, 7, 2)
+        assert LEVEL_8.plates_for_gate(gate_coord) == ()
+        game = new_game(LEVEL_8)
+        game = replace(game, kid=replace(game.kid, room=10))
+        game = advance(game, Command())
+        assert gate_coord in game.state.open_gates
+
+
+class TestNoPlateNoGate:
+    def test_gate_without_link_stays_closed(self) -> None:
+        """Una gate sin plate vinculada y sin mouse no se abre sola."""
+        # Construyo un nivel mínimo con gate aislada.
+        from pop2026canon.domain.room import Room
+        from pop2026canon.domain.tiles import Tile, encode_tile
+
+        empty = (encode_tile(Tile.EMPTY, 0),) * 30
+        with_gate = list(empty)
+        with_gate[1 * 10 + 5] = encode_tile(Tile.GATE, 0)
+        room = Room(id=1, fg=tuple(with_gate), bg=empty)
+        lvl = Level(number=1, name="iso", rooms=(room,), start_room=1, start_col=0, start_row=1)
+        game = new_game(lvl)
+        for _ in range(20):
+            game = advance(game, Command())
+        assert (1, 5, 1) not in game.state.open_gates
+
+    def test_unlinked_plate_does_not_open_random_gate(self) -> None:
+        """Si una plate no está vinculada, otra gate suelta no se abre."""
+        from pop2026canon.domain.room import Room
+        from pop2026canon.domain.tiles import Tile, encode_tile
+
+        empty = (encode_tile(Tile.EMPTY, 0),) * 30
+        cells = list(empty)
+        # suelo
+        for c in range(10):
+            cells[2 * 10 + c] = encode_tile(Tile.FLOOR, 0)
+        # plate en (3,1)
+        cells[1 * 10 + 3] = encode_tile(Tile.OPENER, 0)
+        # gate en (6,1) — sin doorlink
+        cells[1 * 10 + 6] = encode_tile(Tile.GATE, 0)
+        room = Room(id=1, fg=tuple(cells), bg=empty)
+        lvl = Level(
+            number=1,
+            name="iso",
+            rooms=(room,),
+            start_room=1,
+            start_col=3,
+            start_row=1,
+        )
+        game = new_game(lvl)
+        for _ in range(20):
+            game = advance(game, Command())
+        assert (1, 6, 1) not in game.state.open_gates
+
+
+class TestEventModelStable:
+    def test_event_still_has_extra_field(self) -> None:
+        """Sanity check del modelo Event tras añadir DoorLink."""
+        e = Event(EventKind.SHADOW_STEP, room=1, extra=43)
+        assert e.extra == 43

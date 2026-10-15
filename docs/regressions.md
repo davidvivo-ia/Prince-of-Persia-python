@@ -28,8 +28,8 @@ Cada fila lista una desviación verificada en `audit.md`. Severidad:
 
 | ID | Subsistema | Canon | `pop2026` actual | Severidad |
 |---|---|---|---|---|
-| G1 | Tile size | 14×63 px (no cuadrado) | 48×64 px (casi cuadrado) | P0 |
-| G2 | Room size | 10×3 tiles fijo | 20×6 tiles variable | P0 |
+| G1 | Tile size | 14x63 px (no cuadrado) | 48x64 px (casi cuadrado) | P0 |
+| G2 | Room size | 10x3 tiles fijo | 20x6 tiles variable | P0 |
 | G3 | Físicas | Tile-based + frame chains con `dx`/`dy` por frame | Continua float (Celeste-style) | P0 |
 | G4 | Frames del prince | ~180 rotoscopiados, encadenados por `seqtbl` | 0 (dibujo procedural) | P0 |
 | G5 | Frame chains (seqtbl) | 94 secuencias nombradas | 18 `Action` enum sin chain | P0 |

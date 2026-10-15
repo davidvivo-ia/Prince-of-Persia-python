@@ -1,0 +1,308 @@
+"""Física de caídas y colisiones: aterrizaje, daño por altura, muros.
+
+Cubre el ciclo completo que faltaba en el motor: walk-off (pisar el
+vacío inicia caída), aterrizaje (soft / med / mortal según fall_y),
+muerte en abismo, colisión horizontal contra muros y gates cerradas,
+y caída-pluma (poción FLOAT).
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+from pop2026canon.application.controller import Command
+from pop2026canon.application.tick import advance
+from pop2026canon.domain.actions import Action, Seq
+from pop2026canon.domain.chars import Char, CharId
+from pop2026canon.domain.game import GameStatus, new_game
+from pop2026canon.domain.level import Level
+from pop2026canon.domain.physics import blocks_body_at, step_physics
+from pop2026canon.domain.room import Room
+from pop2026canon.domain.tiles import PotionType, Tile, encode_tile
+
+
+def _room(rows: list[list[Tile]], room_id: int = 1, **links: int) -> Room:
+    fg = tuple(encode_tile(t, 0) for row in rows for t in row)
+    return Room(id=room_id, fg=fg, bg=tuple([0] * 30), **links)
+
+
+E, F, W, G = Tile.EMPTY, Tile.FLOOR, Tile.WALL, Tile.GATE
+
+
+def _corridor_level(*, pit_cols: tuple[int, ...] = (), wall_col: int | None = None) -> Level:
+    """Sala única: suelo en row 2 (menos pits), muro opcional en row 1."""
+    top = [E] * 10
+    mid = [E] * 10
+    bot = [F] * 10
+    for c in pit_cols:
+        bot[c] = E
+    if wall_col is not None:
+        mid[wall_col] = W
+    room = _room([top, mid, bot])
+    return Level(number=1, name="test", rooms=(room,), start_room=1, start_col=1, start_row=2)
+
+
+def _shaft_level(rows_below: int) -> Level:
+    """Pozo en la columna 4: el kid está de pie en la sala 1 fila 0 y el
+    suelo del pozo está ``rows_below`` FILAS más abajo (canon: un piso es
+    una fila; una sala tiene tres). Dos salas apiladas."""
+    floor_row = rows_below  # fila absoluta (0..5) del suelo del pozo
+    rooms = []
+    for i in (1, 2):
+        rows = []
+        for r in range(3):
+            absolute = (i - 1) * 3 + r
+            row = [F] * 10
+            if 0 <= absolute < floor_row:
+                row[4] = E
+            rows.append(row)
+        rooms.append(_room(rows, room_id=i, link_s=2 if i == 1 else 0, link_n=0 if i == 1 else 1))
+    return Level(number=1, name="test", rooms=tuple(rooms), start_room=1, start_col=4, start_row=0)
+
+
+def _kid(level: Level, **kw: object) -> Char:
+    defaults: dict[str, object] = {
+        "charid": CharId.KID,
+        "room": 1,
+        "curr_col": 1,
+        "curr_row": 2,  # geometría canon: de pie EN la celda del suelo
+        "y": 62,  # pies en la superficie (FEET_Y)
+        "hp_curr": 3,
+        "hp_max": 3,
+        "curr_seq_id": int(Seq.STAND),
+    }
+    defaults.update(kw)
+    return Char(**defaults)  # type: ignore[arg-type]
+
+
+class TestWalkOff:
+    def test_standing_over_pit_starts_fall(self) -> None:
+        level = _corridor_level(pit_cols=(5,))
+        kid = _kid(level, curr_col=5)
+        kid = step_physics(kid, level)
+        assert kid.action is Action.IN_FREEFALL, "El kid no cae al pisar el vacío"
+
+    def test_standing_on_floor_stays(self) -> None:
+        level = _corridor_level()
+        kid = _kid(level, curr_col=5)
+        kid = step_physics(kid, level)
+        assert kid.action is Action.STAND
+
+
+def _drop_kid(level: Level, *, float_ticks: int = 0) -> Char:
+    """Suelta al kid sobre el pit de la sala 1 y simula hasta aterrizar."""
+    kid = _kid(level, curr_col=4, curr_row=0, float_ticks=float_ticks)
+    for _ in range(200):
+        kid = step_physics(kid, level, has_feather=kid.float_ticks > 0)
+        if kid.action is not Action.IN_FREEFALL:
+            break
+    return kid
+
+
+class TestLanding:
+    def test_in_room_fall_from_top_row_hurts(self) -> None:
+        """De la fila 0 a la 2 dentro de la sala son dos pisos: 1 HP."""
+        level = _corridor_level()
+        kid = _kid(level, curr_row=0, y=62, action=Action.IN_FREEFALL, curr_seq_id=int(Seq.FALL))
+        for _ in range(12):
+            kid = step_physics(kid, level)
+            if kid.action is not Action.IN_FREEFALL:
+                break
+        assert kid.action is Action.STAND
+        assert kid.hp_curr == 2, "Dos filas de caída cuestan 1 HP (canon)"
+        assert kid.curr_row == 2, "Debería quedar de pie EN la celda de suelo de row 2"
+
+    def test_one_story_fall_is_safe(self) -> None:
+        """Canon: un piso es una FILA. Caer una fila no hace daño."""
+        kid = _drop_kid(_shaft_level(1))
+        assert (kid.room, kid.curr_row) == (1, 1)
+        assert kid.action is Action.STAND
+        assert kid.hp_curr == 3, "1 piso de caída es seguro (canon)"
+
+    def test_two_story_fall_hurts(self) -> None:
+        kid = _drop_kid(_shaft_level(2))
+        assert (kid.room, kid.curr_row) == (1, 2)
+        assert kid.alive < 0
+        assert kid.hp_curr == 2, "2 pisos de caída cuestan 1 HP (canon)"
+
+    def test_three_story_fall_kills(self) -> None:
+        kid = _drop_kid(_shaft_level(3))
+        assert kid.room == 2
+        assert kid.alive >= 0, "3 pisos de caída matan (canon)"
+        assert kid.hp_curr == 0
+
+    def test_feather_fall_saves_any_height(self) -> None:
+        kid = _drop_kid(_shaft_level(4), float_ticks=500)
+        assert kid.alive < 0, "Con FLOAT activa ninguna caída mata"
+        assert kid.hp_curr == 3
+
+    def test_landing_records_impact_speed(self) -> None:
+        kid = _drop_kid(_shaft_level(2))
+        assert kid.landed_fall_y > 0, "landed_fall_y debe registrar la velocidad de impacto"
+
+
+class TestAbyss:
+    def test_falling_without_south_room_dies(self) -> None:
+        level = _corridor_level(pit_cols=(5,))
+        kid = _kid(level, curr_col=5)
+        for _ in range(30):
+            kid = step_physics(kid, level)
+            if kid.alive >= 0:
+                break
+        assert kid.alive >= 0, "Caer al abismo (sin link sur) debería matar"
+
+
+class TestHorizontalCollision:
+    def test_wall_blocks_body(self) -> None:
+        """Un muro en la fila del suelo bloquea al kid que corre por ella."""
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[2 * 10 + 4] = encode_tile(W, 0)
+        from pop2026canon.domain.level import Level as _Level
+
+        level = _Level(
+            number=1,
+            name="test",
+            rooms=(Room(id=1, fg=tuple(fg), bg=room.bg),),
+            start_room=1,
+            start_col=1,
+            start_row=2,
+        )
+        room = level.room(1)
+        assert blocks_body_at(room, 4, 2)
+        kid = _kid(level, curr_col=3, curr_seq_id=int(Seq.RUN), action=Action.RUN_JUMP)
+        for _ in range(20):
+            kid = step_physics(kid, level)
+            if kid.action is Action.BUMPED:
+                break
+        assert kid.curr_col < 4, f"El kid atravesó el muro (col={kid.curr_col})"
+
+    def test_pillar_does_not_block(self) -> None:
+        top = [E] * 10
+        mid = [E] * 10
+        bot = [F] * 10
+        bot[4] = Tile.BIGPILLAR_BOTTOM
+        room = _room([top, mid, bot])
+        assert not blocks_body_at(room, 4, 2), "Los pilares son decorado — no bloquean"
+
+    def test_closed_gate_blocks_open_gate_does_not(self) -> None:
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[2 * 10 + 4] = encode_tile(G, 0)
+        room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
+        assert blocks_body_at(room2, 4, 2)
+        assert not blocks_body_at(room2, 4, 2, frozenset({(1, 4, 2)}))
+
+
+class TestFeatherFall:
+    def test_float_potion_slows_fall(self) -> None:
+        level = _corridor_level()
+        kid_normal = _kid(level, curr_row=0, action=Action.IN_FREEFALL, curr_seq_id=int(Seq.FALL))
+        kid_feather = replace(kid_normal, float_ticks=100)
+        kid_normal = step_physics(kid_normal, level)
+        kid_feather = step_physics(kid_feather, level, has_feather=True)
+        assert kid_feather.fall_y < kid_normal.fall_y
+
+
+class TestPotionEffects:
+    def test_float_potion_sets_float_ticks(self) -> None:
+        from pop2026canon.domain.levels_canon import LEVEL_4
+
+        # L4 sala 18 col 5 row 1 tiene la potion FLOAT
+        coord = None
+        for rm in LEVEL_4.rooms:
+            for r in range(3):
+                for c in range(10):
+                    tile, mod = rm.tile_at(c, r)
+                    if tile is Tile.POTION and mod == int(PotionType.FLOAT):
+                        coord = (rm.id, c, r)
+        assert coord is not None
+        g = new_game(LEVEL_4)
+        g = replace(g, kid=replace(g.kid, room=coord[0], curr_col=coord[1], curr_row=coord[2]))
+        g = advance(g, Command())
+        assert g.kid.float_ticks > 0, "La poción FLOAT debe activar caída-pluma"
+
+    def test_time_potion_adds_time(self) -> None:
+        from pop2026canon.domain.levels_canon import LEVEL_5
+
+        coord = None
+        for rm in LEVEL_5.rooms:
+            for r in range(3):
+                for c in range(10):
+                    tile, mod = rm.tile_at(c, r)
+                    if tile is Tile.POTION and mod == int(PotionType.TIME):
+                        coord = (rm.id, c, r)
+        assert coord is not None
+        from pop2026canon.domain.game import TimeRemaining
+
+        g = new_game(LEVEL_5)
+        # Con el reloj a tope el bonus se recorta (nunca sobre 60 min);
+        # reducimos el reloj para ver el efecto.
+        g = replace(g, time=TimeRemaining(minutes=30, ticks=0))
+        before = g.time.minutes * 720 + g.time.ticks
+        g = replace(g, kid=replace(g.kid, room=coord[0], curr_col=coord[1], curr_row=coord[2]))
+        g = advance(g, Command())
+        after = g.time.minutes * 720 + g.time.ticks
+        assert after > before, "La poción TIME debe añadir tiempo al reloj"
+
+    def test_max_hp_potion_caps_at_10(self) -> None:
+        from pop2026canon.domain.combat import heal_max
+
+        kid = Char(charid=CharId.KID, room=1, curr_col=1, curr_row=1, hp_curr=10, hp_max=10)
+        kid = heal_max(kid)
+        assert kid.hp_max == 10, "MAX_HITP_ALLOWED es 10"
+
+
+class TestPrincessReunionWins:
+    def test_reaching_princess_wins_game(self) -> None:
+        from pop2026canon.domain.levels_canon import LEVEL_14
+
+        g = new_game(LEVEL_14)
+        g = advance(g, Command())  # spawn princesa
+        princess = g.find_char(CharId.PRINCESS)
+        assert princess is not None
+        g = replace(
+            g,
+            kid=replace(
+                g.kid,
+                room=princess.room,
+                curr_col=princess.curr_col - 1,
+                curr_row=princess.curr_row,
+            ),
+        )
+        g = advance(g, Command())
+        assert g.status is GameStatus.WON_GAME, "Alcanzar a la princesa debe ganar el juego"
+
+
+class TestCanonRowBlocking:
+    """Geometría canon: muros y gates cerradas bloquean en la celda del
+    suelo donde el kid ESTÁ (los niveles originales los ponen ahí)."""
+
+    def test_closed_gate_in_floor_row_blocks(self) -> None:
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[2 * 10 + 5] = encode_tile(G, 0)
+        room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
+        assert blocks_body_at(room2, 5, 2)
+        assert not blocks_body_at(room2, 5, 2, frozenset({(1, 5, 2)}))
+
+    def test_wall_in_floor_row_blocks(self) -> None:
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[2 * 10 + 5] = encode_tile(W, 0)
+        room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
+        assert blocks_body_at(room2, 5, 2)
+
+    def test_wall_of_the_story_above_does_not_block(self) -> None:
+        """Un muro en la fila 1 es del piso de arriba: el kid de la fila
+        2 pasa por debajo."""
+        level = _corridor_level()
+        room = level.room(1)
+        fg = list(room.fg)
+        fg[1 * 10 + 5] = encode_tile(W, 0)
+        room2 = Room(id=1, fg=tuple(fg), bg=room.bg)
+        assert not blocks_body_at(room2, 5, 2)

@@ -1,4 +1,4 @@
-# PLAN.md — Híbrido pragmático v4.1
+# docs/plan-v4.md — Híbrido pragmático v4.1 (motor `pop2026`)
 
 > Mantiene el motor v4.0 (física continua) y suma las piezas que más
 > acercan al feel POP1, sin reescribir el motor.
@@ -144,7 +144,7 @@ Si dices "decide tú": (a)+(a).
 - [ ] CAMPAIGN tiene 100 entradas con L00, L13, L14 añadidos.
 - [ ] `pytest` ≥ 301 verdes (probablemente subirá a ~315).
 - [ ] ruff format + check + mypy --strict limpios.
-- [ ] CHANGELOG y plan.md actualizados.
+- [ ] CHANGELOG y docs/roadmap-v2.md actualizados.
 
 ---
 

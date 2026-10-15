@@ -4,7 +4,7 @@
 
 ```python
 START_MINUTES_LEFT = 60
-START_TICKS_LEFT = 719   # ticks fraccionarios primer minuto
+START_TICKS_LEFT = 719  # ticks fraccionarios primer minuto
 TICKS_PER_MINUTE = 720
 ```
 
@@ -16,7 +16,7 @@ A 12 FPS lógicos, 720 ticks = 60s. 60 minutos = 43 200 ticks.
 @dataclass(frozen=True)
 class TimeState:
     minutes_left: int = 60
-    ticks_left: int = 719   # decrementa cada tick lógico
+    ticks_left: int = 719  # decrementa cada tick lógico
 ```
 
 ## Decremento

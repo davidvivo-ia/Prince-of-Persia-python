@@ -5,19 +5,19 @@
 ```python
 @dataclass(frozen=True)
 class SaveSlot:
-    version: int           # protocolo de save
-    level: int             # 1..14
-    room: int              # sala actual
-    col: int               # posición kid
+    version: int  # protocolo de save
+    level: int  # 1..14
+    room: int  # sala actual
+    col: int  # posición kid
     row: int
     direction: int
     hp_curr: int
     hp_max: int
     minutes_left: int
     ticks_left: int
-    sword: int             # 0 sheathed, 2 drawn
-    flags: int             # shadow_initialized, has_stolen_potion, etc.
-    rng_seed: int          # para reproducibilidad
+    sword: int  # 0 sheathed, 2 drawn
+    flags: int  # shadow_initialized, has_stolen_potion, etc.
+    rng_seed: int  # para reproducibilidad
 ```
 
 ## Backend
