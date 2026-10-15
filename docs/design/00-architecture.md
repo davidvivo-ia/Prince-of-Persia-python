@@ -85,11 +85,11 @@ src/pop2026canon/
 ```python
 @dataclass(frozen=True, slots=True)
 class Frame:
-    id: int                    # 0..180
-    sprite: str                # nombre del sprite atlas
-    dx: int                    # desplazamiento horizontal en px (relativo al char)
-    dy: int                    # desplazamiento vertical en px
-    flags: int                 # bit flags: sound, weight shift, etc.
+    id: int  # 0..180
+    sprite: str  # nombre del sprite atlas
+    dx: int  # desplazamiento horizontal en px (relativo al char)
+    dy: int  # desplazamiento vertical en px
+    flags: int  # bit flags: sound, weight shift, etc.
 ```
 
 180 frames precomputados en `domain/frames.py` (constantes inmutables).
@@ -98,18 +98,20 @@ class Frame:
 
 ```python
 class ActKind(IntEnum):
-    FRAME = 0       # mostrar frame N
-    DX = 1          # tile-shift horizontal
-    DY = 2          # tile-shift vertical
-    SND = 3         # play sound N
-    SET_FALL = 4    # set fall_x, fall_y
-    JMP = 5         # jump to seq label
+    FRAME = 0  # mostrar frame N
+    DX = 1  # tile-shift horizontal
+    DY = 2  # tile-shift vertical
+    SND = 3  # play sound N
+    SET_FALL = 4  # set fall_x, fall_y
+    JMP = 5  # jump to seq label
+
 
 @dataclass(frozen=True, slots=True)
 class SeqAct:
     kind: ActKind
     arg: int
-    arg2: int = 0   # para SET_FALL (dx, dy)
+    arg2: int = 0  # para SET_FALL (dx, dy)
+
 
 Sequence = tuple[SeqAct, ...]
 ```
@@ -121,23 +123,23 @@ Sequence = tuple[SeqAct, ...]
 ```python
 @dataclass(frozen=True, slots=True)
 class Char:
-    charid: int             # 0..6, 0x18
-    room: int               # 0..23
-    curr_col: int           # 0..9 dentro de la sala
-    curr_row: int           # 0..2
-    x: int                  # 0..13 px sub-tile
-    y: int                  # 0..62 px sub-tile
-    direction: int          # -1 left, +1 right
-    frame: int              # ID actual
-    curr_seq_idx: int       # posición en seqtbl
-    action: int             # action_0..action_99
-    fall_x: int             # momentum horizontal en caída
-    fall_y: int             # velocidad vertical de caída
+    charid: int  # 0..6, 0x18
+    room: int  # 0..23
+    curr_col: int  # 0..9 dentro de la sala
+    curr_row: int  # 0..2
+    x: int  # 0..13 px sub-tile
+    y: int  # 0..62 px sub-tile
+    direction: int  # -1 left, +1 right
+    frame: int  # ID actual
+    curr_seq_idx: int  # posición en seqtbl
+    action: int  # action_0..action_99
+    fall_x: int  # momentum horizontal en caída
+    fall_y: int  # velocidad vertical de caída
     hp_curr: int
     hp_max: int
-    sword: int              # 0 sheathed, 2 drawn
-    alive: int              # -1 vivo, >=0 frames muerto
-    repeat: int             # iteraciones del seq actual
+    sword: int  # 0 sheathed, 2 drawn
+    alive: int  # -1 vivo, >=0 frames muerto
+    repeat: int  # iteraciones del seq actual
 ```
 
 Coincide 1-a-1 con `char_type` de `types.h`.
@@ -147,8 +149,8 @@ Coincide 1-a-1 con `char_type` de `types.h`.
 ```python
 @dataclass(frozen=True, slots=True)
 class Room:
-    fg: tuple[int, ...]            # 30 tiles foreground (10x3)
-    bg: tuple[int, ...]            # 30 tiles background/modifier
+    fg: tuple[int, ...]  # 30 tiles foreground (10x3)
+    bg: tuple[int, ...]  # 30 tiles background/modifier
     links: tuple[int, int, int, int]  # N, S, E, W → room idx o 0 (wall)
     guards: tuple[GuardSpawn, ...]
 ```
@@ -158,11 +160,11 @@ class Room:
 ```python
 @dataclass(frozen=True, slots=True)
 class Level:
-    number: int                # 1..14
-    rooms: tuple[Room, ...]    # 24 elementos (huecos = empty room)
-    start_room: int            # 1..24
-    start_col: int             # 0..9
-    start_row: int             # 0..2
+    number: int  # 1..14
+    rooms: tuple[Room, ...]  # 24 elementos (huecos = empty room)
+    start_room: int  # 1..24
+    start_col: int  # 0..9
+    start_row: int  # 0..2
     start_direction: int
     events: tuple[Event, ...]  # shadow_appear, skeleton_wake, etc.
 ```
@@ -174,11 +176,11 @@ class Level:
 class Game:
     level: Level
     kid: Char
-    others: tuple[Char, ...]   # shadow, guards, princess, mouse, vizier
-    state: LevelState          # gates abiertas, loose caídos, potions consumidas
-    time_left_minutes: int     # 60..0
-    time_left_ticks: int       # 0..719
-    flags: int                 # bits: shadow_initialized, sword_picked, etc.
+    others: tuple[Char, ...]  # shadow, guards, princess, mouse, vizier
+    state: LevelState  # gates abiertas, loose caídos, potions consumidas
+    time_left_minutes: int  # 60..0
+    time_left_ticks: int  # 0..719
+    flags: int  # bits: shadow_initialized, sword_picked, etc.
 ```
 
 ## 5. Loop

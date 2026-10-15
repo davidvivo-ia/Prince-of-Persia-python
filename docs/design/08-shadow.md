@@ -15,7 +15,7 @@
 @dataclass(frozen=True)
 class ShadowState:
     initialized: bool = False
-    encounter: int = 0    # contador de encounters resueltos
+    encounter: int = 0  # contador de encounters resueltos
     has_stolen_potion: bool = False
     fused: bool = False
 ```
@@ -82,7 +82,9 @@ def shadow_tick(game: Game) -> Game:
         if shares_cell(new_shadow, kid):
             new_kid = replace(kid, hp_max=kid.hp_max + 1, hp_curr=kid.hp_max + 1)
             new_game = remove_char(game, charid_1_shadow)
-            return replace(new_game, kid=new_kid, shadow_state=replace(new_game.shadow_state, fused=True))
+            return replace(
+                new_game, kid=new_kid, shadow_state=replace(new_game.shadow_state, fused=True)
+            )
         return replace_char(game, charid_1_shadow, new_shadow)
 
     # ... resto de niveles

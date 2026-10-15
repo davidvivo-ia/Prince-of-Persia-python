@@ -68,7 +68,9 @@ def tick_traps(game: Game) -> Game:
     new_states = dict(game.state.tile_states)
     for (room, col, row), st in game.state.tile_states.items():
         tile = game.level.rooms[room - 1].fg[row * 10 + col]
-        new_st = advance_trap(tile, st, kid_pos=(game.kid.room, game.kid.curr_col, game.kid.curr_row))
+        new_st = advance_trap(
+            tile, st, kid_pos=(game.kid.room, game.kid.curr_col, game.kid.curr_row)
+        )
         new_states[(room, col, row)] = new_st
         # detectar instakill
         if kills_kid(tile, new_st, game.kid):

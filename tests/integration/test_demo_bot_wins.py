@@ -42,7 +42,7 @@ Fuera del set:
 """
 """Niveles que el bot debe ganar con seed=42 en menos de 12_000 ticks.
 
-Tras el rediseño puzzle-based (`puzzles.md`), los demás niveles
+Tras el rediseño puzzle-based (`docs/puzzles-v1.md`), los demás niveles
 implican: recoger sable + combatir (`03`, `07`, `10`, `12`, `14`, `15`),
 identificar caída segura entre suelos sueltos (`06`), o un salto
 con ventana estrecha tras pinchos (`08`) — todos jugables por

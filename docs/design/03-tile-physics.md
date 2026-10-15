@@ -18,10 +18,11 @@ verticales). El movimiento se aplica como `dx`/`dy` en cada acto de
 Replicando `seg006.c`:
 
 ```python
-FALLING_SPEED_MAX = 33     # px sub-tile / tick
-FALLING_SPEED_ACCEL = 3    # incremento por tick
+FALLING_SPEED_MAX = 33  # px sub-tile / tick
+FALLING_SPEED_ACCEL = 3  # incremento por tick
 FALLING_SPEED_MAX_FEATHER = 4
 FALLING_SPEED_ACCEL_FEATHER = 1
+
 
 def fall_accel(char: Char, has_feather: bool) -> Char:
     if char.action != action_4_in_freefall:
@@ -29,6 +30,7 @@ def fall_accel(char: Char, has_feather: bool) -> Char:
     a = FALLING_SPEED_ACCEL_FEATHER if has_feather else FALLING_SPEED_ACCEL
     mx = FALLING_SPEED_MAX_FEATHER if has_feather else FALLING_SPEED_MAX
     return replace(char, fall_y=min(mx, char.fall_y + a))
+
 
 def fall_speed(char: Char) -> Char:
     new_y = char.y + char.fall_y
@@ -44,13 +46,17 @@ def normalize_to_cell(char: Char) -> Char:
     col, x = char.curr_col, char.x
     row, y = char.curr_row, char.y
     while x >= 14:
-        x -= 14; col += 1
+        x -= 14
+        col += 1
     while x < 0:
-        x += 14; col -= 1
+        x += 14
+        col -= 1
     while y >= 63:
-        y -= 63; row += 1
+        y -= 63
+        row += 1
     while y < 0:
-        y += 63; row -= 1
+        y += 63
+        row -= 1
     return replace(char, curr_col=col, curr_row=row, x=x, y=y)
 ```
 
@@ -99,7 +105,8 @@ def check_grab(char: Char, cmd: Command, room: Room) -> Char | None:
         curr_seq_id=SEQ_15_GRAB_LEDGE_MIDAIR,
         curr_seq_idx=0,
         action=action_6_hang_straight,
-        fall_y=0, fall_x=0,
+        fall_y=0,
+        fall_x=0,
     )
 ```
 

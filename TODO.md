@@ -2,15 +2,23 @@
 
 ## Motor canon `pop2026canon` — estado
 
-> **Cerrado** en canon-0.2.0 (15-may-2026). Suite 532 verdes, mypy
-> strict + ruff limpios. Coexiste con el motor v1.0 original.
+> **Al día** en canon-0.22.0 (15-oct-2026): suite de 1422 tests en
+> verde, `mypy --strict` y `ruff` limpios, CI en GitHub Actions con
+> Python 3.13 y 3.14. Ver `CHANGELOG.md` para lo entregado.
 >
-> Pendientes residuales (no bloquean gameplay):
+> Pendientes del motor canon (no bloquean el juego):
 > - Los ~50 sequence IDs cosméticos restantes del seqtbl.c (variaciones
->   de animación sin impacto mecánico — el motor cubre el 100% de la
->   lógica jugable con las 40 secuencias actuales).
+>   de animación sin impacto mecánico).
 > - Frame timing byte-perfect contra una copia legal de LEVELS.DAT.
-> - Validación cross-platform Windows (sólo Linux probado).
+> - Validación manual en Windows y macOS (la suite corre sin ventana).
+> - Más idiomas además de español e inglés (`presentation/i18n.py`).
+> - Poses propias para la princesa en las cinemáticas (usa las del
+>   esqueleto común).
+
+## Motor v1.0 `pop2026` (legado)
+
+Los planes antiguos de este motor viven en `docs/roadmap-v2.md`,
+`docs/plan-v4.md` y `docs/puzzles-v1.md`.
 
 ## Limitaciones conocidas v1.0
 

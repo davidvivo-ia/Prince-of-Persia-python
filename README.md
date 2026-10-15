@@ -147,6 +147,9 @@ Ver [`docs/architecture.md`](docs/architecture.md) y
 - [`docs/design.md`](docs/design.md) — sistema visual, paleta,
   tipografía, audio, accesibilidad.
 - [`docs/adr/`](docs/adr) — Architecture Decision Records.
+- [`docs/design/`](docs/design) — diseño por subsistema del motor canon.
+- [`docs/roadmap-v2.md`](docs/roadmap-v2.md), [`docs/plan-v4.md`](docs/plan-v4.md),
+  [`docs/puzzles-v1.md`](docs/puzzles-v1.md) — planes del motor v1.0.
 - [`docs/postmortem.md`](docs/postmortem.md) — qué se ganó, qué se
   perdió, qué dice del oficio.
 

@@ -8,24 +8,25 @@ en `guards_skill[24]`. Tabla canónica (reverso de SDLPoP):
 ```python
 @dataclass(frozen=True)
 class GuardSkill:
-    prob_block: float       # 0..1 probabilidad de parry tras strike enemigo
+    prob_block: float  # 0..1 probabilidad de parry tras strike enemigo
     prob_strike_after_block: float
-    refractory: int         # ticks de descanso tras un movimiento
-    advance_chance: float   # prob de hacer advance vs idle
+    refractory: int  # ticks de descanso tras un movimiento
+    advance_chance: float  # prob de hacer advance vs idle
+
 
 GUARD_SKILLS: tuple[GuardSkill, ...] = (
     GuardSkill(0.10, 0.20, 12, 0.10),  # skill 0: torpe
     GuardSkill(0.20, 0.30, 10, 0.20),
-    GuardSkill(0.30, 0.40, 8,  0.30),
-    GuardSkill(0.40, 0.50, 7,  0.40),
-    GuardSkill(0.50, 0.55, 6,  0.50),
-    GuardSkill(0.60, 0.60, 5,  0.55),  # skill 5: estándar
-    GuardSkill(0.65, 0.70, 5,  0.60),
-    GuardSkill(0.75, 0.75, 4,  0.65),
-    GuardSkill(0.80, 0.80, 4,  0.70),
-    GuardSkill(0.85, 0.85, 3,  0.75),
-    GuardSkill(0.90, 0.90, 3,  0.80),
-    GuardSkill(0.95, 0.95, 2,  0.90),  # skill 11: jaffar
+    GuardSkill(0.30, 0.40, 8, 0.30),
+    GuardSkill(0.40, 0.50, 7, 0.40),
+    GuardSkill(0.50, 0.55, 6, 0.50),
+    GuardSkill(0.60, 0.60, 5, 0.55),  # skill 5: estándar
+    GuardSkill(0.65, 0.70, 5, 0.60),
+    GuardSkill(0.75, 0.75, 4, 0.65),
+    GuardSkill(0.80, 0.80, 4, 0.70),
+    GuardSkill(0.85, 0.85, 3, 0.75),
+    GuardSkill(0.90, 0.90, 3, 0.80),
+    GuardSkill(0.95, 0.95, 2, 0.90),  # skill 11: jaffar
 )
 ```
 
@@ -36,8 +37,8 @@ GUARD_SKILLS: tuple[GuardSkill, ...] = (
 ```python
 class GuardState(IntEnum):
     PATROL = 0
-    ALERT = 1     # vio al kid, va hacia él
-    COMBAT = 2    # dentro de rango de espada
+    ALERT = 1  # vio al kid, va hacia él
+    COMBAT = 2  # dentro de rango de espada
     DEAD = 3
 ```
 
