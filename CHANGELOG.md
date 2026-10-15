@@ -6,6 +6,36 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.23.0] — 2026-10-15
+
+### Gráficos 2026: luz con relieve, sombras y post-proceso de cine
+
+- **Luz horneada con relieve en la pared**: de la propia mampostería se
+  deriva un mapa de normales (gradiente de la luminancia) y cada sillar
+  recibe luz difusa de las antorchas, velas, cristales y ventanas de la
+  sala según mire o no hacia la luz — bordes que brillan por el lado de
+  la llama y se apagan por el otro, caída de la luz con la distancia y
+  luz ambiente direccional que marca el relieve lejos de toda llama.
+  Se calcula una vez por sala (``backdrop(room, theme, lights)``) y se
+  cachea; el mapa de luz por frame sigue aportando el parpadeo.
+- **Losas, muros, columnas y rejas con la misma luz**: la capa de tiles
+  recibe la caída por distancia y el color de cada luz de la sala
+  (``tile_light``, cacheada por conjunto de luces), así que una columna
+  junto a una vela se enciende y una losa lejos de la antorcha se apaga.
+- **Oclusión de contacto**: la pared se oscurece alrededor de losas,
+  muros y columnas, como la sombra suave que proyecta la geometría.
+- **Sombras en la pared**: cada personaje proyecta su silueta
+  difuminada sobre el fondo desde la luz fija más cercana — se aleja de
+  la llama, se estira y se aclara con la distancia.
+- **Niebla sólo sobre suelo**: se arrastra por las losas en vez de
+  flotar en el vacío; más baja y más tenue.
+- **Post-proceso de cine** (ajuste "Postproceso de cine", en opciones):
+  grano de película animado en todas las pantallas y aberración
+  cromática en los bordes del mundo; ~1,5 ms por frame en HD.
+- Rendimiento: el dibujo de una sala sigue por debajo de 16 ms de
+  mediana en el lienzo HD; la luz horneada añade 60-100 ms al primer
+  pintado de cada sala (ya costaba 100-500 ms generar la pared).
+
 ## [canon-0.22.0] — 2026-10-14
 
 ### Vitaminado: progreso, cinemáticas, idioma y más vida

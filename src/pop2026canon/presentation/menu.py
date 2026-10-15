@@ -174,6 +174,12 @@ def options_menu() -> Menu:
             MenuItem("particles", "Partículas", "toggle"),
             MenuItem("crt_filter", "Filtro CRT", "toggle"),
             MenuItem("bloom", "Resplandor", "toggle", hint="Halo de llamas y destellos."),
+            MenuItem(
+                "cinematic",
+                "Postproceso de cine",
+                "toggle",
+                hint="Grano de película y aberración cromática.",
+            ),
             MenuItem("screen_shake", "Sacudida de cámara", "toggle", hint="Accesibilidad."),
             MenuItem(
                 "flashes", "Destellos de daño", "toggle", hint="Accesibilidad: fotosensibilidad."

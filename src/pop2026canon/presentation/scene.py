@@ -16,7 +16,7 @@ import pygame
 from pop2026canon.domain.game import Game
 from pop2026canon.infrastructure.settings import Settings
 from pop2026canon.presentation import renderer
-from pop2026canon.presentation.backdrop import backdrop
+from pop2026canon.presentation.backdrop import backdrop, light_tiles
 from pop2026canon.presentation.char_atlas import WARM_FRAMES, CharPalette, is_cached, sprite
 from pop2026canon.presentation.fx import (
     FxEvent,
@@ -26,12 +26,16 @@ from pop2026canon.presentation.fx import (
     PostFx,
     RoomTransition,
     bloom,
+    chromatic_aberration,
+    contact_occlusion,
     desaturate,
     detect_fx_events,
     draw_atmosphere,
     draw_char_shadows,
+    draw_wall_shadows,
     grade,
     rewind_filter,
+    room_lights,
     transition_direction,
 )
 from pop2026canon.presentation.hud import (
@@ -80,6 +84,7 @@ class Scene:
         self._world = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
         self._last_frame = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
         self._base = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
+        self._tiles = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h), pygame.SRCALPHA)
         self._base_key: tuple[object, ...] | None = None
         self._warm: list[tuple[int, CharPalette, int, int]] = []
         self.slowmo = 0
@@ -219,18 +224,27 @@ class Scene:
         s = self.settings
         th = theme_for(game.level.number)
         cells = renderer.room_cells(game)
-        key = (game.level.number, game.kid.room, cells)
+        lights = room_lights(game) if s.lighting else ()
+        key = (game.level.number, game.kid.room, cells, lights)
         if key != self._base_key:
             # Pared + tiles: sólo se recompone si cambia algo (rejas,
             # trampas, losas...). Por frame basta un blit.
             base = self._base
             base.fill((0, 0, 0))
-            base.blit(backdrop(game.kid.room, th.key), (0, LAYOUT.hud_top))
-            renderer.draw_cells(base, game.kid.room, cells, th.palace, th.key)
+            base.blit(backdrop(game.kid.room, th.key, lights), (0, LAYOUT.hud_top))
+            tiles = self._tiles
+            tiles.fill((0, 0, 0, 0))
+            renderer.draw_cells(tiles, game.kid.room, cells, th.palace, th.key)
+            if s.lighting:
+                contact_occlusion(base, tiles)
+                tiles = light_tiles(tiles, lights, LAYOUT.hud_top)
+            base.blit(tiles, (0, 0))
             self._base_key = key
         world.blit(self._base, (0, 0))
         renderer.draw_animated(world, game, cells, t)
         if chars:
+            if s.lighting:
+                draw_wall_shadows(world, game, prev, alpha, lights, t)
             draw_char_shadows(world, game, prev, alpha)
             renderer._draw_chars(world, game, prev, alpha)
         renderer._draw_front_tiles(world, game)
@@ -284,6 +298,8 @@ class Scene:
         canvas.fill((0, 0, 0))
         area = pygame.Rect(0, LAYOUT.hud_top, LAYOUT.window_w, LAYOUT.room_h)
         canvas.blit(world, (ox, LAYOUT.hud_top + oy), area)
+        if s.cinematic:
+            chromatic_aberration(canvas, area)
         if hud:
             draw_hud(
                 canvas,

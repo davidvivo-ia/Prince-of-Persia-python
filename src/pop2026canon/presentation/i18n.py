@@ -60,6 +60,8 @@ EN: dict[str, str] = {
     "Filtro CRT": "CRT filter",
     "Resplandor": "Bloom",
     "Halo de llamas y destellos.": "Glow of flames and sparks.",
+    "Postproceso de cine": "Cinematic post-processing",
+    "Grano de película y aberración cromática.": "Film grain and chromatic aberration.",
     "Sacudida de cámara": "Screen shake",
     "Accesibilidad.": "Accessibility.",
     "Destellos de daño": "Damage flashes",

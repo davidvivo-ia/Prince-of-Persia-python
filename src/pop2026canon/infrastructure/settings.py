@@ -48,6 +48,8 @@ class Settings:
     particles: bool = True
     bloom: bool = True
     """Resplandor de llamas, pociones y chispas (post-proceso)."""
+    cinematic: bool = True
+    """Grano de película y aberración cromática (post-proceso de cine)."""
     game_mode: str = "modern"
     difficulty: str = "normal"
     """``hard``: guardias dos puntos más diestros y 45 minutos de reloj."""

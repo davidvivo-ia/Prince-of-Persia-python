@@ -44,11 +44,14 @@ uv run pop2026canon --levels-dat RUTA  # con los niveles de tu copia original
   altura (cornisas, plataformas, muros macizos) y un tema visual propio — mazmorra con goteras, osario con telarañas, galería de
   mármol a la luz de la luna, cavernas con cristales, tumba con
   jeroglíficos, torre al alba, dominios del visir, aposentos con rosas.
-- **Luz y ambiente**: antorchas que iluminan la piedra, mazmorra fría y
-  palacio cálido, *bloom*, rayos de luz, niebla baja, partículas
-  (polvo, chispas, sangre, cascotes, ascuas), viñeta, sacudida de
-  cámara, *hit-stop* en cada estocada y transición deslizante entre
-  salas.
+- **Luz y ambiente**: la pared tiene relieve y cada sillar recibe la
+  luz de las antorchas según mire o no hacia la llama (mapa de normales
+  horneado por sala), oclusión de contacto alrededor de la geometría,
+  sombras de los personajes proyectadas en la pared, mazmorra fría y
+  palacio cálido, *bloom*, rayos de luz, niebla sobre las losas,
+  partículas (polvo, chispas, sangre, cascotes, ascuas), viñeta, grano
+  de película y aberración cromática opcionales, sacudida de cámara,
+  *hit-stop* en cada estocada y transición deslizante entre salas.
 - **Audio sintetizado**: choques metálicos, pasos, rejas; música
   procedural en modo *hijaz* con capa de darbuka en combate; estéreo.
 - **Mando** (Xbox, PlayStation, Switch Pro, Steam Deck) y teclado.

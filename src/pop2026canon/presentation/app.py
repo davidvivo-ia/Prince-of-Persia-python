@@ -38,7 +38,7 @@ from pop2026canon.infrastructure.audio import SND_REWIND, SND_UI_MOVE, SND_UI_SE
 from pop2026canon.infrastructure.settings import Settings
 from pop2026canon.presentation import fonts
 from pop2026canon.presentation.display import Display
-from pop2026canon.presentation.fx import FxEvent, FxKind, level_is_palace
+from pop2026canon.presentation.fx import FxEvent, FxKind, film_grain, level_is_palace
 from pop2026canon.presentation.i18n import set_language, tr
 from pop2026canon.presentation.input_device import InputHub, UiAction
 from pop2026canon.presentation.layout import LAYOUT, px
@@ -655,6 +655,8 @@ class GameApp:
                 draw_controls(c, self.now, self.input.pad_connected)
             elif ov.menu is not None:
                 draw_menu(c, ov.menu, self.settings, self.now, width=420)
+        if self.settings.cinematic:
+            film_grain(c, self.now)
 
     # --- bucle -------------------------------------------------------------
 
