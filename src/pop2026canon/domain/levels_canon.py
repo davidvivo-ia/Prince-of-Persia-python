@@ -461,7 +461,7 @@ def _l1() -> Level:
         _ascii("##########", "..........", "____...___"),  # 3 el pozo
         _ascii("##########", "...^^.....", "_______T__"),  # 4 galería alta
         _ascii("##########", "..........", "___S_S____"),  # 5 pinchos
-        _ascii("##########", ".........#", "_____L___#"),  # 6 losa → 12
+        _ascii("##########", ".........#", "__y_PL___#"),  # 6 tiempo, placa del tesoro, losa → 12
         # --- Piso medio ---------------------------------------------------
         _ascii("##.___####", "..........", "#____T____"),  # 7 bajo las losas
         _ascii("##########", "..s_......", "____T__P__"),  # 8 la espada y la placa
@@ -472,8 +472,10 @@ def _l1() -> Level:
             "__T_______",
             guards=(G_S(col=7, row=2, direction=-1, skill=0),),
         ),
-        _ascii("##########", "..........", "______L___"),  # 11 sólo se sale cayendo
-        _ascii("###..__###", "..........", "___H______"),  # 12 la poción grande
+        _ascii("##########", "..........", "___X__L__#"),  # 11 cuchilla y la losa: no te pares
+        _ascii(
+            "###..__###", "..........", "#H_G______"
+        ),  # 12 el tesoro tras la reja: se cae desde la 6
         # --- Piso bajo ----------------------------------------------------
         _ascii("##########", "#...^^h...", "#__P______"),  # 13 placa de la salida
         _ascii("##########", "..........", "____XX____"),  # 14 cuchillas
@@ -484,12 +486,18 @@ def _l1() -> Level:
             "____T_____",
             guards=(G_S(col=5, row=2, direction=0, skill=0),),
         ),
-        _ascii("####___.##", "..........", "___T______"),  # 17 bajo la losa de la 11
-        _ascii("##########", ".........#", "_______Dd#"),  # 18 la salida
+        _ascii("####___.##", "..........", "_S_T______"),  # 17 pinchos por el lado del guardia
+        _ascii(  # 18 la salida: el portero
+            "##########",
+            ".........#",
+            "___h___Dd#",
+            guards=(G_S(col=5, row=2, direction=-1, skill=0),),
+        ),
     ]
     doorlinks = (
         DoorLink(plate_room=8, plate_col=7, plate_row=2, gate_room=9, gate_col=6, gate_row=2),
         DoorLink(plate_room=13, plate_col=3, plate_row=2, gate_room=18, gate_col=7, gate_row=2),
+        DoorLink(plate_room=6, plate_col=4, plate_row=2, gate_room=12, gate_col=1, gate_row=2),
     )
     return _build_level(
         number=1,
@@ -536,11 +544,11 @@ def _l2() -> Level:
             "__T____T__",
             guards=(G_S(col=5, row=2, direction=-1, skill=1),),
         ),
-        _ascii("##########", "..........", "___X__X___"),  # 3 cuchillas
-        _ascii("##########", "..........", "_P______G_"),  # 4 placa y reja: corre
+        _ascii("##########", "..........", "__X_X_X___"),  # 3 tres cuchillas
+        _ascii("##########", "..........", "_P__c___G_"),  # 4 placa, cierre y reja: salta y corre
         _ascii("##########", ".........#", "___...___#"),  # 5 el pozo
         _ascii("##########", "#..^^.....", "#__v______"),  # 6 fondo: frasco envenenado
-        _ascii("##########", "..........", "____h_____"),  # 7 poción
+        _ascii("##########", "..........", "___vh_____"),  # 7 veneno junto a la cura
         _ascii("##########", "..........", "____L_____"),  # 8 losa sobre la placa de 18
         _ascii(  # 9 placa de la salida, vigilada
             "##########",
@@ -551,9 +559,14 @@ def _l2() -> Level:
         _ascii("##########", ".....^^...", "___.______"),  # 10 agujero a la 20
         # --- Patio --------------------------------------------------------
         _ascii("##########", "#.........", "#__H______"),  # 11 la poción grande
-        _ascii("##########", "...^^.....", "_S__S_____"),  # 12 pinchos
+        _ascii("##########", "...^^.....", "_S__SS____"),  # 12 pinchos dobles
         _ascii("##########", "..........", "___T______"),  # 13
-        _ascii("##########", "..........", "__X___S___"),  # 14 cuchilla y pinchos
+        _ascii(  # 14 guardia entre la cuchilla y los pinchos
+            "##########",
+            "..........",
+            "__X___S___",
+            guards=(G_S(col=4, row=2, direction=-1, skill=2),),
+        ),
         _ascii("##.___####", "..........", "____T_____"),  # 15 bajo el pozo
         _ascii(  # 16 guardia
             "##########",
@@ -564,10 +577,16 @@ def _l2() -> Level:
         _ascii("##########", "..........", "__X___X___"),  # 17 cuchillas
         _ascii("####.#####", "......^^..", "____P_____"),  # 18 la placa de la reja
         _ascii("##########", "..........", "____c___T_"),  # 19 placa de cierre: sáltala
-        _ascii("##._.#####", "....^^....", "_G______Dd"),  # 20 reja, cornisa y salida
+        _ascii(  # 20 reja, cornisa, el portero y la salida
+            "##._.#####",
+            "....^^....",
+            "_G______Dd",
+            guards=(G_S(col=5, row=2, direction=-1, skill=3),),
+        ),
     ]
     doorlinks = (
         DoorLink(plate_room=4, plate_col=1, plate_row=2, gate_room=4, gate_col=8, gate_row=2),
+        DoorLink(plate_room=4, plate_col=4, plate_row=2, gate_room=4, gate_col=8, gate_row=2),
         DoorLink(plate_room=18, plate_col=4, plate_row=2, gate_room=20, gate_col=1, gate_row=2),
         DoorLink(plate_room=19, plate_col=4, plate_row=2, gate_room=20, gate_col=1, gate_row=2),
         DoorLink(plate_room=9, plate_col=2, plate_row=2, gate_room=20, gate_col=8, gate_row=2),
@@ -619,28 +638,39 @@ def _l3() -> Level:
             guards=(G_S(col=5, row=2, direction=-1, skill=2),),
         ),
         _ascii("##########", "..........", "__G___T___"),  # 7 la reja
-        _ascii("##########", "..........", "____S_S___"),  # 8 pinchos
+        _ascii("##########", "..........", "___S_S_S__"),  # 8 pinchos triples
         _ascii("##########", "..........", "____...___"),  # 9 pozo → 17
         # --- Galería baja -------------------------------------------------
         _ascii("###.__.###", "..^^......", "__________"),  # 10 bajo el pozo; se sube
         _ascii("####__.###", "..^^......", "#___h_____"),  # 11 bajo la losa; se sube
-        _ascii("#####.####", "..........", "_____P____"),  # 12 la placa de la reja
+        _ascii(  # 12 la placa de la reja y su portero
+            "#####.####",
+            "..........",
+            "_____P____",
+            guards=(G_S(col=2, row=2, direction=0, skill=2),),
+        ),
         _ascii("##########", ".........#", "_____y___#"),  # 13 poción del tiempo
-        _ascii("##########", "#........#", "#__X______"),  # 14
+        _ascii("##########", "#........#", "#__X_X____"),  # 14 cuchillas dobles
         _ascii(  # 15 guardia
             "##########",
             "..........",
             "___T______",
             guards=(G_S(col=5, row=2, direction=0, skill=2),),
         ),
-        _ascii("##########", "..........", "______Dd__"),  # 16 la salida
+        _ascii(  # 16 la salida: el portero
+            "##########",
+            "..........",
+            "__h___Dd__",
+            guards=(G_S(col=4, row=2, direction=-1, skill=3),),
+        ),
         _ascii("####___.##", "..........", "_______L__"),  # 17 bajo el pozo; losa → 18
         # --- Cripta -------------------------------------------------------
-        _ascii("####____.#", "........^^", "H__P______"),  # 18 placa de la salida
+        _ascii("####____.#", "........^^", "HG_P___P__"),  # 18 placa de la salida; tesoro tras reja
     ]
     doorlinks = (
         DoorLink(plate_room=12, plate_col=5, plate_row=2, gate_room=7, gate_col=2, gate_row=2),
         DoorLink(plate_room=18, plate_col=3, plate_row=2, gate_room=16, gate_col=6, gate_row=2),
+        DoorLink(plate_room=18, plate_col=7, plate_row=2, gate_room=18, gate_col=1, gate_row=2),
     )
     events = (Event(EventKind.SKELETON_WAKE, room=1, col=2),)
     return _build_level(
@@ -681,7 +711,12 @@ def _l4() -> Level:
     specs = [
         # --- Galería alta -------------------------------------------------
         _ascii("##########", "#.........", "#___T_____"),  # 1
-        _ascii("##########", "..........", "__S_S_S___"),  # 2 pinchos
+        _ascii(  # 2 guardia sobre los pinchos: pelea a paso corto
+            "##########",
+            "..........",
+            "__S_S_S___",
+            guards=(G_S(col=7, row=2, direction=-1, skill=3),),
+        ),
         _ascii("##########", "......^^..", "___.._____"),  # 3 pozo → 11
         _ascii("##########", "..........", "____T___P_"),  # 4 placa de la reja
         _ascii("_t__tt__t_", "..........", "_____M____"),  # 5 el espejo
@@ -696,8 +731,10 @@ def _l4() -> Level:
         _ascii("##########", "^^........", "____...___"),  # 9 pozo → 17
         _ascii("##########", "..........", "____.__Dd_"),  # 10 la salida
         # --- Galería oeste ------------------------------------------------
-        _ascii("##.__#####", "..........", "#___h_____"),  # 11 bajo el pozo
-        _ascii("##########", "..........", "____X_X___"),  # 12
+        _ascii(
+            "##.__#####", "..........", "#HG_P_hX__"
+        ),  # 11 bajo el pozo: tesoro, reja, placa, poción y cuchilla
+        _ascii("##########", "..........", "___X_X_X__"),  # 12 cuchillas triples
         _ascii("##########", "..........", "[_v_S_____"),  # 13 balcón, veneno
         _ascii(  # 14 guardia
             "##########",
@@ -711,13 +748,19 @@ def _l4() -> Level:
         _ascii("###.___###", "..........", "____.___T_"),  # 17 bajo el pozo; agujero → 19
         _ascii("###._.####", "..^^......", "_______L__"),  # 18 escalera a la 10; losa → 20
         _ascii("###._.####", "..^^......", "__________"),  # 19 escalera a la 17
-        _ascii("#####___##", "..........", "__P___f_T_"),  # 20 placa de la salida
+        _ascii(  # 20 placa de la salida, pluma y su portero
+            "#####___##",
+            "..........",
+            "__P___f_T_",
+            guards=(G_S(col=5, row=2, direction=-1, skill=3),),
+        ),
     ]
     doorlinks = (
         DoorLink(plate_room=4, plate_col=8, plate_row=2, gate_room=6, gate_col=1, gate_row=2),
         DoorLink(plate_room=15, plate_col=2, plate_row=2, gate_room=15, gate_col=8, gate_row=2),
         DoorLink(plate_room=15, plate_col=5, plate_row=2, gate_room=15, gate_col=8, gate_row=2),
         DoorLink(plate_room=20, plate_col=2, plate_row=2, gate_room=10, gate_col=7, gate_row=2),
+        DoorLink(plate_room=11, plate_col=4, plate_row=2, gate_room=11, gate_col=2, gate_row=2),
     )
     events = (Event(EventKind.SHADOW_MIRROR, room=5, col=5),)
     return _build_level(
@@ -755,7 +798,7 @@ def _l5() -> Level:
         _ascii("##########", "^^^.......", "______S___"),  # 3
         _ascii("_t__t__t__", "...^.^....", "____h_____"),  # 4 la poción robada
         _ascii("##########", "..........", "__P_____L_"),  # 5 placa; losa al vacío
-        _ascii("##########", "..........", "____X_____"),  # 6 cuchilla
+        _ascii("##########", "..........", "__c_X_____"),  # 6 placa de cierre ante la cuchilla
         _ascii("##########", "..........", "___G_...__"),  # 7 reja y pozo → 14
         _ascii(  # 8 arena
             "##########",
@@ -772,12 +815,24 @@ def _l5() -> Level:
         ),
         # --- Ala oeste ----------------------------------------------------
         _ascii("##########", "#.........", "#___k_____"),  # 11 huesos
-        _ascii("###___.###", ".^^.......", "__________"),  # 12 bajo las losas; se sube
-        _ascii("##########", "..........", "____h____]"),  # 13 balcón y poción
+        _ascii(  # 12 bajo las losas; guardia; se sube
+            "###___.###",
+            ".^^.......",
+            "__________",
+            guards=(G_S(col=6, row=2, direction=-1, skill=3),),
+        ),
+        _ascii(
+            "##########", "..........", "__hPSG_H_]"
+        ),  # 13 balcón: placa, pinchos, reja y tesoro
         # --- Ala este -----------------------------------------------------
         _ascii("####.___.#", "...^^.....", "__________"),  # 14 bajo el pozo; se sube
         _ascii("##########", "...|.|.|..", "__________"),  # 15 celosías
-        _ascii("##########", "..........", "_____XS___"),  # 16
+        _ascii(  # 16 guardia entre la cuchilla y los pinchos
+            "##########",
+            "..........",
+            "___X_S____",
+            guards=(G_S(col=7, row=2, direction=-1, skill=3),),
+        ),
         _ascii("##########", "....^^....", "__________"),  # 17
         _ascii("##########", "..........", "___T___T__"),  # 18
         _ascii("##########", "....b.b...", "____B_B___"),  # 19
@@ -790,7 +845,9 @@ def _l5() -> Level:
     ]
     doorlinks = (
         DoorLink(plate_room=5, plate_col=2, plate_row=2, gate_room=7, gate_col=3, gate_row=2),
+        DoorLink(plate_room=6, plate_col=2, plate_row=2, gate_room=7, gate_col=3, gate_row=2),
         DoorLink(plate_room=20, plate_col=1, plate_row=2, gate_room=10, gate_col=7, gate_row=2),
+        DoorLink(plate_room=13, plate_col=3, plate_row=2, gate_room=13, gate_col=5, gate_row=2),
     )
     events = (Event(EventKind.SHADOW_STEAL, room=4),)
     return _build_level(
@@ -838,7 +895,7 @@ def _l6() -> Level:
         _ascii("##########", "....^^^...", "_____L____"),  # 6 losa sobre la placa de 11
         _ascii("##########", "...|.|.|..", "____..____"),  # 7 pozo → 12
         _ascii("##########", "^^^.......", "_____G____"),  # 8 la reja
-        _ascii("##########", "..........", "___X______"),  # 9
+        _ascii("##########", "..........", "___X______"),  # 9 cuchilla
         _ascii(  # 10 la salida
             "##########",
             ".........#",
@@ -846,8 +903,15 @@ def _l6() -> Level:
             guards=(G_S(col=3, row=2, direction=0, skill=4),),
         ),
         # --- Terraza baja -------------------------------------------------
-        _ascii("#####.####", "..........", "#_h__P____"),  # 11 la placa de la reja
-        _ascii("###.__.###", "..^^......", "__________"),  # 12 bajo el pozo; se sube
+        _ascii(
+            "#####.####", "..........", "#_hv_P____"
+        ),  # 11 la placa de la reja; veneno junto a la cura
+        _ascii(  # 12 bajo el pozo: un guardia te espera al caer; se sube
+            "###.__.###",
+            "..^^......",
+            "__________",
+            guards=(G_S(col=8, row=2, direction=-1, skill=4),),
+        ),
         _ascii("##########", "..........", "[_________"),  # 13 balcón
         _ascii("##########", "..........", "___S_S_S__"),  # 14 pinchos
         _ascii(  # 15 guardia
@@ -856,15 +920,23 @@ def _l6() -> Level:
             "_____T____",
             guards=(G_S(col=5, row=2, direction=-1, skill=4),),
         ),
-        _ascii("##########", "....^^^...", "__________"),  # 16
-        _ascii("##########", "..........", "_____X____"),  # 17
-        _ascii("##########", ".........#", "__P_H____#"),  # 18 placa de la salida
+        _ascii(  # 16 guardia bajo la cornisa
+            "##########",
+            "....^^^...",
+            "__________",
+            guards=(G_S(col=7, row=2, direction=-1, skill=4),),
+        ),
+        _ascii("##########", "..........", "_____X____"),  # 17 cuchilla
+        _ascii(
+            "##########", ".........#", "__P_GXH__#"
+        ),  # 18 placa de la salida; reja, cuchilla y tesoro
     ]
     doorlinks = (
         DoorLink(plate_room=2, plate_col=2, plate_row=2, gate_room=2, gate_col=7, gate_row=2),
         DoorLink(plate_room=2, plate_col=5, plate_row=2, gate_room=2, gate_col=7, gate_row=2),
         DoorLink(plate_room=11, plate_col=5, plate_row=2, gate_room=8, gate_col=5, gate_row=2),
         DoorLink(plate_room=18, plate_col=2, plate_row=2, gate_room=10, gate_col=7, gate_row=2),
+        DoorLink(plate_room=18, plate_col=2, plate_row=2, gate_room=18, gate_col=4, gate_row=2),
     )
     events = (Event(EventKind.SHADOW_STEP, room=1, extra=43),)
     return _build_level(
@@ -920,14 +992,23 @@ def _l7() -> Level:
         # --- Piso medio ---------------------------------------------------
         _ascii("##.___.###", ".^^.......", "#___f..___"),  # 8 pluma y pozo de 3 pisos
         _ascii("##########", "..........", "____LL____"),  # 9 losas → 16
-        _ascii("##########", ".........#", "__X_h_X__#"),  # 10 fondo de saco
+        _ascii("##########", ".........#", "_XX_h_XX_#"),  # 10 fondo de saco: cuchillas dobles
         _ascii("##########", "#.........", "#_P____L__"),  # 11 placa de la salida; losa → 18
         _ascii("##########", "....b.....", "____B_____"),  # 12
-        _ascii("##########", "...^^.....", "__S__h____"),  # 13 poción
+        _ascii(  # 13 poción con guardia
+            "##########",
+            "...^^.....",
+            "__S__h____",
+            guards=(G_S(col=8, row=2, direction=-1, skill=5),),
+        ),
         _ascii("####.___##", "..........", "____T_____"),  # 14 bajo el pozo
         # --- Piso bajo ----------------------------------------------------
-        _ascii("#####..###", "..........", "_____T____"),  # 15 fondo del pozo
-        _ascii("###.__.###", "..........", "__________"),  # 16 bajo las losas
+        _ascii(
+            "#####..###", "..........", "_G_y_T____"
+        ),  # 15 fondo del pozo; tesoro de tiempo tras reja
+        _ascii(
+            "###.__.###", "..........", "____P_____"
+        ),  # 16 bajo las losas: la losa cae sobre la placa
         _ascii("##########", "..........", "____LLL___"),  # 17 losas sobre el vacío
         _ascii("######_.##", "...|...|..", "_____T____"),  # 18 bajo la losa de la 11
         _ascii(  # 19 guardia
@@ -937,7 +1018,12 @@ def _l7() -> Level:
             guards=(G_S(col=4, row=2, direction=0, skill=5),),
         ),
         _ascii("##########", "...b..b...", "___B__B___"),  # 20
-        _ascii("##########", "....^^....", "__X___X___"),  # 21 cuchillas
+        _ascii(  # 21 guardia entre las cuchillas
+            "##########",
+            "....^^....",
+            "__X___X___",
+            guards=(G_S(col=4, row=2, direction=0, skill=5),),
+        ),
         _ascii(  # 22 la salida
             "##########",
             ".........#",
@@ -948,6 +1034,7 @@ def _l7() -> Level:
     doorlinks = (
         DoorLink(plate_room=4, plate_col=5, plate_row=2, gate_room=7, gate_col=2, gate_row=2),
         DoorLink(plate_room=11, plate_col=2, plate_row=2, gate_room=22, gate_col=7, gate_row=2),
+        DoorLink(plate_room=16, plate_col=4, plate_row=2, gate_room=15, gate_col=1, gate_row=2),
     )
     return _build_level(
         number=7,
@@ -980,7 +1067,7 @@ def _l8() -> Level:
         _ascii("##########", "#........#", "#___...__#"),  # 1 inicio: pozo → 11
         _ascii("##########", "#.........", "#__L_X____"),  # 2 fondo de saco
         _ascii("##########", "....|.|...", "__________"),  # 3 celosías
-        _ascii("##########", "..........", "_____LLL__"),  # 4 losas → 14
+        _ascii("##########", "..........", "____LLLL__"),  # 4 losas cuádruples → 14
         _ascii("##########", "...b..b...", "___B__B___"),  # 5
         _ascii("##########", "..........", "_______S__"),  # 6 pinchos
         _ascii("##########", "..........", "_____X____"),  # 7 cuchilla
@@ -988,17 +1075,29 @@ def _l8() -> Level:
         _ascii("##########", "..........", "[____T____"),  # 9 balcón
         _ascii("##########", "..........", "_____._GDd"),  # 10 reja del ratón y salida
         # --- Galería baja -------------------------------------------------
-        _ascii("###.___.##", "..........", "#_________"),  # 11 bajo el pozo
+        _ascii(  # 11 bajo el pozo: el primer guardia te espera al caer
+            "###.___.##",
+            "..........",
+            "#_________",
+            guards=(G_S(col=8, row=2, direction=-1, skill=4),),
+        ),
         _ascii("###_######", "..........", "___X__X___"),  # 12 cuchillas
         _ascii("##########", "..........", "__L__S____"),  # 13 losa al vacío, pinchos
-        _ascii("####.___##", "..........", "____P_____"),  # 14 placa de la salida
+        _ascii(  # 14 placa de la salida y su portero
+            "####.___##",
+            "..........",
+            "____P_____",
+            guards=(G_S(col=7, row=2, direction=-1, skill=4),),
+        ),
         _ascii(  # 15 guardia
             "##########",
             "...b..b...",
             "___B__B___",
             guards=(G_S(col=4, row=2, direction=0, skill=4),),
         ),
-        _ascii("##########", "..........", "____k_L___"),  # 16 huesos, losa al vacío
+        _ascii(
+            "##########", "..........", "____k_L___"
+        ),  # 16 huesos: despierta el esqueleto; losa al vacío
         _ascii("##########", "....^^....", "_____XX___"),  # 17 cuchillas dobles
         _ascii("##########", "...|.|.|..", "__________"),  # 18 celosías
         _ascii(  # 19 guardia
@@ -1012,7 +1111,10 @@ def _l8() -> Level:
     doorlinks = (
         DoorLink(plate_room=14, plate_col=4, plate_row=2, gate_room=10, gate_col=8, gate_row=2),
     )
-    events = (Event(EventKind.MOUSE_APPEAR, room=10),)
+    events = (
+        Event(EventKind.MOUSE_APPEAR, room=10),
+        Event(EventKind.SKELETON_WAKE, room=16, col=3),
+    )
     return _build_level(
         number=8,
         name="The Caverns",
@@ -1063,20 +1165,32 @@ def _l9() -> Level:
         _ascii("##########", "^^^.......", "____X_X___"),  # 9 cuchillas
         _ascii("##########", ".........#", "_______Dd#"),  # 10 la salida
         # --- Cripta -------------------------------------------------------
-        _ascii("##########", "#.........", "#___k_h___"),  # 11
-        _ascii("##########", "..........", "____X_X___"),  # 12
+        _ascii("##########", "#.........", "#___k_h___"),  # 11 huesos y poción
+        _ascii(  # 12 guardia entre cuchillas
+            "##########",
+            "..........",
+            "____X_X___",
+            guards=(G_S(col=8, row=2, direction=-1, skill=5),),
+        ),
         _ascii("##########", "....^^....", "__________"),  # 13
         _ascii("##########", "..........", "___X__X___"),  # 14
         _ascii("##########", "...|.|.|..", "__________"),  # 15
         _ascii("##########", "..........", "____P_____"),  # 16 placa de la salida
-        _ascii("###.___.##", "..^^......", "__________"),  # 17 bajo el pozo; se sube
+        _ascii(
+            "###.___.##", "..^^......", "__________"
+        ),  # 17 bajo el pozo: despierta el esqueleto; se sube
         _ascii(  # 18 guardia
             "##########",
             "..........",
             "___T______",
             guards=(G_S(col=5, row=2, direction=-1, skill=5),),
         ),
-        _ascii("##########", "....^^....", "_____H____"),  # 19 poción grande
+        _ascii(  # 19 poción grande tras reja; su portero
+            "##########",
+            "....^^....",
+            "_PXG_H____",
+            guards=(G_S(col=8, row=2, direction=-1, skill=5),),
+        ),
         _ascii(  # 20 poción del tiempo
             "##########",
             ".........#",
@@ -1088,7 +1202,9 @@ def _l9() -> Level:
         DoorLink(plate_room=3, plate_col=8, plate_row=2, gate_room=5, gate_col=6, gate_row=2),
         DoorLink(plate_room=4, plate_col=4, plate_row=2, gate_room=5, gate_col=6, gate_row=2),
         DoorLink(plate_room=16, plate_col=4, plate_row=2, gate_room=10, gate_col=7, gate_row=2),
+        DoorLink(plate_room=19, plate_col=1, plate_row=2, gate_room=19, gate_col=3, gate_row=2),
     )
+    events = (Event(EventKind.SKELETON_WAKE, room=17, col=7),)
     return _build_level(
         number=9,
         name="The Tomb",
@@ -1097,6 +1213,7 @@ def _l9() -> Level:
         start_room=1,
         start_col=1,
         start_row=2,
+        events=events,
         doorlinks=doorlinks,
     )
 
@@ -1136,10 +1253,15 @@ def _l10() -> Level:
             "_______..#",
             guards=(G_S(col=2, row=2, direction=0, skill=5),),
         ),
-        _ascii("######.__.", "..........", "__S_..____"),  # 3 pinchos
+        _ascii("######.__.", "..........", "f_S_..____"),  # 3 pluma: baja el pozo de un salto
         _ascii("###.__.###", "..........", "________.."),  # 4 cruce con el ala
         _ascii("#######.__", "..........", "_..___G___"),  # 5 la reja
-        _ascii("#__.######", "...|..|...", "____..____"),  # 6
+        _ascii(  # 6 guardia en la celosía
+            "#__.######",
+            "...|..|...",
+            "____..____",
+            guards=(G_S(col=7, row=2, direction=-1, skill=5),),
+        ),
         _ascii("###.__.###", "....b.....", "____B___.."),  # 7
         _ascii("#######.__", "..........", "_..___S___"),  # 8 pinchos
         _ascii(  # 9 guardia; losa → 10
@@ -1152,7 +1274,12 @@ def _l10() -> Level:
         # --- Ala este -----------------------------------------------------
         _ascii("##########", "..........", "_P_____L__"),  # 11 placa de la reja
         _ascii("##########", "...^^.....", "____X_____"),  # 12
-        _ascii("##########", "..........", "___X___X__"),  # 13 cuchillas
+        _ascii(  # 13 guardia entre cuchillas
+            "##########",
+            "..........",
+            "___X___X__",
+            guards=(G_S(col=5, row=2, direction=-1, skill=5),),
+        ),
         _ascii("##########", "...b..b.b.", "___B__B_B_"),  # 14 columnas
         _ascii(  # 15 placa de la salida, vigilada
             "##########",
@@ -1161,18 +1288,19 @@ def _l10() -> Level:
             guards=(G_S(col=7, row=2, direction=-1, skill=5),),
         ),
         _ascii("##########", "..^^......", "___S_S____"),  # 16 pinchos
-        _ascii("##########", "...|.|.|..", "__________"),  # 17 celosías
+        _ascii("##########", "...|.|.|..", "____y_____"),  # 17 celosías y poción del tiempo
         _ascii("##########", "..........", "_____T____"),  # 18
         _ascii("##########", "..........", "____LL____"),  # 19 losas al vacío
-        _ascii(  # 20 la poción grande
+        _ascii(  # 20 la poción grande tras reja
             "##########",
             ".........#",
-            "____H____#",
+            "_PG_H____#",
             guards=(G_S(col=6, row=2, direction=-1, skill=5),),
         ),
     ]
     doorlinks = (
         DoorLink(plate_room=11, plate_col=1, plate_row=2, gate_room=5, gate_col=6, gate_row=2),
+        DoorLink(plate_room=20, plate_col=1, plate_row=2, gate_room=20, gate_col=2, gate_row=2),
         DoorLink(plate_room=15, plate_col=5, plate_row=2, gate_room=10, gate_col=1, gate_row=2),
     )
     return _build_level(
@@ -1213,8 +1341,8 @@ def _l11() -> Level:
         _ascii("##########", "....^^^...", "__T_..____"),  # 1 inicio: pozo → 3
         _ascii(  # 2 arena
             "##########",
-            "..b....b..",
-            "__B__h_B_#",
+            "..b.......",
+            "__B_P_GH_#",
             guards=(G_S(col=3, row=2, direction=0, skill=5),),
         ),
         _ascii("###.__.###", "..........", "___X_LX___"),  # 3 cuchillas y losa → 7
@@ -1222,10 +1350,15 @@ def _l11() -> Level:
         _ascii("###_.#####", "..........", "#_h_PG____"),  # 5 antesala: placa y reja
         _ascii("##########", ".........#", "_______Dd#"),  # 6 la salida
         _ascii("####._.###", "...|..|...", "#_________"),  # 7
-        _ascii("######._.#", "..........", "____S_S___"),  # 8
+        _ascii(  # 8 guardia entre pinchos
+            "######._.#",
+            "..........",
+            "____S_S___",
+            guards=(G_S(col=8, row=2, direction=-1, skill=5),),
+        ),
         _ascii("##########", "....b.....", "____B_____"),  # 9
         _ascii("##########", "..........", "[_________"),  # 10 balcón
-        _ascii("##########", "..........", "_____h____"),  # 11
+        _ascii("##########", "..........", "_____h____"),  # 11 poción
         _ascii("##########", "....^^^...", "__________"),  # 12
         _ascii("##########", "..........", "___LL_____"),  # 13 las dos losas → 5
         _ascii("##########", "...b...b..", "___B___B__"),  # 14
@@ -1236,7 +1369,12 @@ def _l11() -> Level:
             guards=(G_S(col=4, row=2, direction=0, skill=3),),
         ),
         _ascii("##########", "..........", "____X_X___"),  # 16
-        _ascii("##########", "..........", "___S______"),  # 17
+        _ascii(  # 17 guardia tras los pinchos
+            "##########",
+            "..........",
+            "___S______",
+            guards=(G_S(col=7, row=2, direction=-1, skill=5),),
+        ),
         _ascii("##########", "....b.b...", "____B_B___"),  # 18
         _ascii("##########", "...|.|.|..", "__________"),  # 19
         _ascii(  # 20 placa de la salida
@@ -1249,6 +1387,7 @@ def _l11() -> Level:
     doorlinks = (
         DoorLink(plate_room=5, plate_col=4, plate_row=2, gate_room=5, gate_col=5, gate_row=2),
         DoorLink(plate_room=20, plate_col=4, plate_row=2, gate_room=6, gate_col=7, gate_row=2),
+        DoorLink(plate_room=2, plate_col=4, plate_row=2, gate_room=2, gate_col=6, gate_row=2),
     )
     return _build_level(
         number=11,
@@ -1293,14 +1432,21 @@ def _l12() -> Level:
             guards=(G_S(col=5, row=2, direction=-1, skill=7),),
         ),
         _ascii("##########", "...^^^^...", "____LL.___"),  # 4 losas y hueco al vacío
-        _ascii("_t__tt__t_", "..........", "_____M__h_"),  # 5 el espejo: fusión
+        _ascii(
+            "_t__tt__t_", "..........", "_____M_vh_"
+        ),  # 5 el espejo: fusión; veneno junto a la cura
         _ascii("##########", "......^^^^", "_____L____"),  # 6 losa al vacío
         _ascii("##########", ".b......S.", "_BS_____B_"),  # 7 aparece el visir
         _ascii("##########", "..........", "____..._Dd"),  # 8 pozo → 9 y la salida
         # --- Galería sur --------------------------------------------------
         _ascii("###.___.##", "..^^......", "#_________"),  # 9 bajo el pozo; se sube
         _ascii("##########", "....b.b...", "____B_B___"),  # 10
-        _ascii("##########", "...^^^....", "__________"),  # 11
+        _ascii(  # 11 guardia
+            "##########",
+            "...^^^....",
+            "__________",
+            guards=(G_S(col=7, row=2, direction=-1, skill=7),),
+        ),
         _ascii("##########", "..........", "[_________"),  # 12 balcón
         _ascii("##########", "..........", "_____P____"),  # 13 placa de la reja
         _ascii("##########", "..........", "____G_____"),  # 14 la reja
@@ -1311,9 +1457,14 @@ def _l12() -> Level:
             guards=(G_S(col=5, row=2, direction=-1, skill=8),),
         ),
         _ascii("##########", "..........", "__P_______"),  # 16 placa de vuelta: corre
-        _ascii("##########", "..........", "_____k____"),  # 17
+        _ascii("##########", "..........", "_____k____"),  # 17 huesos
         _ascii("##########", "...|.|.|..", "__________"),  # 18
-        _ascii("##########", "..........", "____X_X___"),  # 19
+        _ascii(  # 19 guardia entre cuchillas
+            "##########",
+            "..........",
+            "____X_X___",
+            guards=(G_S(col=7, row=2, direction=-1, skill=8),),
+        ),
         _ascii(  # 20 el campeón del visir
             "##########",
             "..........",
@@ -1322,11 +1473,13 @@ def _l12() -> Level:
         ),
         _ascii("##########", "....^^....", "___c___P__"),  # 21 cierre y placa de la salida
         _ascii("##########", "....b.....", "____B__T__"),  # 22
-        _ascii("##########", "..........", "_____L____"),  # 23 losa al vacío
-        _ascii(  # 24 la poción grande
+        _ascii(
+            "##########", "..........", "_____L____"
+        ),  # 23 losa al vacío; despierta el esqueleto
+        _ascii(  # 24 la poción grande tras reja
             "##########",
             ".........#",
-            "____H____#",
+            "_PG_H____#",
             guards=(G_S(col=6, row=2, direction=-1, skill=8),),
         ),
     ]
@@ -1335,10 +1488,12 @@ def _l12() -> Level:
         DoorLink(plate_room=16, plate_col=2, plate_row=2, gate_room=14, gate_col=4, gate_row=2),
         DoorLink(plate_room=21, plate_col=3, plate_row=2, gate_room=14, gate_col=4, gate_row=2),
         DoorLink(plate_room=21, plate_col=7, plate_row=2, gate_room=8, gate_col=8, gate_row=2),
+        DoorLink(plate_room=24, plate_col=1, plate_row=2, gate_room=24, gate_col=2, gate_row=2),
     )
     events = (
         Event(EventKind.SHADOW_FUSION, room=5, col=5),
         Event(EventKind.VIZIER_INIT, room=7),
+        Event(EventKind.SKELETON_WAKE, room=23, col=7),
     )
     return _build_level(
         number=12,
@@ -1357,11 +1512,12 @@ def _l12() -> Level:
 # Nivel 13 — Final Run  (18 salas)  carrera contra reloj
 # ===========================================================================
 def _l13() -> Level:
-    """La huida final: dieciocho salas en hilera, sin guardias, contra el
-    reloj. Cuchillas en serie, camas de pinchos, fosos, losas sobre el
+    """La huida final: dieciocho salas en hilera contra el reloj, con
+    tres guardias de élite en el camino. Cuchillas en serie, camas de pinchos, fosos, losas sobre el
     vacío, la reja de la 7 (su placa, en la 6, entre cuchillas) y la
     placa de la salida en la 15, dos salas de cuchillas antes de la
     puerta."""
+    G_S = GuardSpawn  # noqa: N806
     grid = """
      1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18
     """
@@ -1373,17 +1529,32 @@ def _l13() -> Level:
         _ascii("##########", "...^^^^...", "____..____"),  # 5 foso
         _ascii("##########", "..........", "__P__X____"),  # 6 placa de la reja
         _ascii("##########", "^^........", "__S__G__S_"),  # 7 la reja entre pinchos
-        _ascii("##########", "....^^....", "__________"),  # 8
+        _ascii(  # 8 guardia
+            "##########",
+            "....^^....",
+            "__________",
+            guards=(G_S(col=6, row=2, direction=-1, skill=6),),
+        ),
         _ascii("##########", "..^^^^^^..", "_____L____"),  # 9 losa al vacío
         _ascii("##########", "..........", "___X___X__"),  # 10
-        _ascii("##########", "..........", "_____h___]"),  # 11 balcón y poción
+        _ascii("##########", "..........", "___h_y___]"),  # 11 balcón, vida y tiempo
         _ascii("##########", "...|.|.|..", "__________"),  # 12
         _ascii("##########", "...b...b..", "___B_T_B__"),  # 13
         _ascii("##########", "..........", "__S_S_S___"),  # 14 pinchos
-        _ascii("##########", "..........", "____P_____"),  # 15 placa de la salida
+        _ascii(  # 15 placa de la salida y su portero
+            "##########",
+            "..........",
+            "____P_____",
+            guards=(G_S(col=7, row=2, direction=-1, skill=6),),
+        ),
         _ascii("##########", "..........", "____X_X___"),  # 16
         _ascii("##########", "...^^^^...", "____LL____"),  # 17 losas al vacío
-        _ascii("##########", ".........#", "_______Dd#"),  # 18 la puerta
+        _ascii(  # 18 la puerta y el último guardia
+            "##########",
+            ".........#",
+            "__h____Dd#",
+            guards=(G_S(col=4, row=2, direction=-1, skill=6),),
+        ),
     ]
     doorlinks = (
         DoorLink(plate_room=6, plate_col=2, plate_row=2, gate_room=7, gate_col=5, gate_row=2),

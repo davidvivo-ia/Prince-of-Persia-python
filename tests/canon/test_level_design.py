@@ -8,7 +8,7 @@ import pytest
 
 from pop2026canon.domain.level import Level
 from pop2026canon.domain.levels_canon import CANON_LEVELS, _ascii
-from pop2026canon.domain.tiles import SOLID, Tile
+from pop2026canon.domain.tiles import SOLID, PotionType, Tile
 
 LEVELS = CANON_LEVELS
 _IDS = [f"L{lv.number}" for lv in LEVELS]
@@ -216,3 +216,105 @@ def test_closer_plates_and_loose_on_plates_exist() -> None:
                             loose_on_plate += 1
     assert closers >= 4
     assert loose_on_plate >= 3
+
+
+# ---------------------------------------------------------------------------
+# Vitaminado 2026: guardias, rejas de tesoro, esqueletos, porteros
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("level", PLAYABLE, ids=_PIDS)
+def test_levels_have_enough_guards(level: Level) -> None:
+    """Cada nivel jugable tiene al menos tres guardias y uno de ellos
+    vigila la placa de la salida o la propia puerta (el portero)."""
+    guards = [(rm.id, g) for rm in level.rooms for g in rm.guards]
+    assert len(guards) >= 3, f"L{level.number}: sólo {len(guards)} guardias"
+    exits = {
+        rm.id
+        for rm in level.rooms
+        for r in range(3)
+        for c in range(10)
+        if rm.tile_at(c, r)[0] is Tile.LEVEL_DOOR_LEFT
+    }
+    plates = {
+        p[0]
+        for e in exits
+        for p in level.plates_for_gate(
+            next(
+                (e, c, r)
+                for r in range(3)
+                for c in range(10)
+                if level.room(e).tile_at(c, r)[0] is Tile.LEVEL_DOOR_LEFT
+            )
+        )
+    }
+    watched = exits | plates
+    neighbours = set()
+    for rid in watched:
+        rm = level.room(rid)
+        neighbours |= {rid, rm.link_n, rm.link_s, rm.link_e, rm.link_w}
+    assert any(rid in neighbours for rid, _ in guards), (
+        f"L{level.number}: ningún guardia vigila la salida ni su placa"
+    )
+
+
+def test_treasure_gates_guard_big_potions() -> None:
+    """En la mayoría de los niveles la poción grande está tras una reja
+    con mecanismo (placa en otra sala o losa-llave): exploración opcional."""
+    treasures = 0
+    for level in PLAYABLE:
+        for rm in level.rooms:
+            for c in range(10):
+                tile, mod = rm.tile_at(c, 2)
+                if tile is not Tile.POTION or mod != int(PotionType.MAX_HP):
+                    continue
+                gates = [
+                    (rm.id, cc, 2)
+                    for cc in range(10)
+                    if rm.tile_at(cc, 2)[0] is Tile.GATE and level.plates_for_gate((rm.id, cc, 2))
+                ]
+                if gates:
+                    treasures += 1
+    assert treasures >= 8, f"sólo {treasures} pociones grandes tras reja"
+
+
+def test_skeletons_wake_in_four_levels() -> None:
+    from pop2026canon.domain.level import EventKind
+
+    levels = [
+        lv.number for lv in PLAYABLE if any(e.kind is EventKind.SKELETON_WAKE for e in lv.events)
+    ]
+    assert levels == [3, 8, 9, 12]
+    for lv in PLAYABLE:
+        for e in lv.events:
+            if e.kind is EventKind.SKELETON_WAKE:
+                room = lv.room(e.room)
+                assert room.tile_at(e.col, 2)[0] in (Tile.FLOOR, Tile.SKELETON), (
+                    f"L{lv.number}: el esqueleto despierta sobre {room.tile_at(e.col, 2)[0]}"
+                )
+                # Hay escapatoria: una losa, un pozo o una cornisa a la que
+                # trepar (el esqueleto no trepa) en la sala o en la vecina
+                escape = any(
+                    lv.room(r).tile_at(c, 2)[0] in (Tile.LOOSE, Tile.EMPTY)
+                    or lv.room(r).tile_at(c, 1)[0] is Tile.DOORTOP_WITH_FLOOR
+                    for r in (e.room, room.link_e, room.link_w)
+                    if 1 <= r <= len(lv.rooms)
+                    for c in range(10)
+                )
+                assert escape, f"L{lv.number}: el esqueleto no tiene escapatoria"
+
+
+def test_poison_sits_next_to_a_cure_somewhere() -> None:
+    """Pociones trampa: en varios niveles hay un frasco de veneno junto
+    a uno de vida (hay que mirar el color)."""
+    pairs = 0
+    for level in PLAYABLE:
+        for rm in level.rooms:
+            kinds = {c: rm.tile_at(c, 2) for c in range(10)}
+            for c in range(9):
+                a, b = kinds[c], kinds[c + 1]
+                if a[0] is Tile.POTION and b[0] is Tile.POTION:
+                    mods = {a[1], b[1]}
+                    if int(PotionType.POISON) in mods and int(PotionType.HEAL) in mods:
+                        pairs += 1
+    assert pairs >= 3

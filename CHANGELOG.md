@@ -6,6 +6,40 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.25.0] — 2026-10-16
+
+### Los trece niveles, vitaminados (superpensada nivel a nivel)
+
+Diseño completo en `docs/superpensada-niveles.md`; resumen en el README.
+Las cuadrículas de salas no cambian: todo pasa dentro de las salas.
+
+- **Más duelos y con terreno**: de 35 a 61 guardias en la campaña (y de
+  147 a 161 trampas, de 16 a 26 rejas, de 35 a 48 pociones). Cada
+  nivel tiene al menos tres y uno de ellos es el *portero* de la placa
+  de la salida o de la propia puerta (L1, L2, L3, L13 acaban en duelo).
+  Guardias entre cuchillas, sobre pinchos (pelea a paso corto), tras una
+  losa suelta y dentro de las salas del tesoro. L13 (la huida) tenía
+  cero guardias; ahora tres de élite.
+- **Esqueletos** en cuatro niveles (L3, L8, L9, L12), siempre con una
+  losa, un pozo o una cornisa cerca para perderlos.
+- **Rejas de tesoro**: en nueve niveles la poción grande está tras una
+  reja con su propia mecánica (placa en la sala con cuchilla o pinchos
+  entre medias, losa-llave, caer desde arriba y correr antes de que
+  cierre, portero dentro). Exploración opcional que da la medalla
+  Explorador y vida máxima.
+- **Placas de cierre nuevas** en la ruta: L2 (entre la placa y la reja
+  de la 4: salta y corre) y L5 (delante de la cuchilla de la 6).
+- **Más trampas** donde cambian la lectura: cuchillas triples (L2, L3,
+  L4, L7), pinchos dobles y triples (L2, L3), losas cuádruples (L8),
+  cuchilla antes de la losa que no deja pararse (L1), pinchos por el
+  lado del guardia (L1).
+- **Pociones con decisión**: veneno junto a la cura en L2, L6 y L12;
+  pociones de tiempo escondidas (L1, L7, L10, L13); **pluma en lo alto
+  de la torre** (L10) para bajar el pozo de un salto.
+- **Tests de diseño nuevos**: guardias por nivel y portero, rejas de
+  tesoro, esqueletos con escapatoria, pociones trampa. Bot y
+  solucionador humano completan los trece niveles; replays regenerados.
+
 ## [canon-0.24.0] — 2026-10-16
 
 ### Fantasma del récord, música por ambiente y remates
