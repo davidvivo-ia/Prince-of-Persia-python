@@ -169,9 +169,29 @@ uv run mypy --strict src
 uv run pytest --cov=src --cov-report=term-missing
 ```
 
-CI en GitHub Actions con Python 3.13 y 3.14. Más de 1400 tests: dominio
-puro, solucionadores que juegan cada nivel, replays dorados, tests
-visuales por sala, audio, menús, progreso y la app completa sin ventana.
+### CI / CD
+
+- **CI** (`.github/workflows/ci.yml`), en cada pull request y en `main`:
+  formato, lint y tipos; tests en Linux (Python 3.13 y 3.14), Windows y
+  macOS (3.13) con cobertura mínima del 85 %; arranque sin ventana de
+  los dos motores; construcción del wheel y prueba de instalación en un
+  entorno limpio. Las dependencias se instalan desde `uv.lock`
+  (`uv sync --locked`), así que cada ejecución es reproducible.
+- **Release** (`.github/workflows/release.yml`): al etiquetar una
+  versión se construyen el wheel, el sdist y un ejecutable por sistema
+  (Linux, Windows y macOS, con PyInstaller) y se publican en una
+  GitHub Release con las notas del `CHANGELOG`:
+
+  ```bash
+  git tag v0.25.0 && git push origin v0.25.0
+  ```
+
+- **Dependabot** vigila las acciones de GitHub cada semana y las
+  dependencias de `uv.lock` cada mes.
+
+Más de 1400 tests: dominio puro, solucionadores que juegan cada nivel,
+replays dorados, tests visuales por sala, audio, menús, progreso y la
+app completa sin ventana.
 
 ## Documentación
 

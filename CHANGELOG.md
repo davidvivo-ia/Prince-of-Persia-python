@@ -6,6 +6,28 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.25.1] — 2026-10-16
+
+### CI / CD arreglado
+
+- **Lockfile versionado**: `uv.lock` estaba en `.gitignore` y el CI
+  resolvía las dependencias de cero en cada ejecución (así entró el
+  ruff 0.17 que rompió el formato). Ahora va en el repositorio y el CI
+  instala con `uv sync --locked`.
+- **Sin ejecuciones duplicadas**: cada push a una rama con PR lanzaba
+  el CI dos veces; ahora sólo `pull_request` y `main`, con
+  `concurrency` para cancelar la ejecución anterior.
+- **Acciones al día** (checkout v7, setup-uv v7 con caché, artefactos
+  v7/v8): adiós a los avisos de Node 20.
+- **Matriz de sistemas**: tests en Linux (3.13 y 3.14), Windows y macOS
+  (3.13); cobertura mínima del 85 % (`fail_under` en `pyproject`); el
+  XML de cobertura y el paquete como artefactos; el wheel se instala y
+  arranca en un entorno limpio.
+- **Release** nueva: al etiquetar `vX.Y.Z`, ejecutables de Linux,
+  Windows y macOS con PyInstaller (probados sin ventana), wheel y sdist
+  adjuntos a una GitHub Release con la sección del CHANGELOG.
+- **Dependabot** para acciones y para `uv.lock`.
+
 ## [canon-0.25.0] — 2026-10-16
 
 ### Los trece niveles, vitaminados (superpensada nivel a nivel)

@@ -1,0 +1,99 @@
+name: Release
+
+# Al etiquetar `vX.Y.Z` (p. ej. `git tag v0.25.0 && git push --tags`):
+# construye el wheel, el sdist y un ejecutable por sistema (Linux,
+# Windows, macOS) y los adjunta a una GitHub Release con notas generadas.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  UV_LOCKED: "1"
+  SDL_VIDEODRIVER: dummy
+  SDL_AUDIODRIVER: dummy
+  PYTHONUTF8: "1"
+
+jobs:
+  binaries:
+    name: Ejecutable (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: pop2026canon-linux-x86_64
+            exe: pop2026canon
+          - os: windows-latest
+            asset: pop2026canon-windows-x86_64.exe
+            exe: pop2026canon.exe
+          - os: macos-latest
+            asset: pop2026canon-macos-arm64
+            exe: pop2026canon
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Sincronizar dependencias (lockfile)
+        run: uv sync --locked
+      - name: Construir con PyInstaller
+        run: >-
+          uv run --with pyinstaller pyinstaller --noconfirm --onefile
+          --name pop2026canon --paths src --collect-all pygame
+          src/pop2026canon/__main__.py
+      - name: Smoke del ejecutable
+        shell: bash
+        run: ./dist/${{ matrix.exe }} --headless --frames 60
+      - name: Renombrar
+        shell: bash
+        run: mv "dist/${{ matrix.exe }}" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publicar la release
+    runs-on: ubuntu-latest
+    needs: [binaries]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Wheel y sdist
+        run: uv build
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: pop2026canon-*
+          path: dist
+          merge-multiple: true
+      - name: Listar artefactos
+        run: ls -la dist
+      - name: Sección del CHANGELOG para esta versión
+        shell: bash
+        run: |
+          python3 - <<'PY' > release-notes.md
+          import re
+          from pathlib import Path
+          text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          sections = re.split(r"^## ", text, flags=re.M)
+          body = sections[1] if len(sections) > 1 else ""
+          print("## " + body.strip() if body else "Ver CHANGELOG.md")
+          PY
+          cat release-notes.md
+      - uses: softprops/action-gh-release@v3
+        with:
+          body_path: release-notes.md
+          generate_release_notes: true
+          files: |
+            dist/*
