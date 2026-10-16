@@ -26,15 +26,17 @@ import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
+import numpy as np
 import pygame
 
 from pop2026canon.domain.actions import Action, Seq
 from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.game import Game
 from pop2026canon.domain.tiles import Tile
-from pop2026canon.presentation.backdrop import decor_lights, decor_spots
+from pop2026canon.presentation.backdrop import Light, decor_lights, decor_spots
+from pop2026canon.presentation.char_atlas import CharPalette, sprite
 from pop2026canon.presentation.layout import LAYOUT, px
-from pop2026canon.presentation.renderer import _char_px, _lerp_char_px
+from pop2026canon.presentation.renderer import _char_px, _lerp_char_px, _palette_for
 from pop2026canon.presentation.themes import LevelTheme, theme_for
 from pop2026canon.presentation.tile_atlas import (
     PALACE_LEVELS,
@@ -725,6 +727,24 @@ def _light_texture(radius: int, color: tuple[int, int, int]) -> pygame.Surface:
     return surf
 
 
+def room_lights(game: Game) -> tuple[Light, ...]:
+    """Luces fijas de la sala del kid — antorchas y decoración — en
+    coordenadas del mundo (``y`` sin HUD). Son las que se hornean con
+    relieve en la pared (:func:`backdrop.backdrop`) y las que proyectan
+    las sombras de los personajes."""
+    theme = theme_for(game.level.number)
+    room = game.level.room(game.kid.room)
+    out: list[Light] = []
+    for row in range(3):
+        for col in range(10):
+            tile = room.tile_at(col, row)[0]
+            if tile in (Tile.TORCH, Tile.TORCH_WITH_DEBRIS):
+                cx, cy = _torch_flame_px(col, row)
+                out.append((cx, cy - LAYOUT.hud_top, px(230), theme.torch))
+    out.extend(decor_lights(room.id, theme.key))
+    return tuple(out)
+
+
 DUNGEON_AMBIENT = theme_for(1).ambient
 PALACE_AMBIENT = theme_for(4).ambient
 
@@ -798,7 +818,8 @@ class Lighting:
         # Luces de la decoración del tema (velas, cristales, ventanas)
         for i, (dx, dy, dr, dcol) in enumerate(decor_lights(room.id, theme.key)):
             wob = 0.9 + 0.1 * math.sin(t * 9.0 + i * 1.9)
-            add(dx, dy + top, int(dr * wob), dcol, glow=0.22)
+            soft = (dcol[0] * 7 // 10, dcol[1] * 7 // 10, dcol[2] * 7 // 10)
+            add(dx, dy + top, int(dr * wob), soft, glow=0.1)
         rim = theme.rim
         rim_top = (rim[0] * 3 // 5, rim[1] * 3 // 5, rim[2] * 3 // 5)
         lip_w = max(1, px(1))
@@ -890,7 +911,7 @@ def _fog_texture(w: int, h: int, color: tuple[int, int, int]) -> pygame.Surface:
                 + g[x1][y0 + 1] * tx * ty
             )
             dens = (y / small_h) ** 1.5 * (1 - (y / small_h) ** 6)
-            k = max(0.0, v - 0.35) * 1.6 * dens
+            k = max(0.0, v - 0.3) * 0.85 * dens
             small.set_at((x, y), tuple(min(255, int(c * k)) for c in color))
     return pygame.transform.smoothscale(small, (w, h))
 
@@ -921,13 +942,38 @@ def draw_atmosphere(surf: pygame.Surface, game: Game, t: float) -> None:
         b = beam.copy()
         b.fill(tuple(int(255 * pulse) for _ in range(3)), special_flags=pygame.BLEND_RGB_MULT)
         surf.blit(b, (x, top + y), special_flags=pygame.BLEND_ADD)
-    fog = _fog_texture(LAYOUT.window_w, px(60), theme.fog)
+    fog = _fog_texture(LAYOUT.window_w, px(40), theme.fog)
     fw = fog.get_width()
+    room_obj = game.level.room(room)
+    tw = LAYOUT.tile_w
     for row in range(3):
-        y = top + (row + 1) * tile_h - LAYOUT.foot_lift - px(48)
+        y = top + (row + 1) * tile_h - LAYOUT.foot_lift - px(30)
         off = int((t * px(9) * (1 + row * 0.3) + row * 300) % fw)
-        surf.blit(fog, (-off, y), special_flags=pygame.BLEND_ADD)
-        surf.blit(fog, (fw - off, y), special_flags=pygame.BLEND_ADD)
+        # Sólo donde hay suelo: la niebla se arrastra por las losas, no
+        # flota en el vacío.
+        for col in range(10):
+            if not has_floor(int(room_obj.tile_at(col, row)[0])) or (
+                (room, col, row) in game.state.fallen_floors
+            ):
+                continue
+            x0 = col * tw
+            src = pygame.Rect((x0 + off) % fw, 0, tw, fog.get_height())
+            if src.right <= fw:
+                surf.blit(fog, (x0, y), src, special_flags=pygame.BLEND_ADD)
+            else:
+                first = fw - src.x
+                surf.blit(
+                    fog,
+                    (x0, y),
+                    pygame.Rect(src.x, 0, first, src.h),
+                    special_flags=pygame.BLEND_ADD,
+                )
+                surf.blit(
+                    fog,
+                    (x0 + first, y),
+                    pygame.Rect(0, 0, tw - first, src.h),
+                    special_flags=pygame.BLEND_ADD,
+                )
 
 
 def bloom(surf: pygame.Surface, rect: pygame.Rect, *, threshold: int = 200, gain: int = 5) -> None:
@@ -993,6 +1039,101 @@ def draw_char_shadows(surf: pygame.Surface, game: Game, prev: Game | None, alpha
             continue
         x, y = _lerp_char_px(pc, c, alpha)
         surf.blit(sprite, (x - sprite.get_width() // 2, y - sprite.get_height() // 2))
+
+
+CONTACT_AO = 0.6
+"""Oscurecimiento máximo de la pared pegada a la geometría."""
+
+
+def contact_occlusion(base: pygame.Surface, tiles: pygame.Surface, *, radius: int = 0) -> None:
+    """Oclusión de contacto: la pared se oscurece alrededor de losas,
+    muros y columnas (``tiles``: capa con alfa de los tiles), como la
+    sombra suave que la geometría proyecta sobre el fondo. Se aplica a
+    ``base`` en sitio, una vez por composición de la sala."""
+    w, h = tiles.get_size()
+    mask = pygame.mask.from_surface(tiles, 60)
+    hard = mask.to_surface(setcolor=(255, 255, 255), unsetcolor=(0, 0, 0))
+    q = 4
+    small = pygame.transform.smoothscale(hard, (max(1, w // q), max(1, h // q)))
+    small = pygame.transform.box_blur(small, max(1, (radius or px(7)) // q))
+    soft = pygame.transform.smoothscale(small, (w, h))
+    # darken = 255 - CONTACT_AO * soft   (sólo cuenta fuera de la geometría,
+    # que luego se pinta encima)
+    k = int(255 * CONTACT_AO)
+    soft.fill((k, k, k), special_flags=pygame.BLEND_RGB_MULT)
+    veil = pygame.Surface((w, h))
+    veil.fill((255, 255, 255))
+    veil.blit(soft, (0, 0), special_flags=pygame.BLEND_RGB_SUB)
+    base.blit(veil, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+
+
+WALL_SHADOW_ALPHA = 110
+WALL_SHADOW_REACH = px(130)
+"""Distancia (px) a la luz a partir de la cual la sombra ya es tenue."""
+
+
+@functools.lru_cache(maxsize=512)
+def _silhouette(
+    frame: int, palette: CharPalette, facing: int, variant: int, stretch: int
+) -> tuple[pygame.Surface, tuple[int, int]]:
+    """Silueta negra difuminada del sprite, estirada ``stretch`` %."""
+    img, (ax, ay) = sprite(frame, palette, facing, variant)
+    mask = pygame.mask.from_surface(img, 40)
+    sil = mask.to_surface(setcolor=(0, 0, 0, 255), unsetcolor=(0, 0, 0, 0))
+    w, h = sil.get_size()
+    sh = max(2, h * stretch // 100)
+    sil = pygame.transform.smoothscale(sil, (w, sh))
+    pad = px(4)
+    out = pygame.Surface((w + pad * 2, sh + pad * 2), pygame.SRCALPHA)
+    out.blit(sil, (pad, pad))
+    out = pygame.transform.box_blur(out, max(1, px(2)))
+    return out, (ax + pad, ay * stretch // 100 + pad)
+
+
+def draw_wall_shadows(
+    surf: pygame.Surface,
+    game: Game,
+    prev: Game | None,
+    alpha: float,
+    lights: tuple[Light, ...],
+    t: float = 0.0,
+) -> None:
+    """Sombra de cada personaje proyectada en la pared del fondo por la
+    luz fija más cercana: se aleja de la llama, se estira y se aclara con
+    la distancia. Sin luces, una sombra corta desde arriba a la izquierda."""
+    room = game.kid.room
+    top = LAYOUT.hud_top
+    chars: list[tuple[Char, Char | None]] = []
+    prev_others = prev.others if prev else ()
+    for i, c in enumerate(game.others):
+        if c.room == room and c.charid is not CharId.MOUSE:
+            pc = prev_others[i] if i < len(prev_others) else None
+            chars.append((c, pc))
+    chars.append((game.kid, prev.kid if prev else None))
+    for c, pc in chars:
+        if c.alive >= 30 or not c.frame:
+            continue
+        x, y = _lerp_char_px(pc, c, alpha)
+        if lights:
+            lx, ly, _r, _col = min(lights, key=lambda lt: (lt[0] - x) ** 2 + (lt[1] + top - y) ** 2)
+            dx, dy = x - lx, (y - px(40)) - (ly + top)
+            dist = math.hypot(dx, dy) or 1.0
+            k = max(0.0, 1.0 - dist / (WALL_SHADOW_REACH * 2.6))
+            if k <= 0.05:
+                continue
+            # La llama tiembla: la sombra respira con ella
+            flick = 1.0 + 0.08 * math.sin(t * 13.0 + lx * 0.01) + 0.05 * math.sin(t * 7.3)
+            off_x = int(dx / dist * px(10 + 26 * k) * flick)
+            off_y = int(-px(4) - px(8) * k)
+            stretch = 100 + int(22 * k * flick)
+            a = int(WALL_SHADOW_ALPHA * (0.35 + 0.65 * k) * (2.0 - flick))
+        else:
+            off_x, off_y, stretch, a = px(6), -px(3), 104, WALL_SHADOW_ALPHA // 3
+        pal = CharPalette.KID if c is game.kid else _palette_for(c.charid)
+        variant = game.level.number if pal is CharPalette.GUARD else 0
+        sil, (ax, ay) = _silhouette(c.frame, pal, c.direction, variant, stretch)
+        sil.set_alpha(a)
+        surf.blit(sil, (x - ax + off_x, y - ay + off_y))
 
 
 # ---------------------------------------------------------------------------
@@ -1075,6 +1216,65 @@ class PostFx:
             veil = pygame.Surface(world.size, pygame.SRCALPHA)
             veil.fill((*self.flash_color, int(110 * self.flash)))
             surf.blit(veil, world.topleft)
+
+
+GRAIN_AMPLITUDE = 7
+"""Amplitud (±) del grano de película, en niveles de 0-255."""
+
+
+@functools.lru_cache(maxsize=1)
+def _grain_sheet(w: int, h: int) -> pygame.Surface:
+    """Ruido blanco (0..2·amplitud) del doble de tamaño que el lienzo: cada
+    frame se blitea un recorte en una posición aleatoria."""
+    rng = np.random.default_rng(1989)
+    noise = rng.integers(0, GRAIN_AMPLITUDE * 2 + 1, size=(w * 2, h * 2), dtype=np.uint8)
+    arr = np.repeat(noise[:, :, None], 3, axis=2)
+    surf = pygame.Surface((w * 2, h * 2))
+    pygame.surfarray.blit_array(surf, arr)
+    return surf
+
+
+def film_grain(surf: pygame.Surface, t: float, *, rect: pygame.Rect | None = None) -> None:
+    """Grano de película animado: suma ruido y resta su media (±amplitud).
+    Dos blits de pantalla completa (~1 ms en HD)."""
+    area = rect or surf.get_rect()
+    w, h = area.size
+    sheet = _grain_sheet(w, h)
+    rng = random.Random(int(t * 60))
+    ox, oy = rng.randrange(w), rng.randrange(h)
+    surf.blit(sheet, area.topleft, pygame.Rect(ox, oy, w, h), special_flags=pygame.BLEND_RGB_ADD)
+    g = GRAIN_AMPLITUDE
+    surf.fill((g, g, g), area, special_flags=pygame.BLEND_RGB_SUB)
+
+
+ABERRATION_BAND = 110
+"""Ancho (px de diseño) de las bandas laterales con aberración."""
+
+
+def chromatic_aberration(
+    surf: pygame.Surface, rect: pygame.Rect, shift: int = 0, band: int = 0
+) -> None:
+    """Aberración cromática de lente en los bordes: en una banda a cada
+    lado el canal rojo se desplaza hacia fuera, así que los contornos se
+    descomponen en franjas rojas y cian mientras el centro queda nítido.
+    Sólo toca las dos bandas (~1 ms en HD)."""
+    shift = shift or max(1, px(1))
+    band = band or px(ABERRATION_BAND)
+    for side in (-1, 1):
+        x0 = rect.x if side < 0 else rect.right - band
+        strip = surf.subsurface(pygame.Rect(x0, rect.y, band, rect.h))
+        red = strip.copy()
+        red.fill((255, 0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        strip.fill((0, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
+        strip.blit(red, (side * shift, 0), special_flags=pygame.BLEND_RGB_ADD)
+        # El hueco que deja el desplazamiento (en el lado interior de la
+        # banda) se rellena con el propio rojo sin desplazar: sin costura.
+        edge = (
+            pygame.Rect(band - shift, 0, shift, rect.h)
+            if side < 0
+            else pygame.Rect(0, 0, shift, rect.h)
+        )
+        strip.blit(red, edge.topleft, edge, special_flags=pygame.BLEND_RGB_ADD)
 
 
 def desaturate(surf: pygame.Surface, amount: float) -> None:

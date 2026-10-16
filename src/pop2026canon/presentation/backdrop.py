@@ -13,7 +13,13 @@ Las piezas que dan luz (velas, cristales, ventanas) se colocan con
 está dibujada la pieza.
 
 La luz (``fx.Lighting``) multiplica sobre esto: lejos de las antorchas
-queda en penumbra, cerca brilla la piedra.
+queda en penumbra, cerca brilla la piedra. Además, ``backdrop`` recibe
+las luces fijas de la sala (antorchas, velas, cristales, ventanas) y
+**hornea** su luz con relieve: de la propia mampostería se deriva un
+mapa de normales (gradiente de la luminancia) y cada sillar recibe luz
+difusa según mire o no hacia la antorcha — bordes que brillan por el
+lado de la llama y se apagan por el otro, como un *normal map* de un
+juego actual. Se calcula una vez por sala y se cachea.
 """
 
 from __future__ import annotations
@@ -728,12 +734,156 @@ _ORDER = (
 )
 
 
+Light = tuple[int, int, int, RGB]
+"""Luz fija de la sala: ``(x, y, radio, color)`` en píxeles del mundo (``y``
+desde lo alto de la sala, sin HUD)."""
+
+RELIEF_BASE = 0.58
+"""Factor de luz de la pared lejos de toda luz (antes del mapa de luz)."""
+RELIEF_GAIN = 1.0
+"""Cuánto suma cada luz a plena potencia sobre una cara que la mira."""
+RELIEF_DEPTH = 0.075
+"""Inclinación de las normales por unidad de gradiente de luminancia."""
+RELIEF_Z = 46
+"""Altura (px de diseño) de las luces sobre el plano de la pared."""
+RELIEF_AMBIENT = 0.48
+"""Luz ambiente direccional que marca el relieve en toda la pared."""
+RELIEF_MAX = 1.45
+
+
+def _norm3(x: float, y: float, z: float) -> tuple[float, float, float]:
+    d = math.sqrt(x * x + y * y + z * z) or 1.0
+    return x / d, y / d, z / d
+
+
+def relief_factor(surf: pygame.Surface, lights: tuple[Light, ...], *, scale: int = 2) -> np.ndarray:
+    """Factor de luz (w, h, 3) float32 para ``surf`` con las ``lights``:
+    difusa lambertiana sobre el relieve de la pared con atenuación por
+    distancia. Se calcula a ``1/scale`` de la resolución y se amplía."""
+    w, h = surf.get_size()
+    small = pygame.transform.smoothscale(surf, (max(2, w // scale), max(2, h // scale)))
+    arr = pygame.surfarray.array3d(small).astype(np.float32)
+    lum = arr[:, :, 0] * 0.3 + arr[:, :, 1] * 0.59 + arr[:, :, 2] * 0.11
+    # Suavizado 3x3 para que el grano no chispee
+    pad = np.pad(lum, 1, mode="edge")
+    lum = (
+        pad[:-2, :-2]
+        + pad[:-2, 1:-1]
+        + pad[:-2, 2:]
+        + pad[1:-1, :-2]
+        + pad[1:-1, 1:-1]
+        + pad[1:-1, 2:]
+        + pad[2:, :-2]
+        + pad[2:, 1:-1]
+        + pad[2:, 2:]
+    ) / 9.0
+    gx = np.zeros_like(lum)
+    gy = np.zeros_like(lum)
+    gx[1:-1, :] = (lum[2:, :] - lum[:-2, :]) * 0.5
+    gy[:, 1:-1] = (lum[:, 2:] - lum[:, :-2]) * 0.5
+    nx = -gx * RELIEF_DEPTH
+    ny = -gy * RELIEF_DEPTH
+    nz = np.ones_like(lum)
+    inv = 1.0 / np.sqrt(nx * nx + ny * ny + 1.0)
+    nx *= inv
+    ny *= inv
+    nz *= inv
+    sw, sh = lum.shape
+    xs = (np.arange(sw, dtype=np.float32) * scale)[:, None]
+    ys = (np.arange(sh, dtype=np.float32) * scale)[None, :]
+    # Luz ambiente direccional (de arriba, un poco por delante y a la
+    # izquierda): el relieve se lee también lejos de toda llama.
+    ax, ay, az = _norm3(-0.35, -0.6, 0.72)
+    amb = np.clip(nx * ax + ny * ay + nz * az, 0.0, None) * RELIEF_AMBIENT
+    total = np.repeat((RELIEF_BASE + amb)[:, :, None], 3, axis=2)
+    z = float(px(RELIEF_Z))
+    for lx, ly, radius, color in lights:
+        dx = lx - xs
+        dy = ly - ys
+        dist = np.sqrt(dx * dx + dy * dy + z * z)
+        ndotl = np.clip((nx * dx + ny * dy + nz * z) / dist, 0.0, None)
+        att = 1.0 / (1.0 + (dist / max(1.0, float(radius))) ** 2)
+        # Las luces pequeñas (velas, cristales) aportan menos que una antorcha
+        power = min(1.0, radius / float(px(320)))
+        k = (ndotl * att * RELIEF_GAIN * power)[:, :, None]
+        total += k * (np.array(color, dtype=np.float32) / 255.0)[None, None, :]
+    np.clip(total, 0.4, RELIEF_MAX, out=total)
+    if scale == 1:
+        return total
+    up = np.repeat(np.repeat(total, scale, axis=0), scale, axis=1)
+    return up[:w, :h]
+
+
+def bake_relief(surf: pygame.Surface, lights: tuple[Light, ...]) -> None:
+    """Multiplica ``surf`` (en sitio) por :func:`relief_factor`."""
+    if not lights:
+        return
+    fac = relief_factor(surf, lights)
+    arr = pygame.surfarray.pixels3d(surf)
+    lit = arr.astype(np.float32) * fac
+    np.clip(lit, 0, 255, out=lit)
+    arr[:] = lit.astype(np.uint8)
+    del arr
+
+
+TILE_LIGHT_SCALE = 8
+
+
+@functools.lru_cache(maxsize=32)
+def tile_light(lights: tuple[Light, ...]) -> tuple[pygame.Surface, pygame.Surface]:
+    """Luz horneada para la capa de tiles (losas, muros, columnas, rejas):
+    la misma caída por distancia y color que la pared, sin relieve (las
+    piezas miran al jugador). Devuelve dos superficies del tamaño de la
+    sala para aplicar como ``factor = mult/255 + add/255``: la primera se
+    multiplica (0..1) y la segunda se suma (lo que pasa de 1)."""
+    w, h = LAYOUT.window_w, LAYOUT.room_h
+    q = TILE_LIGHT_SCALE
+    sw, sh = w // q, h // q
+    xs = (np.arange(sw, dtype=np.float32) * q + q / 2)[:, None]
+    ys = (np.arange(sh, dtype=np.float32) * q + q / 2)[None, :]
+    z = float(px(RELIEF_Z))
+    az = _norm3(-0.35, -0.6, 0.72)[2]
+    total = np.full((sw, sh, 3), RELIEF_BASE + RELIEF_AMBIENT * az, dtype=np.float32)
+    for lx, ly, radius, color in lights:
+        dx = lx - xs
+        dy = ly - ys
+        dist = np.sqrt(dx * dx + dy * dy + z * z)
+        ndotl = z / dist
+        att = 1.0 / (1.0 + (dist / max(1.0, float(radius))) ** 2)
+        power = min(1.0, radius / float(px(320)))
+        k = (ndotl * att * RELIEF_GAIN * power)[:, :, None]
+        total += k * (np.array(color, dtype=np.float32) / 255.0)[None, None, :]
+    np.clip(total, 0.4, RELIEF_MAX, out=total)
+    mult = (np.clip(total, 0.0, 1.0) * 255).astype(np.uint8)
+    add = (np.clip(total - 1.0, 0.0, 1.0) * 255).astype(np.uint8)
+    out = []
+    for arr in (mult, add):
+        small = pygame.Surface((sw, sh))
+        pygame.surfarray.blit_array(small, arr)
+        out.append(pygame.transform.smoothscale(small, (w, h)))
+    return out[0], out[1]
+
+
+def light_tiles(tiles: pygame.Surface, lights: tuple[Light, ...], top: int) -> pygame.Surface:
+    """Copia de la capa de tiles (con alfa) iluminada por ``tile_light``."""
+    if not lights:
+        return tiles
+    mult, add = tile_light(lights)
+    lit = tiles.copy()
+    lit.blit(mult, (0, top), special_flags=pygame.BLEND_RGB_MULT)
+    extra = tiles.copy()
+    extra.blit(add, (0, top), special_flags=pygame.BLEND_RGB_MULT)
+    lit.blit(extra, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+    return lit
+
+
 @functools.lru_cache(maxsize=24)
-def backdrop(room_id: int, theme: str | bool) -> pygame.Surface:
+def backdrop(room_id: int, theme: str | bool, lights: tuple[Light, ...] = ()) -> pygame.Surface:
     """Superficie del ancho de la sala y alto del mundo (sin HUD).
 
     ``theme``: clave de un tema de nivel (``"l1"``...), o ``True``/``False``
-    para el palacio/mazmorra genéricos."""
+    para el palacio/mazmorra genéricos. ``lights``: luces fijas de la
+    sala cuya luz se hornea con relieve (vacío: pared sin hornear)."""
     if isinstance(theme, bool):
         theme = "l4" if theme else "l1"
     th = theme_by_key(theme)
@@ -768,4 +918,5 @@ def backdrop(room_id: int, theme: str | bool) -> pygame.Surface:
     for name in _ORDER:
         if name in th.decor:
             _DECOR[name](surf, th, room_id, random.Random(_seed(room_id, th.key, name + "/draw")))
+    bake_relief(surf, lights)
     return surf
