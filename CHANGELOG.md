@@ -17,7 +17,7 @@ versionado sigue [SemVer].
 - **Sin ejecuciones duplicadas**: cada push a una rama con PR lanzaba
   el CI dos veces; ahora sólo `pull_request` y `main`, con
   `concurrency` para cancelar la ejecución anterior.
-- **Acciones al día** (checkout v7, setup-uv v10 con caché, artefactos
+- **Acciones al día** (checkout v7, setup-uv v7 con caché, artefactos
   v7/v8): adiós a los avisos de Node 20.
 - **Matriz de sistemas**: tests en Linux (3.13 y 3.14), Windows y macOS
   (3.13); cobertura mínima del 85 % (`fail_under` en `pyproject`); el
