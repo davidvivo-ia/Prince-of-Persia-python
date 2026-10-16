@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -331,17 +332,105 @@ def _tek(seed: int) -> Any:
     )
 
 
-@functools.lru_cache(maxsize=4)
+@dataclass(frozen=True, slots=True)
+class MusicStyle:
+    """Parámetros del tema procedural de un ambiente."""
+
+    bpm: int
+    tonic: float
+    seed: int
+    rest: float
+    """Probabilidad de silencio por paso de la melodía (0..1)."""
+    scale: tuple[int, ...] = HIJAZ
+    bright: float = 1.0
+    """Ganancia de la melodía respecto al bordón."""
+    drone_depth: float = 1.0
+    """Peso de la octava grave del bordón."""
+    bells: bool = False
+    """Campanas espaciadas sobre el bordón (tumbas, jardín)."""
+    tension: float = 0.12
+    """Trémolo disonante de la capa de combate."""
+    steps: tuple[float, ...] = (0.5, 0.5, 1.0, 1.0, 1.5, 2.0)
+    """Duraciones (en pulsos) entre las que elige la melodía."""
+
+
+NAHAWAND = (0, 2, 3, 5, 7, 8, 10)
+"""Modo nahawand (menor natural): más sombrío que el hijaz."""
+KURD = (0, 1, 3, 5, 7, 8, 10)
+"""Modo kurd (frigio): tenso, de persecución."""
+AJAM = (0, 2, 4, 5, 7, 9, 11)
+"""Modo ajam (mayor): luminoso, para el jardín de la princesa."""
+
+MUSIC_STYLES: dict[str, MusicStyle] = {
+    "dungeon": MusicStyle(bpm=76, tonic=146.83, seed=3, rest=0.5),
+    "guards": MusicStyle(bpm=84, tonic=146.83, seed=5, rest=0.42, tension=0.16),
+    "tomb": MusicStyle(
+        bpm=62,
+        tonic=110.0,
+        seed=9,
+        rest=0.62,
+        scale=NAHAWAND,
+        bright=0.8,
+        drone_depth=1.3,
+        bells=True,
+        steps=(1.0, 1.0, 1.5, 2.0, 3.0),
+    ),
+    "palace": MusicStyle(bpm=92, tonic=220.0, seed=7, rest=0.35),
+    "mountain": MusicStyle(
+        bpm=70,
+        tonic=123.47,
+        seed=13,
+        rest=0.55,
+        drone_depth=1.5,
+        bright=0.85,
+        steps=(1.0, 1.0, 2.0, 2.0, 3.0),
+    ),
+    "cave": MusicStyle(bpm=68, tonic=130.81, seed=17, rest=0.6, scale=NAHAWAND, bells=True),
+    "tower": MusicStyle(bpm=100, tonic=246.94, seed=19, rest=0.3, bright=1.1, drone_depth=0.7),
+    "vizier": MusicStyle(
+        bpm=88, tonic=164.81, seed=23, rest=0.4, scale=KURD, tension=0.22, drone_depth=1.2
+    ),
+    "escape": MusicStyle(
+        bpm=124,
+        tonic=196.0,
+        seed=29,
+        rest=0.22,
+        scale=KURD,
+        bright=1.15,
+        steps=(0.5, 0.5, 0.5, 1.0, 1.0),
+        tension=0.2,
+    ),
+    "garden": MusicStyle(
+        bpm=84,
+        tonic=261.63,
+        seed=31,
+        rest=0.38,
+        scale=AJAM,
+        bright=1.0,
+        drone_depth=0.6,
+        bells=True,
+        tension=0.05,
+    ),
+}
+
+
+def music_style_for(name: str) -> MusicStyle:
+    return MUSIC_STYLES.get(name, MUSIC_STYLES["dungeon"])
+
+
+@functools.lru_cache(maxsize=12)
 def music_layers(theme: str) -> tuple[Any, Any]:
-    """``(base, combate)`` en bucle perfecto para el tema."""
-    palace = theme == "palace"
-    bpm = 92 if palace else 76
+    """``(base, combate)`` en bucle perfecto para el estilo ``theme``
+    (clave de :data:`MUSIC_STYLES`; ``dungeon`` y ``palace`` siguen
+    siendo los genéricos)."""
+    st = music_style_for(theme)
+    bpm = st.bpm
     beat = 60.0 / bpm
     bars = 8
     total = bars * 4 * beat
     n_total = _n(total)
-    tonic = 220.0 if palace else 146.83  # A3 / D3
-    rng = _rng(7 if palace else 3)
+    tonic = st.tonic
+    rng = _rng(st.seed)
 
     # Bordón: tónica y quinta graves con respiración lenta.
     t = _time(n_total)
@@ -349,9 +438,9 @@ def music_layers(theme: str) -> tuple[Any, Any]:
     drone = (
         np.sin(2 * np.pi * tonic / 2 * t) * 0.5
         + np.sin(2 * np.pi * tonic * 0.75 * t) * 0.25
-        + np.sin(2 * np.pi * tonic / 4 * t) * 0.35
+        + np.sin(2 * np.pi * tonic / 4 * t) * 0.35 * st.drone_depth
     ) * lfo
-    drone += lowpass(noise(total, 11), 60) * 0.6 * lfo
+    drone += lowpass(noise(total, 11 + st.seed), 60) * 0.6 * lfo
     base = drone.astype(np.float32) * 0.35
 
     # Melodía: paseo aleatorio por el modo, con silencios.
@@ -359,23 +448,30 @@ def music_layers(theme: str) -> tuple[Any, Any]:
     pos = 0.0
     melody = np.zeros(n_total + _n(2.0), dtype=np.float32)
     while pos < total - beat * 0.5:
-        dur_beats = rng.choice([0.5, 0.5, 1.0, 1.0, 1.5, 2.0])
-        if rng.random() < (0.35 if palace else 0.5):
+        dur_beats = rng.choice(st.steps)
+        if rng.random() < st.rest:
             pos += dur_beats * beat
             continue
         degree = int(np.clip(degree + rng.choice([-2, -1, -1, 0, 1, 1, 2]), -3, 9))
-        octave, idx = divmod(degree, len(HIJAZ))
-        semis = HIJAZ[idx] + 12 * octave
+        octave, idx = divmod(degree, len(st.scale))
+        semis = st.scale[idx] + 12 * octave
         freq = tonic * 2 ** (semis / 12)
-        note = _pluck(freq, 1.6, int(pos * 1000)) * (0.5 if palace else 0.45)
+        note = _pluck(freq, 1.6, int(pos * 1000)) * 0.48 * st.bright
         i = _n(pos)
         melody[i : i + len(note)] += note
         # Ornamento: nota de paso rápida antes de algunas notas
         if rng.random() < 0.25 and i > _n(0.08):
-            grace = _pluck(freq * 2 ** (1 / 12), 0.3, int(pos * 997)) * 0.25
+            grace = _pluck(freq * 2 ** (1 / 12), 0.3, int(pos * 997)) * 0.25 * st.bright
             j = i - _n(0.08)
             melody[j : j + len(grace)] += grace
         pos += dur_beats * beat
+    if st.bells:
+        # Campanas lejanas, una cada dos compases, sobre la tónica o la quinta
+        for bar in range(0, bars, 2):
+            f = tonic * (2.0 if rng.random() < 0.5 else 3.0)
+            bell = _bell(f, 2.4) * 0.16
+            i = _n(bar * 4 * beat + rng.choice([0.0, 1.0, 2.0]) * beat)
+            melody[i : i + len(bell)] += bell
     # Cola que se sale del bucle: vuelve al principio (bucle sin costura)
     tail = melody[n_total:]
     melody = melody[:n_total]
@@ -399,7 +495,9 @@ def music_layers(theme: str) -> tuple[Any, Any]:
     combat = combat[:n_total]
     combat[: len(ctail)] += ctail
     tremolo = 0.5 + 0.5 * np.sin(2 * np.pi * 6 * t)
-    combat += (np.sin(2 * np.pi * tonic * 2 ** (1 / 12) * t) * 0.12 * tremolo).astype(np.float32)
+    combat += (np.sin(2 * np.pi * tonic * 2 ** (1 / 12) * t) * st.tension * tremolo).astype(
+        np.float32
+    )
     return normalize(base, 0.55), normalize(combat, 0.6)
 
 

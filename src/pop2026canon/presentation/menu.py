@@ -185,6 +185,12 @@ def options_menu() -> Menu:
                 "flashes", "Destellos de daño", "toggle", hint="Accesibilidad: fotosensibilidad."
             ),
             MenuItem("hints", "Pistas", "toggle"),
+            MenuItem(
+                "ghost",
+                "Fantasma del récord",
+                "toggle",
+                hint="Tu mejor carrera del nivel corre a tu lado.",
+            ),
             MenuItem("always_show_timer", "Reloj siempre visible", "toggle"),
             MenuItem("back", "Volver"),
         ],

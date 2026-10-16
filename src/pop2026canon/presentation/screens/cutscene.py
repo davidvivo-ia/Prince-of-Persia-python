@@ -45,8 +45,11 @@ def draw_level_card(
     font_big: pygame.font.Font,
     font_small: pygame.font.Font,
     t: float = 0.0,
+    *,
+    record: str = "",
 ) -> None:
-    """Tarjeta de presentación del nivel sobre el poster canon."""
+    """Tarjeta de presentación del nivel sobre el poster canon.
+    ``record``: mejor tiempo guardado del nivel (vacío si no hay)."""
     # Poster como fondo con cast narrativo del nivel y sin título.
     draw_poster(
         surf,
@@ -81,6 +84,9 @@ def draw_level_card(
     sub = font_small.render(tr("NIVEL {n} de 14").format(n=level.number), True, PALETTE.primary)
     surf.blit(sub, sub.get_rect(center=(w // 2, panel_rect.y + px(68))))
 
+    if record:
+        rt = fonts.render(tr("Récord: {t}").format(t=record), 18, PALETTE.poster_gold)
+        surf.blit(rt, rt.get_rect(midright=(panel_rect.right - px(12), panel_rect.y + px(68))))
     tagline = tr(LEVEL_TAGLINES.get(level.number, ""))
     if tagline:
         text = font_small.render(tagline, True, PALETTE.primary_dark)

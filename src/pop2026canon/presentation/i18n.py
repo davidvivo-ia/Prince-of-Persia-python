@@ -67,6 +67,13 @@ EN: dict[str, str] = {
     "Destellos de daño": "Damage flashes",
     "Accesibilidad: fotosensibilidad.": "Accessibility: photosensitivity.",
     "Pistas": "Hints",
+    "Fantasma del récord": "Record ghost",
+    "Tu mejor carrera del nivel corre a tu lado.": "Your best run of the level races beside you.",
+    "Récord: {t}": "Record: {t}",
+    "¡Nuevo récord!": "New record!",
+    "Tiempo total: {t}  ·  Muertes: {d}  ·  Medallas: {m}": (
+        "Total time: {t}  ·  Deaths: {d}  ·  Medals: {m}"
+    ),
     "Reloj siempre visible": "Always show timer",
     "Volver": "Back",
     "SÍ": "ON",

@@ -25,11 +25,27 @@ import pygame
 from pop2026canon.application.assist import RoomCheckpoint, TimeRewind
 from pop2026canon.application.audio_bridge import play_transitions
 from pop2026canon.application.controller import Command
+from pop2026canon.application.ghost import (
+    GhostPlayer,
+    GhostRecorder,
+    GhostRun,
+    better_run,
+    delta_text,
+    load_ghost,
+    run_from_recording,
+    save_ghost,
+)
 from pop2026canon.application.hints import HINTS, detect_hint
-from pop2026canon.application.session import Session, new_session, resolve_transition
+from pop2026canon.application.session import (
+    HARD_MINUTES,
+    Session,
+    new_session,
+    resolve_transition,
+)
 from pop2026canon.application.stats import LevelStats
 from pop2026canon.application.tick import advance
 from pop2026canon.domain.combat import char_opp_dist, is_hostile
+from pop2026canon.domain.constants import START_MINUTES_LEFT
 from pop2026canon.domain.game import Game, GameStatus
 from pop2026canon.infrastructure import progress as progress_io
 from pop2026canon.infrastructure import savegame
@@ -91,6 +107,13 @@ class GameApp:
         self.progress = progress_io.load(self.progress_path)
         self.levels_ui: LevelSelect | None = None
         self.last_medals: tuple[str, ...] = ()
+        self.recorder = GhostRecorder()
+        self.ghost: GhostPlayer | None = None
+        self.record: GhostRun | None = None
+        self.new_record = False
+        self.last_delta = ""
+        self._level_start_hp = 3
+        self._level_start_sword = False
         self.new_medals: tuple[str, ...] = ()
         self.display = Display(self.settings)
         self.canvas = self.display.canvas
@@ -129,6 +152,23 @@ class GameApp:
     def _main_menu(self) -> Menu:
         return main_menu(self._has_save(), self.progress.any_completed)
 
+    def _campaign_clock(self) -> str:
+        """Tiempo de campaña consumido (reloj inicial menos el restante)."""
+        start = (HARD_MINUTES if self.session.hard else START_MINUTES_LEFT) * 720 + 719
+        left = self.session.time.minutes * 720 + self.session.time.ticks
+        used = max(0, start - left) // 12
+        return f"{used // 60:d}:{used % 60:02d}"
+
+    def _ghost_base(self) -> Path | None:
+        return self.progress_path.parent if self.progress_path is not None else None
+
+    def _load_ghost(self) -> None:
+        """Récord del nivel actual y su reproductor (si el ajuste está activo)."""
+        self.record = load_ghost(self.game.level.number, self._ghost_base())
+        self.ghost = None
+        if self.settings.ghost and self.record is not None:
+            self.ghost = GhostPlayer(self.game.level, self.record)
+
     def _save_progress(self) -> None:
         with contextlib.suppress(OSError):
             progress_io.save(self.progress, self.progress_path)
@@ -156,8 +196,13 @@ class GameApp:
     def _apply_settings(self, new: Settings) -> None:
         if new == self.settings:
             return
+        old_ghost = self.settings.ghost
         self.settings = new
         set_language(new.language)
+        if new.ghost != old_ghost and self.phase in ("playing", "paused", "map"):
+            self._load_ghost()
+            if self.ghost is not None:
+                self.ghost.seek(self.game.tick_count)
         self.display.apply(new)
         self.scene.settings = new
         self.audio.set_volumes(new.effective_sfx, new.effective_music)
@@ -166,7 +211,8 @@ class GameApp:
         settings_io.save(self.settings, self.settings_path)
 
     def _music_for_level(self) -> str:
-        return "palace" if level_is_palace(self.game.level.number) else "dungeon"
+        n = self.game.level.number
+        return theme_for(n).music or ("palace" if level_is_palace(n) else "dungeon")
 
     def _start_level(self) -> None:
         self.prev_game = self.game
@@ -175,6 +221,10 @@ class GameApp:
         self.stats = LevelStats(level=self.game.level.number)
         self.stats.start(self.game)
         self.scene.on_level_start(self.game)
+        self.recorder.reset()
+        self._level_start_hp = self.game.kid.hp_max
+        self._level_start_sword = self.game.kid.has_sword
+        self._load_ghost()
         self.frames_since_tick = 0
         self.audio.music(self._music_for_level())
         self.audio.ambience(theme_for(self.game.level.number).ambience)
@@ -420,6 +470,9 @@ class GameApp:
                     self.prev_game = back
                     self.game = back
                     self.stats.rewound_ticks += 1
+                    self.recorder.rewind()
+                    if self.ghost is not None:
+                        self.ghost.step_back()
             self.frames_since_tick = FRAMES_PER_TICK - 1
             return
         if self.rewinding:
@@ -448,6 +501,9 @@ class GameApp:
         prev = self.game
         self.prev_game = prev
         self.game = advance(prev, cmd)
+        self.recorder.record(cmd)
+        if self.ghost is not None:
+            self.ghost.step()
         self.scene.on_tick(prev, self.game)
         play_transitions(self.audio, prev, self.game, self.scene.last_events)
         self._rumble_for(self.scene.last_events)
@@ -469,6 +525,7 @@ class GameApp:
                 self.progress, self.stats, len(self.game.level.rooms)
             )
             self._save_progress()
+            self._save_ghost()
             self._goto("level_done")
         elif status is GameStatus.WON_GAME:
             if self.autosave_enabled and self.save_path.exists():
@@ -487,6 +544,26 @@ class GameApp:
                 self._show_hint("rewind")
             self._goto("dead")
 
+    def _save_ghost(self) -> None:
+        """La carrera recién terminada sustituye al récord si es más rápida."""
+        self.new_record = False
+        self.last_delta = delta_text(
+            self.recorder.ticks, self.record.ticks if self.record is not None else None
+        )
+        run = run_from_recording(
+            self.game.level,
+            self.recorder,
+            hp=self._level_start_hp,
+            has_sword=self._level_start_sword,
+            hard=self.session.hard,
+        )
+        if run is None or not better_run(self.record, run):
+            return
+        self.new_record = True
+        with contextlib.suppress(OSError):
+            save_ghost(run, self._ghost_base())
+        self.record = run
+
     def _dead(self, actions: list[UiAction]) -> None:
         modern = self.settings.modern
         if modern and self.input.rewind_held() and self.rewind.can_rewind:
@@ -500,6 +577,9 @@ class GameApp:
                 self.session = self.session.on_death(dead)
                 back = self.checkpoint.respawn(dead)
                 self.game = back if back is not None else self.session.start_game()
+                self.recorder.invalidate()
+                if self.ghost is not None:
+                    self.ghost.seek(self.game.tick_count)
                 self.prev_game = self.game
                 self.rewind.reset()
                 self.scene.on_respawn(self.game)
@@ -558,6 +638,7 @@ class GameApp:
             show_time=self.input.timer_held(),
             hud=hud,
             toast=toast,
+            ghost=self.ghost,
         )
 
     def _draw(self) -> None:
@@ -591,8 +672,14 @@ class GameApp:
         elif p == "reunion":
             cinematic.draw_ending(c, self.phase_t)
         elif p == "card":
+            rec = load_ghost(self.game.level.number, self._ghost_base())
             cutscene.draw_level_card(
-                c, self.game.level, self.font_big, self.font_small, self.phase_t
+                c,
+                self.game.level,
+                self.font_big,
+                self.font_small,
+                self.phase_t,
+                record=rec.clock if rec is not None else "",
             )
         elif p == "playing":
             self._draw_scene()
@@ -637,6 +724,8 @@ class GameApp:
                 pad=self.input.pad_connected,
                 medals=self.last_medals,
                 new_medals=self.new_medals,
+                delta=self.last_delta,
+                new_record=self.new_record,
             )
         elif p == "victory":
             t = self.session.time
@@ -645,6 +734,8 @@ class GameApp:
                 t=self.phase_t,
                 deaths=self.session.deaths,
                 time_left=f"{t.minutes:02d}:{t.ticks // 12:02d}",
+                time_used=self._campaign_clock(),
+                medals=self.progress.medal_count,
             )
         elif p == "defeat":
             ending.draw_defeat(c, timeout=True, t=self.phase_t)

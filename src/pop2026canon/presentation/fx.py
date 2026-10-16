@@ -29,6 +29,7 @@ from enum import Enum, auto
 import numpy as np
 import pygame
 
+from pop2026canon.application.ghost import GhostPlayer
 from pop2026canon.domain.actions import Action, Seq
 from pop2026canon.domain.chars import Char, CharId
 from pop2026canon.domain.game import Game
@@ -1134,6 +1135,30 @@ def draw_wall_shadows(
         sil, (ax, ay) = _silhouette(c.frame, pal, c.direction, variant, stretch)
         sil.set_alpha(a)
         surf.blit(sil, (x - ax + off_x, y - ay + off_y))
+
+
+GHOST_TINT = (150, 200, 255)
+GHOST_ALPHA = 120
+
+
+@functools.lru_cache(maxsize=256)
+def _ghost_sprite(frame: int, facing: int) -> tuple[pygame.Surface, tuple[int, int]]:
+    """Sprite del kid teñido de azul hielo y translúcido, con un halo."""
+    img, anchor = sprite(frame, CharPalette.KID, facing)
+    out = img.copy()
+    out.fill(GHOST_TINT, special_flags=pygame.BLEND_RGB_MULT)
+    out.fill((60, 90, 140), special_flags=pygame.BLEND_RGB_ADD)
+    out.set_alpha(GHOST_ALPHA)
+    return out, anchor
+
+
+def draw_ghost(surf: pygame.Surface, ghost: GhostPlayer, alpha: float, t: float) -> None:
+    """El fantasma del récord: un kid translúcido que ondea ligeramente."""
+    k = ghost.kid
+    x, y = _lerp_char_px(ghost.prev_kid, k, alpha)
+    img, (ax, ay) = _ghost_sprite(k.frame or 15, k.direction)
+    wob = int(px(1) * math.sin(t * 6.0))
+    surf.blit(img, (x - ax, y - ay + wob))
 
 
 # ---------------------------------------------------------------------------

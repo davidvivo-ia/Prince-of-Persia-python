@@ -32,14 +32,23 @@ def draw_victory(
     t: float = 0.0,
     deaths: int = 0,
     time_left: str = "",
+    time_used: str = "",
+    medals: int | None = None,
 ) -> None:
-    """Final victorioso: reunión con la princesa."""
+    """Final victorioso: reunión con la princesa, con el resumen de la
+    campaña (tiempo consumido, muertes, medallas)."""
     surf.fill(PALETTE.bg)
     w, h = surf.get_size()
     title = fonts.gold_title(tr("VICTORIA"), 60, glow=8)
     surf.blit(title, title.get_rect(center=(w // 2, h // 3)))
     lines = [tr("La princesa está a salvo."), tr("Jaffar ha caído.")]
-    if time_left:
+    if time_used and medals is not None:
+        lines.append(
+            tr("Tiempo total: {t}  ·  Muertes: {d}  ·  Medallas: {m}").format(
+                t=time_used, d=deaths, m=medals
+            )
+        )
+    elif time_left:
         lines.append(tr("Tiempo restante: {t}  ·  Muertes: {d}").format(t=time_left, d=deaths))
     for i, line in enumerate(lines):
         txt = fonts.render(line, 24, PALETTE.primary)
@@ -115,6 +124,8 @@ def draw_level_complete(
     pad: bool = False,
     medals: tuple[str, ...] = (),
     new_medals: tuple[str, ...] = (),
+    delta: str = "",
+    new_record: bool = False,
 ) -> None:
     """Resumen del nivel: tiempo, muertes, enemigos, pociones, salas."""
     w, h = surf.get_size()
@@ -125,8 +136,9 @@ def draw_level_complete(
     surf.blit(title, title.get_rect(center=(w // 2, h // 4)))
     name = fonts.render(f"{stats.level} · {level_name}", 24, PALETTE.primary)
     surf.blit(name, name.get_rect(center=(w // 2, h // 4 + px(40))))
+    clock = stats.clock + (f"  ({delta})" if delta else "")
     rows = [
-        (tr("Tiempo"), stats.clock),
+        (tr("Tiempo"), clock),
         (tr("Muertes"), str(stats.deaths)),
         (tr("Enemigos derrotados"), str(stats.guards_defeated)),
         (tr("Pociones"), str(stats.potions)),
@@ -165,6 +177,13 @@ def draw_level_complete(
             txt = fonts.render(label, 17, col if m in new_medals else PALETTE.primary_dark)
             txt.set_alpha(int(255 * appear))
             surf.blit(txt, txt.get_rect(midtop=(int(cx), base_y + px(16))))
+    if new_record and t > 0.8:
+        k = 1.0 + 0.06 * math.sin(t * 6)
+        rec = fonts.gold_title(tr("¡Nuevo récord!"), 26, glow=5)
+        rec = pygame.transform.smoothscale(
+            rec, (int(rec.get_width() * k), int(rec.get_height() * k))
+        )
+        surf.blit(rec, rec.get_rect(center=(w // 2, h // 4 + px(68))))
     if t > 1.0:
         hint = fonts.render(("A" if pad else "Enter") + tr(" para continuar"), 20, _blink(t))
         surf.blit(hint, hint.get_rect(center=(w // 2, h - px(22))))

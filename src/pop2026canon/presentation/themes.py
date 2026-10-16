@@ -82,6 +82,8 @@ class LevelTheme:
     decor: tuple[str, ...]
     sky: str = "night"
     ambience: str = "wind"
+    music: str = ""
+    """Estilo musical (``audio.MUSIC_STYLES``); vacío = según palacio/mazmorra."""
     """Fondo sonoro (``audio.ambience_layer``): drips, cave, wind, gale,
     tomb, fire, rumble, garden."""
     stone_var: int = 12
@@ -94,6 +96,7 @@ _DUNGEON_TILE = (255, 255, 255)
 THEMES: dict[int, LevelTheme] = {
     1: LevelTheme(
         key="l1",
+        music="dungeon",
         title="Mazmorra",
         palace=False,
         masonry="blocks",
@@ -116,6 +119,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     2: LevelTheme(
         key="l2",
+        music="guards",
         title="Cuerpo de guardia",
         palace=False,
         masonry="blocks",
@@ -138,6 +142,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     3: LevelTheme(
         key="l3",
+        music="tomb",
         title="Osario",
         palace=False,
         masonry="blocks",
@@ -160,6 +165,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     4: LevelTheme(
         key="l4",
+        music="palace",
         title="Galería del espejo",
         palace=True,
         masonry="marble",
@@ -182,6 +188,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     5: LevelTheme(
         key="l5",
+        music="palace",
         title="Salón del ladrón",
         palace=True,
         masonry="blocks",
@@ -203,6 +210,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     6: LevelTheme(
         key="l6",
+        music="palace",
         title="La escalinata",
         palace=True,
         masonry="marble",
@@ -225,6 +233,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     7: LevelTheme(
         key="l7",
+        music="mountain",
         title="Entrañas de la montaña",
         palace=False,
         masonry="rough",
@@ -247,6 +256,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     8: LevelTheme(
         key="l8",
+        music="cave",
         title="Cavernas",
         palace=False,
         masonry="rough",
@@ -269,6 +279,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     9: LevelTheme(
         key="l9",
+        music="tomb",
         title="La tumba",
         palace=False,
         masonry="blocks",
@@ -290,6 +301,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     10: LevelTheme(
         key="l10",
+        music="tower",
         title="La torre",
         palace=True,
         masonry="blocks",
@@ -312,6 +324,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     11: LevelTheme(
         key="l11",
+        music="tower",
         title="Lo alto de la torre",
         palace=True,
         masonry="blocks",
@@ -334,6 +347,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     12: LevelTheme(
         key="l12",
+        music="vizier",
         title="Dominios del visir",
         palace=False,
         masonry="brick",
@@ -355,6 +369,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     13: LevelTheme(
         key="l13",
+        music="escape",
         title="La huida final",
         palace=False,
         masonry="blocks",
@@ -376,6 +391,7 @@ THEMES: dict[int, LevelTheme] = {
     ),
     14: LevelTheme(
         key="l14",
+        music="garden",
         title="Aposentos de la princesa",
         palace=True,
         masonry="marble",
