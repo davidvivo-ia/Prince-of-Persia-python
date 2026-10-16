@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import pygame
 
+from pop2026canon.application.ghost import GhostPlayer
 from pop2026canon.domain.game import Game
 from pop2026canon.infrastructure.settings import Settings
 from pop2026canon.presentation import renderer
@@ -32,6 +33,7 @@ from pop2026canon.presentation.fx import (
     detect_fx_events,
     draw_atmosphere,
     draw_char_shadows,
+    draw_ghost,
     draw_wall_shadows,
     grade,
     rewind_filter,
@@ -86,6 +88,7 @@ class Scene:
         self._base = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h))
         self._tiles = pygame.Surface((LAYOUT.window_w, LAYOUT.window_h), pygame.SRCALPHA)
         self._base_key: tuple[object, ...] | None = None
+        self._ghost: GhostPlayer | None = None
         self._warm: list[tuple[int, CharPalette, int, int]] = []
         self.slowmo = 0
         """Frames restantes a cámara lenta (muerte, golpe mortal)."""
@@ -246,6 +249,8 @@ class Scene:
             if s.lighting:
                 draw_wall_shadows(world, game, prev, alpha, lights, t)
             draw_char_shadows(world, game, prev, alpha)
+            if self._ghost is not None and self._ghost.visible_in(game.kid.room):
+                draw_ghost(world, self._ghost, alpha, t)
             renderer._draw_chars(world, game, prev, alpha)
         renderer._draw_front_tiles(world, game)
         if chars and s.particles:
@@ -275,10 +280,12 @@ class Scene:
         show_time: bool,
         hud: bool = True,
         toast: bool = True,
+        ghost: GhostPlayer | None = None,
     ) -> None:
         s = self.settings
         self._t = t
         world = self._world
+        self._ghost = ghost
         self._render_room(world, game, prev, alpha, t, chars=True)
         self.post.apply(
             world,

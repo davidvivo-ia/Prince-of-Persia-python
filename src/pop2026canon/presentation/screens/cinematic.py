@@ -486,8 +486,10 @@ def draw_intro(surf: pygame.Surface, t: float) -> None:
     elif t < _SCENE_CHAMBER_END:
         s = t - _SCENE_PALACE_END
         _chamber_scene(surf, t)
-        # La princesa, a la izquierda, de pie
-        _actor(surf, 15, CharPalette.PRINCESS, 0, int(w * 0.3), floor_y)
+        # La princesa, a la izquierda: espera cabizbaja y se sobresalta al
+        # ver aparecer el reloj de arena
+        pf = poses.PRINCESS_STARTLE if 3.8 <= s < 7.0 else poses.PRINCESS_WAIT
+        _actor(surf, pf, CharPalette.PRINCESS, 0, int(w * 0.3), floor_y)
         # Jaffar entra desde la derecha (0..3 s), se para junto al pedestal
         vx_end, vx_start = int(w * 0.66), int(w + px(60))
         if s < 3.0:
@@ -538,20 +540,23 @@ def draw_ending(surf: pygame.Surface, t: float) -> None:
         _actor(surf, 15, CharPalette.KID, 0, px_end, floor_y)
     # La princesa va a su encuentro (3..5.5 s)
     pr_start, pr_end = int(w * 0.74), int(w * 0.6)
-    if t < 3.0:
-        _actor(surf, 15, CharPalette.PRINCESS, -1, pr_start, floor_y)
+    if t < 2.2:
+        _actor(surf, poses.PRINCESS_WAIT, CharPalette.PRINCESS, -1, pr_start, floor_y)
+    elif t < 3.0:
+        _actor(surf, poses.PRINCESS_STARTLE, CharPalette.PRINCESS, -1, pr_start, floor_y)
     elif t < 5.5:
         k = _ease((t - 3.0) / 2.5)
+        glide = poses.PRINCESS_GLIDE_FIRST + int(t * 10) % 10
         _actor(
             surf,
-            _run_frame(t, 8),
+            glide,
             CharPalette.PRINCESS,
             -1,
             int(pr_start + (pr_end - pr_start) * k),
             floor_y,
         )
     else:
-        _actor(surf, 15, CharPalette.PRINCESS, -1, pr_end, floor_y)
+        _actor(surf, poses.PRINCESS_JOY, CharPalette.PRINCESS, -1, pr_end, floor_y)
     # Destellos dorados cuando se encuentran
     if t > 5.5:
         rng = random.Random(int(t * 6))

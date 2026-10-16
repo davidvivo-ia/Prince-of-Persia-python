@@ -53,7 +53,8 @@ uv run pop2026canon --levels-dat RUTA  # con los niveles de tu copia original
   de película y aberración cromática opcionales, sacudida de cámara,
   *hit-stop* en cada estocada y transición deslizante entre salas.
 - **Audio sintetizado**: choques metálicos, pasos, rejas; música
-  procedural en modo *hijaz* con capa de darbuka en combate; estéreo.
+  procedural con diez estilos por ambiente (modos hijaz, nahawand, kurd
+  y ajam) y capa de darbuka en combate; fondo sonoro por nivel; estéreo.
 - **Mando** (Xbox, PlayStation, Switch Pro, Steam Deck) y teclado.
 - **Interfaz**: menú principal, pausa, opciones persistentes, controles,
   mapa de salas exploradas, estadísticas por nivel, pistas contextuales
@@ -64,6 +65,9 @@ uv run pop2026canon --levels-dat RUTA  # con los niveles de tu copia original
 - **Progreso y medallas**: selección de nivel con mejores tiempos,
   medallas (Completado, Sin un rasguño, Veloz, Explorador) y dificultad
   normal / difícil.
+- **Fantasma del récord**: tu mejor carrera de cada nivel corre a tu
+  lado como un kid translúcido; la tarjeta del nivel muestra el récord
+  y el resumen, la diferencia.
 - **Idioma**: español o inglés, desde opciones.
 - **Pantalla**: ventana redimensionable, pantalla completa (F11), escala
   suave o entera nítida, filtro CRT y resplandor opcionales.

@@ -6,6 +6,29 @@ versionado sigue [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/es/1.1.0/
 [SemVer]: https://semver.org/lang/es/
 
+## [canon-0.24.0] — 2026-10-16
+
+### Fantasma del récord, música por ambiente y remates
+
+- **Fantasma del récord**: la mejor carrera de cada nivel se graba tick a
+  tick (las entradas del jugador) y, la siguiente vez, un kid translúcido
+  azul la reproduce con el motor real corriendo a tu lado. Sólo cuenta
+  una carrera limpia (sin morir); rebobinar recoloca al fantasma. La
+  tarjeta del nivel muestra el récord, el resumen de nivel superado la
+  diferencia (``-4.2 s``) y "¡Nuevo récord!" cuando lo bates. Ajuste
+  "Fantasma del récord" en opciones; ficheros en
+  ``~/.local/share/pop2026canon/ghosts/``.
+- **Música por ambiente**: diez estilos procedurales (mazmorra, cuerpo
+  de guardia, tumba, palacio, montaña, cuevas, torre, visir, huida y
+  jardín) con su tempo, tónica, modo (hijaz, nahawand, kurd, ajam),
+  densidad de melodía, peso del bordón, campanas y tensión de la capa
+  de combate. Cada tema de nivel elige el suyo (``LevelTheme.music``).
+- **Resumen de campaña** en la pantalla de victoria: tiempo total
+  consumido, muertes y medallas.
+- **Poses propias de la princesa** en las cinemáticas: espera cabizbaja
+  con las manos juntas, se sobresalta al aparecer el reloj de arena, va
+  al encuentro deslizándose y abre los brazos.
+
 ## [canon-0.23.0] — 2026-10-15
 
 ### Gráficos 2026: luz con relieve, sombras y post-proceso de cine

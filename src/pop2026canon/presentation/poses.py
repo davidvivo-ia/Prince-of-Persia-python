@@ -652,6 +652,8 @@ def pose_for(frame: int) -> Pose:
         return replace(p, blade=None) if f >= 238 else p
     if VIZIER_STRIDE_FIRST <= f <= VIZIER_GLOAT:
         return _vizier(f)
+    if PRINCESS_WAIT <= f <= PRINCESS_GLIDE_LAST:
+        return _princess(f)
     return STAND
 
 
@@ -674,6 +676,35 @@ VIZIER_SUMMON_POSE = Pose(
     lean=-10.0, head=-18.0, uarm_n=142.0, farm_n=168.0, uarm_f=128.0, farm_f=160.0
 )
 VIZIER_GLOAT_POSE = Pose(lean=-2.0, head=4.0, uarm_n=28.0, farm_n=96.0, uarm_f=26.0, farm_f=92.0)
+
+
+# Poses de la princesa (frames 260..272): espera con las manos juntas y
+# la cabeza baja, se sobresalta, abre los brazos de alegría y camina
+# deslizándose (paso corto bajo el vestido).
+PRINCESS_WAIT = 260
+PRINCESS_STARTLE = 261
+PRINCESS_JOY = 262
+PRINCESS_GLIDE_FIRST = 263
+PRINCESS_GLIDE_LAST = 272
+
+PRINCESS_WAIT_POSE = Pose(lean=5.0, head=14.0, uarm_n=24.0, farm_n=84.0, uarm_f=22.0, farm_f=80.0)
+PRINCESS_STARTLE_POSE = Pose(
+    lean=-6.0, head=-10.0, uarm_n=58.0, farm_n=132.0, uarm_f=50.0, farm_f=120.0
+)
+PRINCESS_JOY_POSE = Pose(lean=-3.0, head=-6.0, uarm_n=96.0, farm_n=110.0, uarm_f=84.0, farm_f=100.0)
+
+
+def _princess(f: int) -> Pose:
+    if f == PRINCESS_WAIT:
+        return PRINCESS_WAIT_POSE
+    if f == PRINCESS_STARTLE:
+        return PRINCESS_STARTLE_POSE
+    if f == PRINCESS_JOY:
+        return PRINCESS_JOY_POSE
+    phi = (f - PRINCESS_GLIDE_FIRST) / 10 * 2 * math.pi
+    p = run_pose(phi, 0.3)
+    # Brazos abiertos hacia delante, sin balanceo: va a su encuentro
+    return replace(p, lean=4.0, head=-2.0, uarm_n=70.0, farm_n=96.0, uarm_f=60.0, farm_f=88.0)
 
 
 def _vizier(f: int) -> Pose:
